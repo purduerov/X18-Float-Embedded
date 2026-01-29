@@ -109,31 +109,29 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst) {
 }
 
 void ms5837_read(MS5837_t *sensor) {
-    if (sensor->i2c_inst == NULL) return;
-
     uint8_t cmd;
     uint8_t buffer[3];
 
-    // Pressure (D1)
-    cmd = 0x4A; // OSR 8192
-    if (i2c_write_timeout_us(sensor->i2c_inst, 0x76, &cmd, 1, false, 100000) < 0) return;
-    
-    // Wait for conversion (Python code uses conservative timing)
-    sleep_ms(20);
+    // Request D1 (Pressure) conversion
+    cmd = 0x4A; // MS5837_CONVERT_D1_8192
+    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
+    sleep_ms(20); 
 
-    cmd = 0x00; // ADC Read
-    if (i2c_write_timeout_us(sensor->i2c_inst, 0x76, &cmd, 1, true, 100000) < 0) return;
-    i2c_read_timeout_us(sensor->i2c_inst, 0x76, buffer, 3, false, 100000);
+    // Read D1 ADC
+    cmd = 0x00; // MS5837_ADC_READ
+    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
+    i2c_read_blocking(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false);
     sensor->D1 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
-    // Temperature (D2)
-    cmd = 0x5A; // OSR 8192
-    if (i2c_write_timeout_us(sensor->i2c_inst, 0x76, &cmd, 1, false, 100000) < 0) return;
+    // Request D2 (Temperature) conversion
+    cmd = 0x5A; // MS5837_CONVERT_D2_8192
+    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
     sleep_ms(20);
 
-    cmd = 0x00; // ADC Read
-    if (i2c_write_timeout_us(sensor->i2c_inst, 0x76, &cmd, 1, true, 100000) < 0) return;
-    i2c_read_timeout_us(sensor->i2c_inst, 0x76, buffer, 3, false, 100000);
+    // Read D2 ADC
+    cmd = 0x00;
+    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
+    i2c_read_blocking(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false);
     sensor->D2 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
     ms5837_calculate(sensor);
@@ -210,35 +208,26 @@ void ms5837_calculate(MS5837_t *sensor) {
 }
 
 
-float ms5837_get_temperature(MS5837_t *sensor) {
-    // The calculate function stores temperature as an integer where 2000 = 20.00°C.
-    // We divide by 100.0f to get the float representation.
-    return sensor->TEMP / 100.0f;
-}
-
 float ms5837_get_pressure(MS5837_t *sensor, float conversion) {
-    // The conversion parameter allows you to multiply by factors like MS5837_UNIT_PA.
-    if (sensor->model == 1) { // MS5837_02BA
-        // 02BA is stored in 0.01 mbar increments.
-        return sensor->P * conversion / 100.0f;
-    } else { // MS5837_30BA (default)
-        // 30BA is stored in 0.1 mbar increments.
-        return sensor->P * conversion / 10.0f;
+    if (sensor->model == MS5837_02BA) {
+        return (float)sensor->P * conversion / 100.0f;
+    } else {
+        // For 30BA, the pressure calculation results in 0.1 mbar units
+        return (float)sensor->P * conversion / 10.0f;
     }
 }
 
+float ms5837_get_temperature(MS5837_t *sensor) {
+    // TEMP is calculated in centidegrees (100 * deg C)
+    return (float)sensor->TEMP / 100.0f;
+}
+
 float ms5837_get_depth(MS5837_t *sensor) {
-    // We get the pressure in Pascals (Pa).
-    // The library assumes a standard atmospheric pressure of 101300 Pa.
-    // Depth = (Measured Pressure - Air Pressure) / (Density * Gravity)
-    float pressure_pa = ms5837_get_pressure(sensor, 100.0f); // 100.0f is the Pa conversion factor
-    return (pressure_pa - 101300.0f) / (sensor->fluidDensity * 9.80665f);
+    // Uses the standard atmospheric pressure of 101300 Pa as a baseline
+    return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
 }
 
 float ms5837_get_altitude(MS5837_t *sensor) {
-    // This requires the 'pow' function from <math.h>.
-    // It assumes a standard sea-level pressure of 1013.25 mbar.
-    float pressure_mbar = ms5837_get_pressure(sensor, 1.0f); // 1.0f is the mbar conversion factor
-    return (1.0f - pow((pressure_mbar / 1013.25f), 0.190284f)) * 145366.45f * 0.3048f;
+    // Standard altitude formula using 1013.25 mbar as sea level pressure
+    return (1.0f - powf((ms5837_get_pressure(sensor, 1.0f) / 1013.25f), 0.190284f)) * 145366.45f * 0.3048f;
 }
-
