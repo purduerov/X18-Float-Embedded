@@ -9,6 +9,7 @@
             "name": "PlatformIO",
             "includePath": [
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/src",
+                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/BN085",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/MS5837",
                 "C:/Users/aman/packages/framework-picosdk/generated",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/.pio/build/adafruit_feather/generated",
@@ -118,6 +119,7 @@
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/src",
+                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/BN085",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/MS5837",
                     "C:/Users/aman/packages/framework-picosdk/generated",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/.pio/build/adafruit_feather/generated",

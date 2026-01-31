@@ -8,7 +8,7 @@
 #define SDA_PIN 2
 #define SCL_PIN 3
 
-int main()
+int ms5837_main()
 {
     // Initialize standard I/O for serial communication via USB or UART
     stdio_init_all();
