@@ -1,6 +1,7 @@
 #include "ms5837.h"
 #include <math.h>
 #include "hardware/i2c.h"
+#include <stdio.h> // Required for debug prints
 
 // These constants define the commands sent over I2C to control the sensor.
 #define MS5837_RESET_CMD 0x1E       // Command to reset the sensor.

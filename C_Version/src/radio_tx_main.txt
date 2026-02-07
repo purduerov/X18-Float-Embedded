@@ -1,0 +1,78 @@
+#include "pico/stdlib.h"
+#include "hardware/spi.h"
+#include "radiolib_hal_pico.h"
+#include "radiolib_sx1276.h"
+#include <stdio.h>
+
+const uint32_t SPI_MOSI = 19;
+const uint32_t SPI_MISO = 20;
+const uint32_t SPI_SCK = 18;
+const uint32_t CS_PIN = 24;
+const uint32_t RST_PIN = 25;
+const uint32_t EN_PIN = 8;
+const uint32_t IRQ_PIN = 9;
+
+int radio_tx_main()
+{
+    stdio_init_all();
+    gpio_init(EN_PIN);
+    gpio_set_dir(EN_PIN, GPIO_OUT);
+    gpio_put(EN_PIN, 1); // Pull EN high to wake the chip
+    sleep_ms(10);        // Wait for power-on stability/*  */
+    // Explicitly wait for USB serial connection to avoid missing initial prints
+    while (!stdio_usb_connected())
+    {
+        sleep_ms(100);
+    }
+
+    printf("Starting RadioLib RP2040 Port...\n");
+
+    RadioLibHal_t *hal = RadioLib_Pico_Create(spi0, SPI_SCK, SPI_MOSI, SPI_MISO, 8000000);
+
+    RadioLibModule_t radioModule;
+    RadioLib_Module_Create(&radioModule, hal, CS_PIN, IRQ_PIN, RST_PIN, RADIOLIB_NC);
+
+    radioModule.enPin = EN_PIN;
+    uint32_t gPins[] = {RADIOLIB_NC, 29, 6, 7, 10, 11};
+    for (int i = 0; i < 6; i++)
+        radioModule.radioGPins[i] = gPins[i];
+
+    RadioLibSX127x_t lora;
+    RadioLib_SX127x_Create(&lora, &radioModule);
+
+    printf("Initializing SX1276...");
+    int16_t state = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 10);
+
+    if (state == RADIOLIB_ERR_NONE)
+    {
+        printf("success!\n");
+    }
+    else
+    {
+        printf("failed, code %d\n", state);
+        while (true)
+        {
+            sleep_ms(1000);
+        }
+    }
+
+    uint8_t txData[] = "Hello RP2040!";
+    while (true)
+    {
+        printf("Sending packet...");
+        state = RadioLib_SX127x_Transmit(&lora, txData, sizeof(txData));
+
+        if (state == RADIOLIB_ERR_NONE)
+        {
+            printf("done!\n");
+        }
+        else
+        {
+            printf("failed, code %d\n", state);
+        }
+
+        sleep_ms(5000);
+    }
+
+    return 0;
+}
