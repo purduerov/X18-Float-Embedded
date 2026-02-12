@@ -12,7 +12,7 @@ const uint32_t RST_PIN = 25;
 const uint32_t EN_PIN = 8;
 const uint32_t IRQ_PIN = 9; // Make sure this is wired to Physical Pin 12
 
-int main() {
+int radio_rx_main() {
     stdio_init_all();
     
     // Power up sequence
