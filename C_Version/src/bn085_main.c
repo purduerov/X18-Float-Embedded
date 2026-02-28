@@ -89,7 +89,7 @@ void print_inplace(bno_data_state_t *s)
     printf("GEOMAGNETIC:     %6.3f, %6.3f, %6.3f, %6.3f\n", s->geomag_quat[0], s->geomag_quat[1], s->geomag_quat[2], s->geomag_quat[3]);
 }
 
-int bn085_main()
+int imu_main()
 {
     stdio_init_all();
 
@@ -102,7 +102,7 @@ int bn085_main()
     bno08x_driver_t bno;
     bno_data_state_t state;
     memset(&state, 0, sizeof(state));
-
+    
     if (!bno08x_begin_i2c(&bno, I2C_INST, BNO_ADDR, PIN_RESET))
     {
         while (1)
@@ -111,7 +111,7 @@ int bn085_main()
             sleep_ms(1000);
         }
     }
-
+    bno08x_hardware_reset(&bno);
     uint32_t interval = 50000; // 50ms
     bno08x_enable_report(&bno, SH2_ACCELEROMETER, interval);
     bno08x_enable_report(&bno, SH2_GYROSCOPE_CALIBRATED, interval);

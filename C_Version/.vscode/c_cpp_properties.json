@@ -115,6 +115,7 @@
                 "C:/pio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                 "C:/pio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                 "C:/pio/packages/framework-picosdk/lib/tinyusb/src",
+                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/scheduler",
                 ""
             ],
@@ -228,6 +229,7 @@
                     "C:/pio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                     "C:/pio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                     "C:/pio/packages/framework-picosdk/lib/tinyusb/src",
+                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/scheduler",
                     ""
                 ]

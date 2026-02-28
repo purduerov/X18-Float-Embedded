@@ -1,6 +1,5 @@
 #include "actuator.h"
 #include "hardware/adc.h"
-#include <math.h>
 #include <stdio.h>
 
 void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
@@ -8,7 +7,7 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->ext_pin = ext_pin;
     act->ret_pin = ret_pin;
     act->moving = 0;
-    act->move_target = 0.5f;
+    act->move_target = 2048; // Default to mid-range
 
     adc_init();
     adc_gpio_init(act->pos_pin);
@@ -22,15 +21,17 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     gpio_put(act->ret_pin, false);
 }
 
-float actuator_get_position(Actuator *act) {
+int actuator_get_position(Actuator *act) {
     adc_select_input(act->pos_pin - 26); 
     
-    // 256 samples for extreme stability
+    // 256 samples for stability
     uint32_t sum = 0;
     for(int i = 0; i < 256; i++) {
         sum += adc_read();
     }
-    return (float)sum / (256.0f * ADC_MAX);
+    
+    // Return raw average (0-4095)
+    return (int)(sum / 256);
 }
 
 void actuator_set_move_pins(Actuator *act, int direction) {
@@ -47,14 +48,13 @@ void actuator_set_move_pins(Actuator *act, int direction) {
     }
 }
 
-// Simplified move_to: just sets direction and starts
-void actuator_move_to(Actuator *act, float new_position) {
+void actuator_move_to(Actuator *act, int new_position) {
     act->move_target = new_position;
-    float current_pos = actuator_get_position(act);
+    int current_pos = actuator_get_position(act);
     int direction = (new_position > current_pos) ? 1 : -1;
     actuator_set_move_pins(act, direction);
 }
 
 void actuator_tick(Actuator *act) {
-    // Logic moved to main for "Pulse-and-Check"
+    // Logic handled in main loop
 }
