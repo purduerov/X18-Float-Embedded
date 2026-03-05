@@ -72,7 +72,7 @@ int get_filtered_pos(Actuator *act) {
     return sum / FILTER_SIZE;
 }
 
-int main() {
+int actuator_main() {
     stdio_init_all();
 
     while (!stdio_usb_connected()) {

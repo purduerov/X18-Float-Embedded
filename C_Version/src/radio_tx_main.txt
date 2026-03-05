@@ -12,7 +12,7 @@ const uint32_t RST_PIN = 25;
 const uint32_t EN_PIN = 8;
 const uint32_t IRQ_PIN = 9;
 
-int radio_tx_main()
+int main()
 {
     stdio_init_all();
     gpio_init(EN_PIN);
@@ -71,7 +71,7 @@ int radio_tx_main()
             printf("failed, code %d\n", state);
         }
 
-        sleep_ms(5000);
+        sleep_ms(50);
     }
 
     return 0;

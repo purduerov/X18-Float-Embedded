@@ -15,23 +15,32 @@
 #define MS5837_02BA_30BA_SEPARATION 37000
 #define MS5837_30BA_MIN_SENSITIVITY 26000
 
-static uint8_t ms5837_crc4(uint16_t n_prom[]) {
+static uint8_t ms5837_crc4(uint16_t n_prom[])
+{
     uint16_t n_rem = 0;
 
     // We must mask out the CRC bits (first 4 bits of word 0) before calculating
     n_prom[0] = ((n_prom[0]) & 0x0FFF);
     n_prom[7] = 0;
 
-    for (uint8_t i = 0; i < 16; i++) {
-        if (i % 2 == 1) {
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        if (i % 2 == 1)
+        {
             n_rem ^= (uint16_t)((n_prom[i >> 1]) & 0x00FF);
-        } else {
+        }
+        else
+        {
             n_rem ^= (uint16_t)(n_prom[i >> 1] >> 8);
         }
-        for (uint8_t n_bit = 8; n_bit > 0; n_bit--) {
-            if (n_rem & 0x8000) {
+        for (uint8_t n_bit = 8; n_bit > 0; n_bit--)
+        {
+            if (n_rem & 0x8000)
+            {
                 n_rem = (n_rem << 1) ^ 0x3000;
-            } else {
+            }
+            else
+            {
                 n_rem = (n_rem << 1);
             }
         }
@@ -65,59 +74,51 @@ void ms5837_init_struct(MS5837_t *sensor)
 
 // Inside ms5837.c
 
-bool ms5837_begin(MS5837_t *sensor, void *i2c_inst) {
+bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
+{
     sensor->i2c_inst = i2c_inst;
 
-    // Reset the sensor (100ms delay matches your Python script)
-    uint8_t reset_cmd = 0x1E; 
-    i2c_write_timeout_us(sensor->i2c_inst, 0x76, &reset_cmd, 1, false, 100000);
-    sleep_ms(100); 
+    // Reset the sensor
+    uint8_t reset_cmd = MS5837_RESET_CMD;
+    i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &reset_cmd, 1, false, 100000);
+    sleep_ms(100);
 
-    printf("DEBUG [PROM DUMP]: ");
-    for (uint8_t i = 0; i < 7; i++) {
-        uint8_t prom_read_cmd = 0xA0 + (i * 2);
-        i2c_write_timeout_us(sensor->i2c_inst, 0x76, &prom_read_cmd, 1, true, 100000);
+    // Read PROM coefficients
+    for (uint8_t i = 0; i < 7; i++)
+    {
+        uint8_t prom_read_cmd = MS5837_PROM_READ + (i * 2);
+        i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &prom_read_cmd, 1, true, 100000);
 
         uint8_t buffer[2];
-        int result = i2c_read_timeout_us(sensor->i2c_inst, 0x76, buffer, 2, false, 100000);
+        int result = i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 2, false, 100000);
 
-        if (result < 0) {
-            printf(" [C%d FAIL] ", i);
-            sensor->C[i] = 0;
-        } else {
+        if (result >= 0) {
             sensor->C[i] = (buffer[0] << 8) | buffer[1];
-            printf("C%d:0x%04X ", i, sensor->C[i]);
         }
     }
-    printf("\n");
 
-    // Extract CRC (bits 15-12 of C0)
-    uint8_t crcRead = sensor->C[0] >> 12;
-    // Calculate CRC (using a copy to prevent corrupting C[0])
-    uint16_t c_copy[8];
-    for(int j=0; j<8; j++) c_copy[j] = sensor->C[j];
-    uint8_t crcCalculated = ms5837_crc4(c_copy);
-
-    if (crcCalculated != crcRead) {
-        printf("DEBUG: CRC Mismatch (Read: %d, Calc: %d). FORCING MODEL 02BA.\n", crcRead, crcCalculated);
-        // We override the failure and manually set the model
-        sensor->model = MS5837_02BA; 
-        return true; 
+    // Logic for setting the model
+    if (forced_model != MS5837_UNRECOGNISED) {
+        sensor->model = forced_model;
+        printf("MS5837: Model manually set to %s\n", (sensor->model == MS5837_02BA) ? "02BA" : "30BA");
+    } else {
+        // Fallback to auto-detection logic
+        sensor->model = (sensor->C[1] > 37000) ? MS5837_02BA : MS5837_30BA;
+        printf("MS5837: Auto-detected model %s\n", (sensor->model == MS5837_02BA) ? "02BA" : "30BA");
     }
 
-    // Standard detection as a backup
-    sensor->model = (sensor->C[1] > 37000) ? MS5837_02BA : MS5837_30BA;
     return true;
 }
 
-void ms5837_read(MS5837_t *sensor) {
+void ms5837_read(MS5837_t *sensor)
+{
     uint8_t cmd;
     uint8_t buffer[3];
 
     // Request D1 (Pressure) conversion
     cmd = 0x4A; // MS5837_CONVERT_D1_8192
     i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
-    sleep_ms(20); 
+    sleep_ms(20);
 
     // Read D1 ADC
     cmd = 0x00; // MS5837_ADC_READ
@@ -139,7 +140,8 @@ void ms5837_read(MS5837_t *sensor) {
     ms5837_calculate(sensor);
 }
 
-void ms5837_calculate(MS5837_t *sensor) {
+void ms5837_calculate(MS5837_t *sensor)
+{
     // We define local variables for intermediate calculation steps.
     // Using int64_t is mandatory here to prevent overflow.
     int32_t dT = 0;
@@ -158,10 +160,13 @@ void ms5837_calculate(MS5837_t *sensor) {
     dT = sensor->D2 - (uint32_t)sensor->C[5] * 256L;
 
     // Calculate SENS (Sensitivity) and OFF (Offset) based on the sensor model.
-    if (sensor->model == 1) { // MS5837_02BA
+    if (sensor->model == 1)
+    { // MS5837_02BA
         SENS = (int64_t)sensor->C[1] * 65536L + ((int64_t)sensor->C[3] * dT) / 128L;
         OFF = (int64_t)sensor->C[2] * 131072L + ((int64_t)sensor->C[4] * dT) / 64L;
-    } else { // MS5837_30BA
+    }
+    else
+    { // MS5837_30BA
         SENS = (int64_t)sensor->C[1] * 32768L + ((int64_t)sensor->C[3] * dT) / 256L;
         OFF = (int64_t)sensor->C[2] * 65536L + ((int64_t)sensor->C[4] * dT) / 128L;
     }
@@ -172,23 +177,31 @@ void ms5837_calculate(MS5837_t *sensor) {
     // --- Part 2: Second Order Temperature Compensation ---
     // This part corrects for non-linearities at low and high temperatures.
 
-    if (sensor->model == 1) { // MS5837_02BA
-        if ((sensor->TEMP / 100) < 20) { // Low temperature (< 20°C)
+    if (sensor->model == 1)
+    { // MS5837_02BA
+        if ((sensor->TEMP / 100) < 20)
+        { // Low temperature (< 20°C)
             Ti = (11 * (int64_t)dT * dT) / 34359738368LL;
             OFFi = (31 * (sensor->TEMP - 2000) * (sensor->TEMP - 2000)) / 8;
             SENSi = (63 * (sensor->TEMP - 2000) * (sensor->TEMP - 2000)) / 32;
         }
-    } else { // MS5837_30BA
-        if ((sensor->TEMP / 100) < 20) { // Low temperature (< 20°C)
+    }
+    else
+    { // MS5837_30BA
+        if ((sensor->TEMP / 100) < 20)
+        { // Low temperature (< 20°C)
             Ti = (3 * (int64_t)dT * dT) / 8589934592LL;
             OFFi = (3 * (sensor->TEMP - 2000) * (sensor->TEMP - 2000)) / 2;
             SENSi = (5 * (sensor->TEMP - 2000) * (sensor->TEMP - 2000)) / 8;
-            
-            if ((sensor->TEMP / 100) < -15) { // Very low temperature (< -15°C)
+
+            if ((sensor->TEMP / 100) < -15)
+            { // Very low temperature (< -15°C)
                 OFFi = OFFi + 7 * (sensor->TEMP + 1500L) * (sensor->TEMP + 1500L);
                 SENSi = SENSi + 4 * (sensor->TEMP + 1500L) * (sensor->TEMP + 1500L);
             }
-        } else if ((sensor->TEMP / 100) >= 20) { // High temperature (> 20°C)
+        }
+        else if ((sensor->TEMP / 100) >= 20)
+        { // High temperature (> 20°C)
             Ti = 2 * ((int64_t)dT * dT) / 137438953472LL;
             OFFi = (1 * (sensor->TEMP - 2000) * (sensor->TEMP - 2000)) / 16;
             SENSi = 0;
@@ -202,34 +215,43 @@ void ms5837_calculate(MS5837_t *sensor) {
     // Update the final temperature and pressure in the struct.
     sensor->TEMP = sensor->TEMP - Ti;
 
-    if (sensor->model == 1) { // MS5837_02BA
+    if (sensor->model == 1)
+    { // MS5837_02BA
         sensor->P = (((sensor->D1 * SENS2) / 2097152L - OFF2) / 32768L);
-    } else { // MS5837_30BA
+    }
+    else
+    { // MS5837_30BA
         sensor->P = (((sensor->D1 * SENS2) / 2097152L - OFF2) / 8192L);
     }
 }
 
-
-float ms5837_get_pressure(MS5837_t *sensor, float conversion) {
-    if (sensor->model == MS5837_02BA) {
+float ms5837_get_pressure(MS5837_t *sensor, float conversion)
+{
+    if (sensor->model == MS5837_02BA)
+    {
         return (float)sensor->P * conversion / 100.0f;
-    } else {
+    }
+    else
+    {
         // For 30BA, the pressure calculation results in 0.1 mbar units
         return (float)sensor->P * conversion / 10.0f;
     }
 }
 
-float ms5837_get_temperature(MS5837_t *sensor) {
+float ms5837_get_temperature(MS5837_t *sensor)
+{
     // TEMP is calculated in centidegrees (100 * deg C)
     return (float)sensor->TEMP / 100.0f;
 }
 
-float ms5837_get_depth(MS5837_t *sensor) {
+float ms5837_get_depth(MS5837_t *sensor)
+{
     // Uses the standard atmospheric pressure of 101300 Pa as a baseline
     return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
 }
 
-float ms5837_get_altitude(MS5837_t *sensor) {
+float ms5837_get_altitude(MS5837_t *sensor)
+{
     // Standard altitude formula using 1013.25 mbar as sea level pressure
     return (1.0f - powf((ms5837_get_pressure(sensor, 1.0f) / 1013.25f), 0.190284f)) * 145366.45f * 0.3048f;
 }

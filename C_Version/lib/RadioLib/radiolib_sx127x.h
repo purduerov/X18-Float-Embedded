@@ -57,5 +57,18 @@ int16_t RadioLib_SX127x_Receive(RadioLibSX127x_t *chip, uint8_t *data, size_t le
 int16_t RadioLib_SX127x_SetFrequency(RadioLibSX127x_t *chip, float freq);
 int16_t RadioLib_SX127x_SetBandwidth(RadioLibSX127x_t *chip, float bw);
 int16_t RadioLib_SX127x_SetSpreadingFactor(RadioLibSX127x_t *chip, uint8_t sf);
+// Starts the RX process without blocking
+int16_t RadioLib_SX127x_StartReceive(RadioLibSX127x_t *chip);
 
+// Reads the data from the FIFO after the interrupt fires
+int16_t RadioLib_SX127x_ReadData(RadioLibSX127x_t *chip, uint8_t *data, size_t len);
+
+// Helper to attach an interrupt callback to the IRQ pin
+void RadioLib_SX127x_SetAction(RadioLibSX127x_t *chip, void (*cb)(void));
+
+// Starts the TX process without blocking
+int16_t RadioLib_SX127x_StartTransmit(RadioLibSX127x_t *chip, const uint8_t *data, size_t len);
+
+// Cleans up after the TX interrupt fires
+int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t *chip);
 #endif

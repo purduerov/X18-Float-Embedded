@@ -201,3 +201,85 @@ int16_t RadioLib_SX127x_Receive(RadioLibSX127x_t* chip, uint8_t* data, size_t le
     
     return (int16_t)length; // Return number of bytes received
 }
+
+int16_t RadioLib_SX127x_StartReceive(RadioLibSX127x_t* chip) {
+    // 1. Standby mode
+    setMode(chip, RADIOLIB_SX127X_STANDBY);
+
+    // 2. Map DIO0 to RxDone (0x00 maps DIO0 to RxDone)
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_DIO_MAPPING_1, 0x00);
+
+    // 3. Clear IRQ flags
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+
+    // 4. Enter RX Continuous (or RX_SINGLE if you prefer)
+    return setMode(chip, RADIOLIB_SX127X_RXCONTINUOUS);
+}
+
+int16_t RadioLib_SX127x_ReadData(RadioLibSX127x_t* chip, uint8_t* data, size_t len) {
+    // 1. Check for CRC Error (IRQ Flag Bit 5)
+    uint8_t flags = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS);
+    if (flags & 0x20) { 
+        RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+        return RADIOLIB_ERR_CRC_MISMATCH; 
+    }
+
+    // 2. Read packet length
+    uint8_t length = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_RX_NB_BYTES);
+    
+    // 3. Set FIFO pointer to current packet address
+    uint8_t currentAddr = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO_RX_CURRENT_ADDR);
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO_ADDR_PTR, currentAddr);
+
+    // 4. Read data safely
+    size_t readLen = (len < length) ? len : length; 
+    for (size_t i = 0; i < readLen; i++) {
+        data[i] = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO);
+    }
+
+    // 5. Clear Flags 
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+    
+    // Note: If using RXCONTINUOUS, the radio stays in RX. 
+    // If you want to stop receiving, uncomment the next line:
+    // setMode(chip, RADIOLIB_SX127X_STANDBY);
+    
+    return (int16_t)length;
+}
+
+void RadioLib_SX127x_SetAction(RadioLibSX127x_t* chip, void (*cb)(void)) {
+    RadioLibHal_t* hal = chip->mod->hal;
+    if (chip->mod->irqPin != RADIOLIB_NC) {
+        hal->attachInterrupt(hal, chip->mod->irqPin, cb, hal->gpioInterruptRising);
+    }
+}
+
+int16_t RadioLib_SX127x_StartTransmit(RadioLibSX127x_t* chip, const uint8_t* data, size_t len) {
+    // 1. Standby mode
+    setMode(chip, RADIOLIB_SX127X_STANDBY);
+
+    // 2. Clear all IRQ flags
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+
+    // 3. Configure DIO0 to TxDone (0x40 maps DIO0 to TxDone)
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_DIO_MAPPING_1, 0x40);
+
+    // 4. Set FIFO pointers
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO_ADDR_PTR, 0);
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO_TX_BASE_ADDR, 0);
+    
+    // 5. Write data to FIFO
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_PAYLOAD_LENGTH, (uint8_t)len);
+    for (size_t i = 0; i < len; i++) {
+        RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_FIFO, data[i]);
+    }
+
+    // 6. Start TX and return immediately
+    return setMode(chip, RADIOLIB_SX127X_TX);
+}
+
+int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t* chip) {
+    // Clear IRQ flags and return to standby
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+    return setMode(chip, RADIOLIB_SX127X_STANDBY);
+}

@@ -9,8 +9,6 @@
 #define bar 0.001f
 #define mbar 1.0f
 
-
-
 typedef struct {
     // Hardware Reference
     void* i2c_inst;      // Pointer to your I2C hardware instance
@@ -31,7 +29,7 @@ typedef struct {
 
 
 void ms5837_init_struct(MS5837_t *sensor);
-bool ms5837_begin(MS5837_t *sensor, void *i2c_inst);
+bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model);
 void ms5837_read(MS5837_t *sensor);
 void ms5837_calculate(MS5837_t *sensor);
 
