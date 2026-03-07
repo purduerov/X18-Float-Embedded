@@ -150,7 +150,7 @@ int main()
     uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 
     RadioLib_SX127x_StartReceive(&lora);
-
+    
     while (true)
     {
         uint32_t now = to_ms_since_boot(get_absolute_time());
