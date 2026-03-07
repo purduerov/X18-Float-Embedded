@@ -22,7 +22,8 @@ typedef enum
     CMD_BEGIN_PROFILE = 0x04,
     CMD_DONE_PROFILE = 0x05,
     CMD_DATA_DONE = 0x06,
-    CMD_ACK = 0x07
+    CMD_ACK = 0x07,
+    CMD_PREDIVE_READY = 0x08
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -203,6 +204,10 @@ int main()
                     packet_t rx_pkt;
                     memcpy(&rx_pkt, buffer, sizeof(packet_t));
 
+                    if (rx_pkt.command == CMD_PREDIVE_READY)
+                    {
+                        printf(">> PREDIVE_READY: Float is confirmed and starting mission.\n");
+                    }
                     if (fsm_state == SURFACE_WAITING_PROFILE)
                     {
                         if (rx_pkt.command == CMD_DONE_PROFILE)
