@@ -10,12 +10,10 @@
 #include "radio_setup.h"
 
 // --- Profiling Configuration ---
-#define PROFILE_DURATION_MS 180000 
-#define SAMPLE_INTERVAL_MS  1000
-#define TOTAL_PACKETS (PROFILE_DURATION_MS / SAMPLE_INTERVAL_MS)
-
-float recorded_depths[TOTAL_PACKETS];
-uint32_t recorded_times[TOTAL_PACKETS];
+#define SAMPLE_INTERVAL_MS 1000
+#define MAX_PACKETS 400 // Allocates memory for max ~6.5 minutes of data at 1Hz
+float recorded_depths[MAX_PACKETS];
+uint32_t recorded_times[MAX_PACKETS];
 
 // --- I2C / Sensor Setup ---
 #define I2C_PORT i2c1
@@ -26,7 +24,7 @@ uint32_t recorded_times[TOTAL_PACKETS];
 typedef enum
 {
     FLOAT_IDLE,
-    FLOAT_PRE_DIVE,      
+    FLOAT_PRE_DIVE,
     FLOAT_PROFILING,
     FLOAT_PROFILE_DONE,
     FLOAT_DUMPING_DATA
@@ -53,7 +51,7 @@ int main()
 
     // --- Initialize Persistent Storage ---
     printf("Initializing Flash Storage...\n");
-    storage_init(); 
+    storage_init();
 
     // --- Initialize I2C and MS5837 ---
     printf("Initializing I2C Bus...");
@@ -76,9 +74,11 @@ int main()
     }
 
     // --- Initialize Radio (Using Shared Library) ---
-    if (!radio_setup_init(onInterrupt)) {
+    if (!radio_setup_init(onInterrupt))
+    {
         printf("Radio init failed! Halting.\n");
-        while (true) sleep_ms(1000);
+        while (true)
+            sleep_ms(1000);
     }
 
     printf("Float Initialized. Waiting in IDLE state...\n");
@@ -117,7 +117,7 @@ int main()
         if (state == FLOAT_PRE_DIVE && !currentlyTransmitting)
         {
             printf(">> Sending Pre-Dive Data Packet...\n");
-            
+
             packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
             tx_pkt.payload.telemetry.company_number = current_settings.company_number;
             tx_pkt.payload.telemetry.time_ms = now;
@@ -128,14 +128,14 @@ int main()
         }
         else if (state == FLOAT_PROFILING)
         {
-            if (now - lastSampleTime >= SAMPLE_INTERVAL_MS && sampleIndex < TOTAL_PACKETS)
+            if (now - lastSampleTime >= SAMPLE_INTERVAL_MS && sampleIndex < MAX_PACKETS)
             {
                 ms5837_read(&depth_sensor);
                 recorded_depths[sampleIndex] = ms5837_get_depth(&depth_sensor) - SENSOR_TOP_OFFSET;
                 recorded_times[sampleIndex] = now;
 
                 printf(">> Sample %u/%lu: Time %lu ms | Depth %.2f m\n",
-                       sampleIndex + 1, TOTAL_PACKETS, recorded_times[sampleIndex], recorded_depths[sampleIndex]);
+                       sampleIndex + 1, MAX_PACKETS, recorded_times[sampleIndex], recorded_depths[sampleIndex]);
 
                 // NOTE: Insert your PID control loop here using current_settings.kp, etc.
 
@@ -143,9 +143,9 @@ int main()
                 lastSampleTime = now;
             }
 
-            if (now - profileStartTime >= PROFILE_DURATION_MS)
+            if (now - profileStartTime >= (current_settings.profile_duration_s * 1000))
             {
-                printf(">> Profile complete (%lu ms). Surfacing...\n", PROFILE_DURATION_MS);
+                printf(">> Profile complete (%u sec). Surfacing...\n", current_settings.profile_duration_s);
                 state = FLOAT_PROFILE_DONE;
             }
         }
@@ -167,7 +167,7 @@ int main()
                 printf(">> Sending/Retransmitting Data Packet %d...\n", currentSeqNum);
 
                 packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = currentSeqNum};
-                
+
                 tx_pkt.payload.telemetry.company_number = current_settings.company_number;
                 tx_pkt.payload.telemetry.time_ms = recorded_times[currentSeqNum - 1];
                 tx_pkt.payload.telemetry.depth_m = recorded_depths[currentSeqNum - 1];
@@ -188,7 +188,7 @@ int main()
                 RadioLib_SX127x_FinishTransmit(&lora);
                 currentlyTransmitting = false;
 
-                if (state == FLOAT_PRE_DIVE) 
+                if (state == FLOAT_PRE_DIVE)
                 {
                     printf(">> Pre-dive packet sent. Starting dive profiles (Radio SILENT)...\n");
                     state = FLOAT_PROFILING;
@@ -213,14 +213,14 @@ int main()
                         if (rx_pkt.command == CMD_BEGIN_PROFILE)
                         {
                             printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive Transmission...\n");
-                            state = FLOAT_PRE_DIVE; 
+                            state = FLOAT_PRE_DIVE;
                         }
                         else if (rx_pkt.command == CMD_SET_PID)
                         {
                             current_settings.kp = rx_pkt.payload.settings.kp;
                             current_settings.ki = rx_pkt.payload.settings.ki;
                             current_settings.kd = rx_pkt.payload.settings.kd;
-                            printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n", 
+                            printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n",
                                    current_settings.kp, current_settings.ki, current_settings.kd);
                             storage_save();
                         }
@@ -230,16 +230,22 @@ int main()
                             printf(">> Company ID Updated: %u. Saving to Flash...\n", current_settings.company_number);
                             storage_save();
                         }
+                        else if (rx_pkt.command == CMD_SET_DURATION)
+                        {
+                            current_settings.profile_duration_s = rx_pkt.payload.settings.profile_duration_s;
+                            printf(">> Profile Duration Updated: %u seconds. Saving to Flash...\n", current_settings.profile_duration_s);
+                            storage_save();
+                        }
                         else if (rx_pkt.command == CMD_REQ_SETTINGS)
                         {
                             printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
-                            
+
                             packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
                             tx_pkt.payload.settings.kp = current_settings.kp;
                             tx_pkt.payload.settings.ki = current_settings.ki;
                             tx_pkt.payload.settings.kd = current_settings.kd;
                             tx_pkt.payload.settings.company_number = current_settings.company_number;
-                            
+
                             currentlyTransmitting = true;
                             RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                         }
@@ -261,7 +267,7 @@ int main()
                             printf(">> Received ACK for packet %d.\n", currentSeqNum);
                             currentSeqNum++;
 
-                            if (currentSeqNum > sampleIndex) 
+                            if (currentSeqNum > sampleIndex)
                             {
                                 printf(">> All data sent. Sending DATA_DONE...\n");
                                 packet_t done_pkt = {.command = CMD_DATA_DONE, .seq_num = 0};

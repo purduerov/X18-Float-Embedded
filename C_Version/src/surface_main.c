@@ -1,7 +1,7 @@
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 
 // --- Shared Library Includes ---
 #include "packets.h"
@@ -42,9 +42,11 @@ int main()
     printf("\n\n=== MATE Surface Station Booting ===\n");
 
     // --- Initialize Radio (Using Shared Library) ---
-    if (!radio_setup_init(onInterrupt)) {
+    if (!radio_setup_init(onInterrupt))
+    {
         printf("Radio init failed! Halting.\n");
-        while (true) sleep_ms(1000);
+        while (true)
+            sleep_ms(1000);
     }
 
     printf("Surface Station Ready.\n");
@@ -106,7 +108,7 @@ int main()
                             {
                                 printf(">> Sending PID: P=%.2f, I=%.2f, D=%.2f\n", p, i, d);
                                 packet_t tx_pkt = {.command = CMD_SET_PID, .seq_num = 0};
-                                
+
                                 tx_pkt.payload.settings.kp = p;
                                 tx_pkt.payload.settings.ki = i;
                                 tx_pkt.payload.settings.kd = d;
@@ -123,6 +125,18 @@ int main()
                                 printf(">> Sending Company ID Update: %lu\n", parsed_id);
                                 packet_t tx_pkt = {.command = CMD_SET_COMPANY, .seq_num = 0};
                                 tx_pkt.payload.telemetry.company_number = (uint16_t)parsed_id;
+                                currentlyTransmitting = true;
+                                RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
+                            }
+                        }
+                        else if (input_line[0] == 't' || input_line[0] == 'T')
+                        {
+                            uint32_t parsed_time;
+                            if (sscanf(input_line + 1, "%lu", &parsed_time) == 1)
+                            {
+                                printf(">> Sending Duration Update: %lu sec\n", parsed_time);
+                                packet_t tx_pkt = {.command = CMD_SET_DURATION, .seq_num = 0};
+                                tx_pkt.payload.settings.profile_duration_s = (uint16_t)parsed_time;
                                 currentlyTransmitting = true;
                                 RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                             }
@@ -179,12 +193,12 @@ int main()
                     {
                         if (rx_pkt.command == CMD_REP_SETTINGS)
                         {
-                            // Output a highly recognizable string for the Python script to parse
-                            printf("\n[SYNC] FLOAT_SETTINGS: P=%.2f, I=%.2f, D=%.2f, Co#=%u\n",
+                            printf("\n[SYNC] FLOAT_SETTINGS: P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u\n",
                                    rx_pkt.payload.settings.kp,
                                    rx_pkt.payload.settings.ki,
                                    rx_pkt.payload.settings.kd,
-                                   rx_pkt.payload.settings.company_number);
+                                   rx_pkt.payload.settings.company_number,
+                                   rx_pkt.payload.settings.profile_duration_s);
                         }
                     }
                     else if (fsm_state == SURFACE_WAITING_PROFILE)
@@ -202,9 +216,9 @@ int main()
 
                             if (downloaded_data != NULL)
                             {
-                                free(downloaded_data); 
+                                free(downloaded_data);
                             }
-                            allocated_capacity = 16; 
+                            allocated_capacity = 16;
                             downloaded_count = 0;
                             downloaded_data = (SensorReading_t *)malloc(allocated_capacity * sizeof(SensorReading_t));
 
@@ -224,7 +238,7 @@ int main()
                             {
                                 if (downloaded_count >= allocated_capacity)
                                 {
-                                    allocated_capacity *= 2; 
+                                    allocated_capacity *= 2;
                                     SensorReading_t *temp = (SensorReading_t *)realloc(downloaded_data, allocated_capacity * sizeof(SensorReading_t));
 
                                     if (temp != NULL)
@@ -242,7 +256,7 @@ int main()
                                     downloaded_data[downloaded_count].company_number = rx_pkt.payload.telemetry.company_number;
                                     downloaded_data[downloaded_count].time_ms = rx_pkt.payload.telemetry.time_ms;
                                     downloaded_data[downloaded_count].depth_m = rx_pkt.payload.telemetry.depth_m;
-                                    
+
                                     printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m\n",
                                            rx_pkt.seq_num,
                                            downloaded_data[downloaded_count].company_number,
@@ -265,13 +279,13 @@ int main()
                         else if (rx_pkt.command == CMD_DATA_DONE)
                         {
                             printf("\n--- START DATA DUMP ---\n");
-                            printf("CompanyNumber,Time(ms),Depth(m)\n"); 
+                            printf("CompanyNumber,Time(ms),Depth(m)\n");
 
                             for (size_t i = 0; i < downloaded_count; i++)
                             {
-                                printf("%u,%lu,%.2f\n", 
-                                       downloaded_data[i].company_number, 
-                                       downloaded_data[i].time_ms, 
+                                printf("%u,%lu,%.2f\n",
+                                       downloaded_data[i].company_number,
+                                       downloaded_data[i].time_ms,
                                        downloaded_data[i].depth_m);
                             }
 

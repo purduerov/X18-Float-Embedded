@@ -15,8 +15,9 @@ typedef enum
     CMD_ACK = 0x07,
     CMD_PREDIVE_READY = 0x08,
     CMD_SET_COMPANY = 0x09,
-    CMD_REQ_SETTINGS = 0x0A, // Surface asks Float for current flash settings
-    CMD_REP_SETTINGS = 0x0B  // Float replies with current flash settings
+    CMD_REQ_SETTINGS = 0x0A, 
+    CMD_REP_SETTINGS = 0x0B,
+    CMD_SET_DURATION = 0x0C // NEW: Command to set underwater time
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -34,8 +35,9 @@ typedef struct __attribute__((packed))
             float ki;
             float kd;
             uint16_t company_number;
-        } settings; // 14 bytes total, fits comfortably in our new 16-byte limit
-        uint8_t raw[16];     
+            uint16_t profile_duration_s; // Added to sync payload
+        } settings; 
+        uint8_t raw[24]; // Expanded to 24 bytes for future expansion
     } payload;
 } packet_t;
 

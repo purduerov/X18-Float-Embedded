@@ -34,23 +34,23 @@ void storage_save(void) {
 }
 
 void storage_load(void) {
-    // XIP_BASE is the memory address where Flash is mirrored
     const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
     memcpy(&current_settings, flash_target_contents, sizeof(float_settings_t));
 
-    // Check if we have valid data by looking for the magic number
     if (current_settings.magic_number != SETTINGS_MAGIC) {
         printf("[STORAGE] No saved settings found. Initializing defaults.\n");
         current_settings.kp = 1.0f;
         current_settings.ki = 0.5f;
         current_settings.kd = 0.1f;
         current_settings.company_number = 9999;
+        current_settings.profile_duration_s = 180; // Default: 3 minutes
         current_settings.magic_number = SETTINGS_MAGIC;
-        storage_save(); // Save defaults immediately
+        storage_save(); 
     } else {
         printf("[STORAGE] Successfully loaded settings from Flash.\n");
-        printf("[STORAGE] Loaded PID: P=%.2f, I=%.2f, D=%.2f | Team: %u\n", 
-               current_settings.kp, current_settings.ki, current_settings.kd, current_settings.company_number);
+        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Team: %u | Time: %us\n", 
+               current_settings.kp, current_settings.ki, current_settings.kd, 
+               current_settings.company_number, current_settings.profile_duration_s);
     }
 }
 
