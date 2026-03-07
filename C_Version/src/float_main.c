@@ -1,23 +1,13 @@
 #include "pico/stdlib.h"
-#include "radiolib_hal_pico.h"
-#include "radiolib_sx1276.h"
 #include "hardware/i2c.h"
 #include "ms5837.h"
 #include <stdio.h>
 #include <string.h>
 
-// --- New Library Includes ---
+// --- Custom Library Includes ---
 #include "packets.h"
 #include "storage.h"
-
-// --- Radio Setup ---
-const uint32_t SPI_MOSI = 19;
-const uint32_t SPI_MISO = 20;
-const uint32_t SPI_SCK = 18;
-const uint32_t CS_PIN = 24;
-const uint32_t RST_PIN = 25;
-const uint32_t EN_PIN = 8;
-const uint32_t IRQ_PIN = 9;
+#include "radio_setup.h"
 
 // --- Profiling Configuration ---
 #define PROFILE_DURATION_MS 180000 
@@ -51,10 +41,6 @@ void onInterrupt(void) { operationDoneFlag = true; }
 int main()
 {
     stdio_init_all();
-    gpio_init(EN_PIN);
-    gpio_set_dir(EN_PIN, GPIO_OUT);
-    gpio_put(EN_PIN, 1);
-    sleep_ms(100);
 
     uint32_t waitTime = 0;
     while (!stdio_usb_connected() && waitTime < 5000)
@@ -68,7 +54,6 @@ int main()
     // --- Initialize Persistent Storage ---
     printf("Initializing Flash Storage...\n");
     storage_init(); 
-    // current_settings is now loaded into RAM and ready to use
 
     // --- Initialize I2C and MS5837 ---
     printf("Initializing I2C Bus...");
@@ -90,21 +75,11 @@ int main()
         printf("MS5837 Initialized.\n");
     }
 
-    // --- Initialize Radio ---
-    RadioLibHal_t *hal = RadioLib_Pico_Create(spi0, SPI_SCK, SPI_MOSI, SPI_MISO, 8000000);
-    RadioLibModule_t radioModule;
-    memset(&radioModule, 0, sizeof(RadioLibModule_t)); 
-    RadioLib_Module_Create(&radioModule, hal, CS_PIN, IRQ_PIN, RST_PIN, RADIOLIB_NC);
-    radioModule.enPin = EN_PIN;
-
-    uint32_t gPins[] = {RADIOLIB_NC, 29, 6, 7, 10, 11};
-    for (int i = 0; i < 6; i++)
-        radioModule.radioGPins[i] = gPins[i];
-
-    RadioLibSX127x_t lora;
-    RadioLib_SX127x_Create(&lora, &radioModule);
-    RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 10);
-    RadioLib_SX127x_SetAction(&lora, onInterrupt);
+    // --- Initialize Radio (Using Shared Library) ---
+    if (!radio_setup_init(onInterrupt)) {
+        printf("Radio init failed! Halting.\n");
+        while (true) sleep_ms(1000);
+    }
 
     printf("Float Initialized. Waiting in IDLE state...\n");
 
@@ -123,6 +98,7 @@ int main()
 
     uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 
+    // Start listening for commands from the surface
     RadioLib_SX127x_StartReceive(&lora);
 
     while (true)
@@ -143,7 +119,6 @@ int main()
             printf(">> Sending Pre-Dive Data Packet...\n");
             
             packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
-            // Use the company number loaded from flash storage
             tx_pkt.payload.telemetry.company_number = current_settings.company_number;
             tx_pkt.payload.telemetry.time_ms = now;
             tx_pkt.payload.telemetry.depth_m = 0.0f;
@@ -193,7 +168,6 @@ int main()
 
                 packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = currentSeqNum};
                 
-                // Use the company number loaded from flash storage
                 tx_pkt.payload.telemetry.company_number = current_settings.company_number;
                 tx_pkt.payload.telemetry.time_ms = recorded_times[currentSeqNum - 1];
                 tx_pkt.payload.telemetry.depth_m = recorded_depths[currentSeqNum - 1];
@@ -243,20 +217,31 @@ int main()
                         }
                         else if (rx_pkt.command == CMD_SET_PID)
                         {
-                            // Update the values in RAM and save to Flash
-                            current_settings.kp = rx_pkt.payload.pid_gains[0];
-                            current_settings.ki = rx_pkt.payload.pid_gains[1];
-                            current_settings.kd = rx_pkt.payload.pid_gains[2];
+                            current_settings.kp = rx_pkt.payload.settings.kp;
+                            current_settings.ki = rx_pkt.payload.settings.ki;
+                            current_settings.kd = rx_pkt.payload.settings.kd;
                             printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n", 
                                    current_settings.kp, current_settings.ki, current_settings.kd);
                             storage_save();
                         }
                         else if (rx_pkt.command == CMD_SET_COMPANY)
                         {
-                            // Update the value in RAM and save to Flash
                             current_settings.company_number = rx_pkt.payload.telemetry.company_number;
                             printf(">> Company ID Updated: %u. Saving to Flash...\n", current_settings.company_number);
                             storage_save();
+                        }
+                        else if (rx_pkt.command == CMD_REQ_SETTINGS)
+                        {
+                            printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
+                            
+                            packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
+                            tx_pkt.payload.settings.kp = current_settings.kp;
+                            tx_pkt.payload.settings.ki = current_settings.ki;
+                            tx_pkt.payload.settings.kd = current_settings.kd;
+                            tx_pkt.payload.settings.company_number = current_settings.company_number;
+                            
+                            currentlyTransmitting = true;
+                            RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                         }
                     }
                     else if (state == FLOAT_PROFILE_DONE)

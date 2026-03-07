@@ -14,7 +14,9 @@ typedef enum
     CMD_DATA_DONE = 0x06,
     CMD_ACK = 0x07,
     CMD_PREDIVE_READY = 0x08,
-    CMD_SET_COMPANY = 0x09
+    CMD_SET_COMPANY = 0x09,
+    CMD_REQ_SETTINGS = 0x0A, // Surface asks Float for current flash settings
+    CMD_REP_SETTINGS = 0x0B  // Float replies with current flash settings
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -27,8 +29,13 @@ typedef struct __attribute__((packed))
             uint32_t time_ms;
             float depth_m;
         } telemetry;         
-        float pid_gains[3];  
-        uint8_t raw[12];     
+        struct {
+            float kp;
+            float ki;
+            float kd;
+            uint16_t company_number;
+        } settings; // 14 bytes total, fits comfortably in our new 16-byte limit
+        uint8_t raw[16];     
     } payload;
 } packet_t;
 

@@ -1,20 +1,11 @@
 #include "pico/stdlib.h"
-#include "radiolib_hal_pico.h"
-#include "radiolib_sx1276.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h> // Required for malloc, realloc, free
+#include <stdlib.h> 
 
 // --- Shared Library Includes ---
 #include "packets.h"
-
-const uint32_t SPI_MOSI = 19;
-const uint32_t SPI_MISO = 20;
-const uint32_t SPI_SCK = 18;
-const uint32_t CS_PIN = 24;
-const uint32_t RST_PIN = 25;
-const uint32_t EN_PIN = 8;
-const uint32_t IRQ_PIN = 9;
+#include "radio_setup.h"
 
 typedef enum
 {
@@ -26,7 +17,7 @@ typedef enum
 const char *SurfaceStateNames[] = {
     "IDLE", "WAITING_PROFILE", "DOWNLOADING"};
 
-// Updated structure to hold the downloaded MATE telemetry data in RAM
+// Structure to hold the downloaded MATE telemetry data in RAM
 typedef struct
 {
     uint16_t company_number;
@@ -40,10 +31,6 @@ void onInterrupt(void) { operationDoneFlag = true; }
 int main()
 {
     stdio_init_all();
-    gpio_init(EN_PIN);
-    gpio_set_dir(EN_PIN, GPIO_OUT);
-    gpio_put(EN_PIN, 1);
-    sleep_ms(100);
 
     uint32_t waitTime = 0;
     while (!stdio_usb_connected() && waitTime < 5000)
@@ -54,33 +41,14 @@ int main()
 
     printf("\n\n=== MATE Surface Station Booting ===\n");
 
-    RadioLibHal_t *hal = RadioLib_Pico_Create(spi0, SPI_SCK, SPI_MOSI, SPI_MISO, 8000000);
-    RadioLibModule_t radioModule;
-    RadioLib_Module_Create(&radioModule, hal, CS_PIN, IRQ_PIN, RST_PIN, RADIOLIB_NC);
-    radioModule.enPin = EN_PIN;
-
-    uint32_t gPins[] = {RADIOLIB_NC, 29, 6, 7, 10, 11};
-    for (int i = 0; i < 6; i++)
-        radioModule.radioGPins[i] = gPins[i];
-
-    RadioLibSX127x_t lora;
-    RadioLib_SX127x_Create(&lora, &radioModule);
-
-    printf("Initializing SX1276...\n");
-    int16_t radio_status = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 10);
-    if (radio_status != RADIOLIB_ERR_NONE)
-    {
-        printf("CRITICAL ERROR: Radio Init failed, code %d\n", radio_status);
-        printf("Check your wiring! Freezing program here.\n");
-        while (true)
-            sleep_ms(1000);
+    // --- Initialize Radio (Using Shared Library) ---
+    if (!radio_setup_init(onInterrupt)) {
+        printf("Radio init failed! Halting.\n");
+        while (true) sleep_ms(1000);
     }
-    printf("Radio Init Success!\n");
-
-    RadioLib_SX127x_SetAction(&lora, onInterrupt);
 
     printf("Surface Station Ready.\n");
-    printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company ID)\n");
+    printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company ID), '?' (Sync Settings)\n");
 
     SurfaceState_t fsm_state = SURFACE_IDLE;
     bool currentlyTransmitting = false;
@@ -139,16 +107,12 @@ int main()
                                 printf(">> Sending PID: P=%.2f, I=%.2f, D=%.2f\n", p, i, d);
                                 packet_t tx_pkt = {.command = CMD_SET_PID, .seq_num = 0};
                                 
-                                tx_pkt.payload.pid_gains[0] = p;
-                                tx_pkt.payload.pid_gains[1] = i;
-                                tx_pkt.payload.pid_gains[2] = d;
+                                tx_pkt.payload.settings.kp = p;
+                                tx_pkt.payload.settings.ki = i;
+                                tx_pkt.payload.settings.kd = d;
 
                                 currentlyTransmitting = true;
                                 RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
-                            }
-                            else
-                            {
-                                printf(">> [ERROR] Invalid PID format. Please use format: s <P> <I> <D>\n");
                             }
                         }
                         else if (input_line[0] == 'c' || input_line[0] == 'C')
@@ -158,16 +122,17 @@ int main()
                             {
                                 printf(">> Sending Company ID Update: %lu\n", parsed_id);
                                 packet_t tx_pkt = {.command = CMD_SET_COMPANY, .seq_num = 0};
-                                
                                 tx_pkt.payload.telemetry.company_number = (uint16_t)parsed_id;
-                                
                                 currentlyTransmitting = true;
                                 RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                             }
-                            else
-                            {
-                                printf(">> [ERROR] Invalid ID format. Please use format: c <ID>\n");
-                            }
+                        }
+                        else if (input_line[0] == '?')
+                        {
+                            printf(">> Requesting current float settings...\n");
+                            packet_t tx_pkt = {.command = CMD_REQ_SETTINGS, .seq_num = 0};
+                            currentlyTransmitting = true;
+                            RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                         }
                     }
                     input_pos = 0;
@@ -210,7 +175,19 @@ int main()
                     packet_t rx_pkt;
                     memcpy(&rx_pkt, buffer, sizeof(packet_t));
 
-                    if (fsm_state == SURFACE_WAITING_PROFILE)
+                    if (fsm_state == SURFACE_IDLE)
+                    {
+                        if (rx_pkt.command == CMD_REP_SETTINGS)
+                        {
+                            // Output a highly recognizable string for the Python script to parse
+                            printf("\n[SYNC] FLOAT_SETTINGS: P=%.2f, I=%.2f, D=%.2f, Co#=%u\n",
+                                   rx_pkt.payload.settings.kp,
+                                   rx_pkt.payload.settings.ki,
+                                   rx_pkt.payload.settings.kd,
+                                   rx_pkt.payload.settings.company_number);
+                        }
+                    }
+                    else if (fsm_state == SURFACE_WAITING_PROFILE)
                     {
                         if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0)
                         {
