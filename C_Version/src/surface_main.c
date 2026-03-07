@@ -23,14 +23,24 @@ typedef enum
     CMD_DONE_PROFILE = 0x05,
     CMD_DATA_DONE = 0x06,
     CMD_ACK = 0x07,
-    CMD_PREDIVE_READY = 0x08
+    CMD_PREDIVE_READY = 0x08,
+    CMD_SET_COMPANY = 0x09
 } PacketCommand_t;
 
+// Updated Packet to match the float and MATE requirements
 typedef struct __attribute__((packed))
 {
     uint8_t command;
     uint16_t seq_num;
-    uint8_t payload[12];
+    union {
+        struct {
+            uint16_t company_number;
+            uint32_t time_ms;
+            float depth_m;
+        } telemetry;         
+        float pid_gains[3];  
+        uint8_t raw[12];     
+    } payload;
 } packet_t;
 
 typedef enum
@@ -43,10 +53,12 @@ typedef enum
 const char *SurfaceStateNames[] = {
     "IDLE", "WAITING_PROFILE", "DOWNLOADING"};
 
-// Structure to hold a single downloaded reading in RAM
+// Updated structure to hold the downloaded MATE telemetry data in RAM
 typedef struct
 {
-    float values[3];
+    uint16_t company_number;
+    uint32_t time_ms;
+    float depth_m;
 } SensorReading_t;
 
 volatile bool operationDoneFlag = false;
@@ -67,7 +79,7 @@ int main()
         waitTime += 100;
     }
 
-    printf("\n\n=== Surface Station Booting ===\n");
+    printf("\n\n=== MATE Surface Station Booting ===\n");
 
     RadioLibHal_t *hal = RadioLib_Pico_Create(spi0, SPI_SCK, SPI_MOSI, SPI_MISO, 8000000);
     RadioLibModule_t radioModule;
@@ -95,7 +107,7 @@ int main()
     RadioLib_SX127x_SetAction(&lora, onInterrupt);
 
     printf("Surface Station Ready.\n");
-    printf("Type 'p' to begin profile. Type 's' to set test PID.\n");
+    printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company ID)\n");
 
     SurfaceState_t fsm_state = SURFACE_IDLE;
     bool currentlyTransmitting = false;
@@ -153,14 +165,35 @@ int main()
                             {
                                 printf(">> Sending PID: P=%.2f, I=%.2f, D=%.2f\n", p, i, d);
                                 packet_t tx_pkt = {.command = CMD_SET_PID, .seq_num = 0};
-                                float new_gains[3] = {p, i, d};
-                                memcpy(tx_pkt.payload, new_gains, 12);
+                                
+                                tx_pkt.payload.pid_gains[0] = p;
+                                tx_pkt.payload.pid_gains[1] = i;
+                                tx_pkt.payload.pid_gains[2] = d;
+
                                 currentlyTransmitting = true;
                                 RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
                             }
                             else
                             {
                                 printf(">> [ERROR] Invalid PID format. Please use format: s <P> <I> <D>\n");
+                            }
+                        }
+                        else if (input_line[0] == 'c' || input_line[0] == 'C')
+                        {
+                            uint32_t parsed_id;
+                            if (sscanf(input_line + 1, "%lu", &parsed_id) == 1)
+                            {
+                                printf(">> Sending Company ID Update: %lu\n", parsed_id);
+                                packet_t tx_pkt = {.command = CMD_SET_COMPANY, .seq_num = 0};
+                                
+                                tx_pkt.payload.telemetry.company_number = (uint16_t)parsed_id;
+                                
+                                currentlyTransmitting = true;
+                                RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)&tx_pkt, sizeof(packet_t));
+                            }
+                            else
+                            {
+                                printf(">> [ERROR] Invalid ID format. Please use format: c <ID>\n");
                             }
                         }
                     }
@@ -204,22 +237,25 @@ int main()
                     packet_t rx_pkt;
                     memcpy(&rx_pkt, buffer, sizeof(packet_t));
 
-                    if (rx_pkt.command == CMD_PREDIVE_READY)
-                    {
-                        printf(">> PREDIVE_READY: Float is confirmed and starting mission.\n");
-                    }
                     if (fsm_state == SURFACE_WAITING_PROFILE)
                     {
-                        if (rx_pkt.command == CMD_DONE_PROFILE)
+                        // Catch the pre-dive packet required by the MATE task
+                        if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0)
+                        {
+                            printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m\n",
+                                   rx_pkt.payload.telemetry.company_number,
+                                   rx_pkt.payload.telemetry.time_ms,
+                                   rx_pkt.payload.telemetry.depth_m);
+                        }
+                        else if (rx_pkt.command == CMD_DONE_PROFILE)
                         {
                             printf(">> Float finished profile! Sending SEND_DATA command...\n");
 
-                            // Initialize dynamic array for the incoming data dump
                             if (downloaded_data != NULL)
                             {
-                                free(downloaded_data); // Clear any old data from a previous dive
+                                free(downloaded_data); 
                             }
-                            allocated_capacity = 16; // Start by allocating space for 16 packets
+                            allocated_capacity = 16; 
                             downloaded_count = 0;
                             downloaded_data = (SensorReading_t *)malloc(allocated_capacity * sizeof(SensorReading_t));
 
@@ -237,10 +273,9 @@ int main()
                         {
                             if (rx_pkt.seq_num == expectedSeqNum)
                             {
-                                // Check if we need to expand the array
                                 if (downloaded_count >= allocated_capacity)
                                 {
-                                    allocated_capacity *= 2; // Double the capacity
+                                    allocated_capacity *= 2; 
                                     SensorReading_t *temp = (SensorReading_t *)realloc(downloaded_data, allocated_capacity * sizeof(SensorReading_t));
 
                                     if (temp != NULL)
@@ -253,15 +288,17 @@ int main()
                                     }
                                 }
 
-                                // Store the payload securely into our dynamic array
                                 if (downloaded_data != NULL)
                                 {
-                                    memcpy(downloaded_data[downloaded_count].values, rx_pkt.payload, 12);
-                                    printf(">> Stored Data #%d: [%.2f, %.2f, %.2f]\n",
+                                    downloaded_data[downloaded_count].company_number = rx_pkt.payload.telemetry.company_number;
+                                    downloaded_data[downloaded_count].time_ms = rx_pkt.payload.telemetry.time_ms;
+                                    downloaded_data[downloaded_count].depth_m = rx_pkt.payload.telemetry.depth_m;
+                                    
+                                    printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m\n",
                                            rx_pkt.seq_num,
-                                           downloaded_data[downloaded_count].values[0],
-                                           downloaded_data[downloaded_count].values[1],
-                                           downloaded_data[downloaded_count].values[2]);
+                                           downloaded_data[downloaded_count].company_number,
+                                           downloaded_data[downloaded_count].time_ms,
+                                           downloaded_data[downloaded_count].depth_m);
                                     downloaded_count++;
                                 }
 
@@ -278,18 +315,19 @@ int main()
                         }
                         else if (rx_pkt.command == CMD_DATA_DONE)
                         {
-                            // Keeping a human-readable header for your manual serial monitor
                             printf("\n--- START DATA DUMP ---\n");
+                            printf("CompanyNumber,Time(ms),Depth(m)\n"); 
 
                             for (size_t i = 0; i < downloaded_count; i++)
                             {
-                                // Format: TeamName, Time(Index), Pressure(Pa), Depth(m)
-                                // Values[0] is depth. We use 0.0 for Pressure if not stored in this struct.
-                                printf("PurdueECE,%u,0.0,%.2f\n", (uint32_t)i, downloaded_data[i].values[0]);
+                                printf("%u,%lu,%.2f\n", 
+                                       downloaded_data[i].company_number, 
+                                       downloaded_data[i].time_ms, 
+                                       downloaded_data[i].depth_m);
                             }
 
                             printf("--- END DATA DUMP ---\n");
-                            printf(">> Download Complete! Total Packets: %u\n", downloaded_count);
+                            printf(">> Download Complete! Total Packets Received: %u\n", downloaded_count);
 
                             fsm_state = SURFACE_IDLE;
                         }
