@@ -43,8 +43,9 @@ const char *SurfaceStateNames[] = {
     "IDLE", "WAITING_PROFILE", "DOWNLOADING"};
 
 // Structure to hold a single downloaded reading in RAM
-typedef struct {
-    float values[3]; 
+typedef struct
+{
+    float values[3];
 } SensorReading_t;
 
 volatile bool operationDoneFlag = false;
@@ -130,7 +131,7 @@ int main()
             {
                 if (input_pos > 0)
                 {
-                    input_line[input_pos] = '\0'; 
+                    input_line[input_pos] = '\0';
 
                     printf("\n[SERIAL] Received: %s\n", input_line);
 
@@ -178,7 +179,7 @@ int main()
                 if (input_pos < sizeof(input_line) - 1)
                 {
                     input_line[input_pos++] = (char)c;
-                    putchar(c); 
+                    putchar(c);
                 }
             }
         }
@@ -207,14 +208,15 @@ int main()
                         if (rx_pkt.command == CMD_DONE_PROFILE)
                         {
                             printf(">> Float finished profile! Sending SEND_DATA command...\n");
-                            
+
                             // Initialize dynamic array for the incoming data dump
-                            if (downloaded_data != NULL) {
+                            if (downloaded_data != NULL)
+                            {
                                 free(downloaded_data); // Clear any old data from a previous dive
                             }
                             allocated_capacity = 16; // Start by allocating space for 16 packets
                             downloaded_count = 0;
-                            downloaded_data = (SensorReading_t*)malloc(allocated_capacity * sizeof(SensorReading_t));
+                            downloaded_data = (SensorReading_t *)malloc(allocated_capacity * sizeof(SensorReading_t));
 
                             packet_t tx_pkt = {.command = CMD_SEND_DATA, .seq_num = 0};
                             currentlyTransmitting = true;
@@ -231,28 +233,33 @@ int main()
                             if (rx_pkt.seq_num == expectedSeqNum)
                             {
                                 // Check if we need to expand the array
-                                if (downloaded_count >= allocated_capacity) {
+                                if (downloaded_count >= allocated_capacity)
+                                {
                                     allocated_capacity *= 2; // Double the capacity
-                                    SensorReading_t *temp = (SensorReading_t*)realloc(downloaded_data, allocated_capacity * sizeof(SensorReading_t));
-                                    
-                                    if (temp != NULL) {
+                                    SensorReading_t *temp = (SensorReading_t *)realloc(downloaded_data, allocated_capacity * sizeof(SensorReading_t));
+
+                                    if (temp != NULL)
+                                    {
                                         downloaded_data = temp;
-                                    } else {
+                                    }
+                                    else
+                                    {
                                         printf(">> [ERROR] Memory allocation failed during realloc!\n");
                                     }
                                 }
 
                                 // Store the payload securely into our dynamic array
-                                if (downloaded_data != NULL) {
+                                if (downloaded_data != NULL)
+                                {
                                     memcpy(downloaded_data[downloaded_count].values, rx_pkt.payload, 12);
-                                    printf(">> Stored Data #%d: [%.2f, %.2f, %.2f]\n", 
-                                        rx_pkt.seq_num, 
-                                        downloaded_data[downloaded_count].values[0], 
-                                        downloaded_data[downloaded_count].values[1], 
-                                        downloaded_data[downloaded_count].values[2]);
+                                    printf(">> Stored Data #%d: [%.2f, %.2f, %.2f]\n",
+                                           rx_pkt.seq_num,
+                                           downloaded_data[downloaded_count].values[0],
+                                           downloaded_data[downloaded_count].values[1],
+                                           downloaded_data[downloaded_count].values[2]);
                                     downloaded_count++;
                                 }
-                                
+
                                 expectedSeqNum++;
                             }
                             else
@@ -266,15 +273,19 @@ int main()
                         }
                         else if (rx_pkt.command == CMD_DATA_DONE)
                         {
-                            printf(">> Download Complete! Total Packets Stored: %u\n", downloaded_count);
-                            
-                            // Print out all stored data to verify it is held in RAM correctly
-                            printf("\n=== STORED PROFILE DATA ===\n");
-                            for (size_t i = 0; i < downloaded_count; i++) {
-                                printf("Packet %u: Depth = %.2f m\n", i + 1, downloaded_data[i].values[0]);
+                            // Keeping a human-readable header for your manual serial monitor
+                            printf("\n--- START DATA DUMP ---\n");
+
+                            for (size_t i = 0; i < downloaded_count; i++)
+                            {
+                                // Format: TeamName, Time(Index), Pressure(Pa), Depth(m)
+                                // Values[0] is depth. We use 0.0 for Pressure if not stored in this struct.
+                                printf("PurdueECE,%u,0.0,%.2f\n", (uint32_t)i, downloaded_data[i].values[0]);
                             }
-                            printf("===========================\n\n");
-                            
+
+                            printf("--- END DATA DUMP ---\n");
+                            printf(">> Download Complete! Total Packets: %u\n", downloaded_count);
+
                             fsm_state = SURFACE_IDLE;
                         }
                     }
