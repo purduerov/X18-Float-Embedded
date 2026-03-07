@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 
+// --- New Library Includes ---
+#include "packets.h"
+#include "storage.h"
+
 // --- Radio Setup ---
 const uint32_t SPI_MOSI = 19;
 const uint32_t SPI_MISO = 20;
@@ -22,42 +26,12 @@ const uint32_t IRQ_PIN = 9;
 
 float recorded_depths[TOTAL_PACKETS];
 uint32_t recorded_times[TOTAL_PACKETS];
-uint16_t active_company_number = 9999; // Default, can be updated via radio
 
 // --- I2C / Sensor Setup ---
 #define I2C_PORT i2c1
 #define PIN_SDA 2
 #define PIN_SCL 3
 #define SENSOR_TOP_OFFSET 0.465f
-
-typedef enum
-{
-    CMD_NONE = 0x00,
-    CMD_SEND_DATA = 0x01,
-    CMD_DATA_TRANSMISSION = 0x02,
-    CMD_SET_PID = 0x03,
-    CMD_BEGIN_PROFILE = 0x04,
-    CMD_DONE_PROFILE = 0x05,
-    CMD_DATA_DONE = 0x06,
-    CMD_ACK = 0x07,
-    CMD_PREDIVE_READY = 0x08,
-    CMD_SET_COMPANY = 0x09
-} PacketCommand_t;
-
-typedef struct __attribute__((packed))
-{
-    uint8_t command;
-    uint16_t seq_num;
-    union {
-        struct {
-            uint16_t company_number;
-            uint32_t time_ms;
-            float depth_m;
-        } telemetry;         
-        float pid_gains[3];  
-        uint8_t raw[12];     
-    } payload;
-} packet_t;
 
 typedef enum
 {
@@ -90,6 +64,11 @@ int main()
     }
 
     printf("\n\n=== MATE Float Station Booting ===\n");
+
+    // --- Initialize Persistent Storage ---
+    printf("Initializing Flash Storage...\n");
+    storage_init(); 
+    // current_settings is now loaded into RAM and ready to use
 
     // --- Initialize I2C and MS5837 ---
     printf("Initializing I2C Bus...");
@@ -142,7 +121,6 @@ int main()
     uint16_t currentSeqNum = 1;
     uint16_t sampleIndex = 0;
 
-    float pid_gains[3] = {1.0f, 0.5f, 0.1f};
     uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 
     RadioLib_SX127x_StartReceive(&lora);
@@ -165,7 +143,8 @@ int main()
             printf(">> Sending Pre-Dive Data Packet...\n");
             
             packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
-            tx_pkt.payload.telemetry.company_number = active_company_number;
+            // Use the company number loaded from flash storage
+            tx_pkt.payload.telemetry.company_number = current_settings.company_number;
             tx_pkt.payload.telemetry.time_ms = now;
             tx_pkt.payload.telemetry.depth_m = 0.0f;
 
@@ -182,6 +161,8 @@ int main()
 
                 printf(">> Sample %u/%lu: Time %lu ms | Depth %.2f m\n",
                        sampleIndex + 1, TOTAL_PACKETS, recorded_times[sampleIndex], recorded_depths[sampleIndex]);
+
+                // NOTE: Insert your PID control loop here using current_settings.kp, etc.
 
                 sampleIndex++;
                 lastSampleTime = now;
@@ -212,7 +193,8 @@ int main()
 
                 packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = currentSeqNum};
                 
-                tx_pkt.payload.telemetry.company_number = active_company_number;
+                // Use the company number loaded from flash storage
+                tx_pkt.payload.telemetry.company_number = current_settings.company_number;
                 tx_pkt.payload.telemetry.time_ms = recorded_times[currentSeqNum - 1];
                 tx_pkt.payload.telemetry.depth_m = recorded_depths[currentSeqNum - 1];
 
@@ -261,13 +243,20 @@ int main()
                         }
                         else if (rx_pkt.command == CMD_SET_PID)
                         {
-                            memcpy(pid_gains, rx_pkt.payload.pid_gains, 12);
-                            printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f\n", pid_gains[0], pid_gains[1], pid_gains[2]);
+                            // Update the values in RAM and save to Flash
+                            current_settings.kp = rx_pkt.payload.pid_gains[0];
+                            current_settings.ki = rx_pkt.payload.pid_gains[1];
+                            current_settings.kd = rx_pkt.payload.pid_gains[2];
+                            printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n", 
+                                   current_settings.kp, current_settings.ki, current_settings.kd);
+                            storage_save();
                         }
                         else if (rx_pkt.command == CMD_SET_COMPANY)
                         {
-                            active_company_number = rx_pkt.payload.telemetry.company_number;
-                            printf(">> Company ID Updated: %u\n", active_company_number);
+                            // Update the value in RAM and save to Flash
+                            current_settings.company_number = rx_pkt.payload.telemetry.company_number;
+                            printf(">> Company ID Updated: %u. Saving to Flash...\n", current_settings.company_number);
+                            storage_save();
                         }
                     }
                     else if (state == FLOAT_PROFILE_DONE)

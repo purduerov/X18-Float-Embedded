@@ -5,6 +5,9 @@
 #include <string.h>
 #include <stdlib.h> // Required for malloc, realloc, free
 
+// --- Shared Library Includes ---
+#include "packets.h"
+
 const uint32_t SPI_MOSI = 19;
 const uint32_t SPI_MISO = 20;
 const uint32_t SPI_SCK = 18;
@@ -12,36 +15,6 @@ const uint32_t CS_PIN = 24;
 const uint32_t RST_PIN = 25;
 const uint32_t EN_PIN = 8;
 const uint32_t IRQ_PIN = 9;
-
-typedef enum
-{
-    CMD_NONE = 0x00,
-    CMD_SEND_DATA = 0x01,
-    CMD_DATA_TRANSMISSION = 0x02,
-    CMD_SET_PID = 0x03,
-    CMD_BEGIN_PROFILE = 0x04,
-    CMD_DONE_PROFILE = 0x05,
-    CMD_DATA_DONE = 0x06,
-    CMD_ACK = 0x07,
-    CMD_PREDIVE_READY = 0x08,
-    CMD_SET_COMPANY = 0x09
-} PacketCommand_t;
-
-// Updated Packet to match the float and MATE requirements
-typedef struct __attribute__((packed))
-{
-    uint8_t command;
-    uint16_t seq_num;
-    union {
-        struct {
-            uint16_t company_number;
-            uint32_t time_ms;
-            float depth_m;
-        } telemetry;         
-        float pid_gains[3];  
-        uint8_t raw[12];     
-    } payload;
-} packet_t;
 
 typedef enum
 {
@@ -239,7 +212,6 @@ int main()
 
                     if (fsm_state == SURFACE_WAITING_PROFILE)
                     {
-                        // Catch the pre-dive packet required by the MATE task
                         if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0)
                         {
                             printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m\n",
