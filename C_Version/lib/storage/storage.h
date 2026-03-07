@@ -3,14 +3,15 @@
 
 #include <stdint.h>
 
-#define SETTINGS_MAGIC 0xDEADBEEF
+// Changed magic number to force a factory reset of the flash memory
+#define SETTINGS_MAGIC 0xBEEFCAFE 
 
 typedef struct {
     float kp;
     float ki;
     float kd;
     uint16_t company_number;
-    uint16_t profile_duration_s; // New Flash Constant
+    uint16_t profile_duration_s; 
     uint32_t magic_number; 
 } float_settings_t;
 
