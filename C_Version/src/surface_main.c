@@ -193,6 +193,7 @@ int main()
                     {
                         if (rx_pkt.command == CMD_REP_SETTINGS)
                         {
+                            // This exact format is required for the Python split(",") logic
                             printf("\n[SYNC] FLOAT_SETTINGS: P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u\n",
                                    rx_pkt.payload.settings.kp,
                                    rx_pkt.payload.settings.ki,

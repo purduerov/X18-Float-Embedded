@@ -35,9 +35,9 @@ typedef struct __attribute__((packed))
             float ki;
             float kd;
             uint16_t company_number;
-            uint16_t profile_duration_s; // Added to sync payload
+            uint16_t profile_duration_s; // Ensure this is here
         } settings; 
-        uint8_t raw[24]; // Expanded to 24 bytes for future expansion
+        uint8_t raw[24];     
     } payload;
 } packet_t;
 
