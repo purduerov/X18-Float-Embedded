@@ -15,10 +15,10 @@ typedef struct {
     uint32_t magic_number; 
 } float_settings_t;
 
-extern float_settings_t current_settings;
-
+// Function prototypes for accessing and modifying settings
 void storage_init(void);
-void storage_load(void);
 void storage_save(void);
+void storage_get_settings(float_settings_t *out_settings);
+void storage_set_settings(const float_settings_t *new_settings);
 
 #endif // STORAGE_H

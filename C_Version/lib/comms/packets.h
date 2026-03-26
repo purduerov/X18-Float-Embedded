@@ -2,6 +2,9 @@
 #define PACKETS_H
 
 #include <stdint.h>
+#include <stddef.h>
+
+#define MAX_PAYLOAD_SIZE 24
 
 typedef enum
 {
@@ -17,7 +20,7 @@ typedef enum
     CMD_SET_COMPANY = 0x09,
     CMD_REQ_SETTINGS = 0x0A, 
     CMD_REP_SETTINGS = 0x0B,
-    CMD_SET_DURATION = 0x0C // NEW: Command to set underwater time
+    CMD_SET_DURATION = 0x0C
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -35,10 +38,22 @@ typedef struct __attribute__((packed))
             float ki;
             float kd;
             uint16_t company_number;
-            uint16_t profile_duration_s; // Ensure this is here
+            uint16_t profile_duration_s; 
         } settings; 
-        uint8_t raw[24];     
+        uint8_t raw[MAX_PAYLOAD_SIZE];     
     } payload;
+    uint8_t checksum; // XOR checksum of all preceding bytes
 } packet_t;
+
+// Helper to calculate a simple XOR checksum for the packet
+static inline uint8_t packet_calculate_checksum(const packet_t *pkt) {
+    const uint8_t *data = (const uint8_t *)pkt;
+    uint8_t checksum = 0;
+    // Calculate over all bytes EXCEPT the checksum field itself (last byte)
+    for (size_t i = 0; i < sizeof(packet_t) - 1; i++) {
+        checksum ^= data[i];
+    }
+    return checksum;
+}
 
 #endif // PACKETS_H

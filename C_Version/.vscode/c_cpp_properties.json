@@ -244,6 +244,7 @@
                 "ARDUINO_ARCH_RP2040",
                 "PICO_STDIO_USB",
                 "PICO_USB=1",
+                "CMAKE_EXPORT_COMPILE_COMMANDS=1",
                 "F_CPU=133000000L",
                 "PICO_RP2040=1",
                 "PICO_RISCV=0",

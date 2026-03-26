@@ -1,15 +1,17 @@
 #ifndef RADIO_SETUP_H
 #define RADIO_SETUP_H
 
-#include "radiolib_hal_pico.h"
-#include "radiolib_sx1276.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-// Expose the LoRa object and hardware abstraction layer so main files can use them
-extern RadioLibHal_t *hal;
-extern RadioLibModule_t radioModule;
-extern RadioLibSX127x_t lora;
-
-// Pass the interrupt function from the main file into the setup
+// Initialize the radio hardware and attach the interrupt callback
 bool radio_setup_init(void (*interrupt_callback)(void));
+
+// High-level API to hide RadioLib complexity
+void radio_start_receive(void);
+void radio_start_transmit(const uint8_t *data, size_t len);
+void radio_finish_transmit(void);
+int16_t radio_read_data(uint8_t *buffer, size_t len);
 
 #endif // RADIO_SETUP_H

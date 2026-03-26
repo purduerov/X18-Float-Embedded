@@ -13,7 +13,19 @@
 #define FLASH_TARGET_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
 
 // Define the global struct here
-float_settings_t current_settings;
+static float_settings_t current_settings;
+
+void storage_get_settings(float_settings_t *out_settings) {
+    if (out_settings) {
+        memcpy(out_settings, &current_settings, sizeof(float_settings_t));
+    }
+}
+
+void storage_set_settings(const float_settings_t *new_settings) {
+    if (new_settings) {
+        memcpy(&current_settings, new_settings, sizeof(float_settings_t));
+    }
+}
 
 void storage_save(void) {
     printf("[STORAGE] Writing settings to Flash...\n");
@@ -33,7 +45,7 @@ void storage_save(void) {
     printf("[STORAGE] Flash Save Complete.\n");
 }
 
-void storage_load(void) {
+static void storage_load(void) {
     const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
     memcpy(&current_settings, flash_target_contents, sizeof(float_settings_t));
 

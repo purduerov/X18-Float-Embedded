@@ -1,20 +1,22 @@
 #include "radio_setup.h"
+#include "radiolib_hal_pico.h"
+#include "radiolib_sx1276.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
 
 // --- Hardcoded Radio Pins ---
-const uint32_t SPI_MOSI = 19;
-const uint32_t SPI_MISO = 20;
-const uint32_t SPI_SCK = 18;
-const uint32_t CS_PIN = 24;
-const uint32_t RST_PIN = 25;
-const uint32_t EN_PIN = 8;
-const uint32_t IRQ_PIN = 9;
+static const uint32_t SPI_MOSI = 19;
+static const uint32_t SPI_MISO = 20;
+static const uint32_t SPI_SCK = 18;
+static const uint32_t CS_PIN = 24;
+static const uint32_t RST_PIN = 25;
+static const uint32_t EN_PIN = 8;
+static const uint32_t IRQ_PIN = 9;
 
-RadioLibHal_t *hal;
-RadioLibModule_t radioModule;
-RadioLibSX127x_t lora;
+static RadioLibHal_t *hal;
+static RadioLibModule_t radioModule;
+static RadioLibSX127x_t lora;
 
 bool radio_setup_init(void (*interrupt_callback)(void)) {
     // Power on the radio module
@@ -49,4 +51,20 @@ bool radio_setup_init(void (*interrupt_callback)(void)) {
     printf("[RADIO] Init Success!\n");
     
     return true;
+}
+
+void radio_start_receive(void) {
+    RadioLib_SX127x_StartReceive(&lora);
+}
+
+void radio_start_transmit(const uint8_t *data, size_t len) {
+    RadioLib_SX127x_StartTransmit(&lora, (uint8_t *)data, len);
+}
+
+void radio_finish_transmit(void) {
+    RadioLib_SX127x_FinishTransmit(&lora);
+}
+
+int16_t radio_read_data(uint8_t *buffer, size_t len) {
+    return RadioLib_SX127x_ReadData(&lora, buffer, len);
 }
