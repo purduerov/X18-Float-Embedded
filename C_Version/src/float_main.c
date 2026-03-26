@@ -99,7 +99,9 @@ int main()
 
     while (true)
     {
+        // printf("loop iter, time ");
         uint32_t now = to_ms_since_boot(get_absolute_time());
+        // printf("%ld\n", now);
 
         if (now - lastDebugPrint >= 2000)
         {
@@ -136,6 +138,7 @@ int main()
             }
 
             // Dynamically check against the duration setting
+            printf("checking if profile complete %d %d\n", now - profileStartTime, (current_settings.profile_duration_s * 1000));
             if (now - profileStartTime >= (current_settings.profile_duration_s * 1000))
             {
                 printf(">> Profile complete (%u sec). Surfacing...\n", current_settings.profile_duration_s);

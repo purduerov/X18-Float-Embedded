@@ -34,7 +34,7 @@ int filter_idx = 0;
 
 // Rotation Settings
 #define DWELL_TIME_MS 2000 
-int targets[] = {1000, 2048, 3000}; 
+int targets[] = { 10000 }; 
 int current_target_idx = 0;
 uint32_t reached_time_ms = 0;
 bool is_waiting = false;
@@ -72,7 +72,7 @@ int get_filtered_pos(Actuator *act) {
     return sum / FILTER_SIZE;
 }
 
-int actuator_main() {
+int main() {
     stdio_init_all();
 
     while (!stdio_usb_connected()) {
