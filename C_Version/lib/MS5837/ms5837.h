@@ -1,3 +1,6 @@
+#ifndef __MS5837_H_
+#define __MS5837_H_
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -37,3 +40,5 @@ float ms5837_get_pressure(MS5837_t *sensor, float conversion);
 float ms5837_get_temperature(MS5837_t *sensor);
 float ms5837_get_depth(MS5837_t *sensor);
 float ms5837_get_altitude(MS5837_t *sensor);
+
+#endif

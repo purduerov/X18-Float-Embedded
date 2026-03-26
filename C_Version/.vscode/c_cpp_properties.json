@@ -9,12 +9,11 @@
             "name": "PlatformIO",
             "includePath": [
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/src",
-                "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/pid",
-                "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/actuator",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/storage",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/comms",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/MS5837",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/BN085",
+                "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/fsm",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/RadioLib",
                 "C:/Users/samna/.platformio/packages/framework-picosdk/generated",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/.pio/build/adafruit_feather/generated",
@@ -118,6 +117,8 @@
                 "C:/Users/samna/.platformio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                 "C:/Users/samna/.platformio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                 "C:/Users/samna/.platformio/packages/framework-picosdk/lib/tinyusb/src",
+                "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/actuator",
+                "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/pid",
                 "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/scheduler",
                 ""
             ],
@@ -125,12 +126,11 @@
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/src",
-                    "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/pid",
-                    "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/actuator",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/storage",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/comms",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/MS5837",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/BN085",
+                    "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/fsm",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/RadioLib",
                     "C:/Users/samna/.platformio/packages/framework-picosdk/generated",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/.pio/build/adafruit_feather/generated",
@@ -234,6 +234,8 @@
                     "C:/Users/samna/.platformio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                     "C:/Users/samna/.platformio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                     "C:/Users/samna/.platformio/packages/framework-picosdk/lib/tinyusb/src",
+                    "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/actuator",
+                    "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/pid",
                     "C:/Users/samna/Desktop/ROV/X18-Float-Embedded/C_Version/lib/scheduler",
                     ""
                 ]

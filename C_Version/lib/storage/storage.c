@@ -42,7 +42,7 @@ void storage_save(void) {
     flash_range_program(FLASH_TARGET_OFFSET, buffer, FLASH_PAGE_SIZE);
     restore_interrupts(ints);
     
-    printf("[STORAGE] Flash Save Complete.\n");
+    printf("[STORAGE] Flash Saved\n");
 }
 
 static void storage_load(void) {
