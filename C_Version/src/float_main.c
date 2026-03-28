@@ -9,11 +9,18 @@
 #include "storage.h"
 #include "radio_setup.h"
 #include "float_fsm.h"
+#include "actuator.h"
+#include "depth_pid.h"
 
 // --- I2C / Sensor Setup ---
 #define I2C_PORT i2c1
 #define PIN_SDA 2
 #define PIN_SCL 3
+
+// --- Actuator Pins ---
+#define PIN_POT 26   
+#define PIN_EXT 12   
+#define PIN_RET 13
 
 static float_fsm_t global_fsm;
 
@@ -32,7 +39,7 @@ int main()
         waitTime += 100;
     }
 
-    printf("\n\n=== MATE Float Station Booting (Refactored) ===\n");
+    printf("\n\n=== MATE Float Station Booting (PID Enabled) ===\n");
 
     // --- Initialize Persistent Storage ---
     storage_init(); 
@@ -51,6 +58,18 @@ int main()
         printf("CRITICAL ERROR: MS5837 FAILED to initialize\n");
     }
 
+    // --- Initialize Actuator ---
+    Actuator act;
+    actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
+
+    // --- Initialize Depth PID ---
+    DepthPID dpid;
+    float_settings_t settings;
+    storage_get_settings(&settings);
+    // 100ms (10Hz) update rate
+    depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, 0, 4095);
+    depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
+
     // --- Initialize Radio ---
     if (!radio_setup_init(onInterrupt)) {
         printf("Radio init failed! Halting.\n");
@@ -60,10 +79,45 @@ int main()
     // --- Initialize State Machine ---
     float_fsm_init(&global_fsm, &depth_sensor);
 
-    printf("Float System Ready.\n");
+    printf("Float System Ready. Target Depth: %.2f m\n", dpid.target_depth);
+
+    uint32_t last_pid_time = to_ms_since_boot(get_absolute_time());
 
     while (true)
     {
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
+        // Run PID loop at 10Hz
+        if (now - last_pid_time >= 100) {
+            // 1. Refresh depth sensor
+            ms5837_read(&depth_sensor);
+            double current_depth = ms5837_get_depth(&depth_sensor);
+            
+            // 2. Refresh PID constants (in case they were updated via radio)
+            storage_get_settings(&settings);
+            dpid.pid.kp = settings.kp;
+            dpid.pid.ki = settings.ki;
+            dpid.pid.kd = settings.kd;
+
+            // 3. Calculate target actuator position
+            int target_pos = 0;
+            depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
+
+            // 4. Command Actuator
+            actuator_move_to(&act, target_pos);
+
+            // 5. Update monitoring (stop if reached)
+            int current_pos = actuator_get_position(&act);
+            if (abs(current_pos - target_pos) < POS_TOL) {
+                actuator_set_move_pins(&act, 0);
+            }
+
+            // printf("[PID] Depth: %.2f m | Target Pos: %d | Current Pos: %d\n", 
+            //        current_depth, target_pos, current_pos);
+
+            last_pid_time = now;
+        }
+
         float_fsm_update(&global_fsm);
         sleep_ms(1);
     }
