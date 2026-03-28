@@ -3,12 +3,12 @@
 ## Phase 1: Depth PID Controller Implementation
 This phase implements the high-level mapping from depth error to target actuator position using TDD.
 
-- [ ] Task: Define Depth PID structure and initialization
-    - [ ] Create `lib/pid/depth_pid.h` defining `DepthPID` wrapper.
-    - [ ] Implement `depth_pid_init` and `depth_pid_set_target`.
-- [ ] Task: Implement Depth-to-Actuator mapping and unit tests (TDD)
+- [x] Task: Define Depth PID structure and initialization [6e32f25]
+    - [x] Create `lib/pid/depth_pid.h` defining `DepthPID` wrapper.
+    - [x] Implement `depth_pid_init` and `depth_pid_set_target`.
+- [x] Task: Implement Depth-to-Actuator mapping and unit tests (TDD) [6e32f25]
     - [ ] Write unit tests for `depth_pid_calculate_target_pos` (mapping depth error to a 0-4095 potentiometer range).
-    - [ ] Implement the calculation logic in `lib/pid/depth_pid.c`.
+    - [x] Implement the calculation logic in `lib/pid/depth_pid.c`.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Depth PID Controller Implementation' (Protocol in workflow.md)
 
 ## Phase 2: Actuator Library Enhancement
