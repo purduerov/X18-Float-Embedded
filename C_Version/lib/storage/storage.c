@@ -56,6 +56,7 @@ static void storage_load(void) {
         current_settings.kd = 0.1f;
         current_settings.company_number = 9999;
         current_settings.profile_duration_s = 180; // Default: 3 minutes
+        current_settings.depth_offset = 0.0f;
         current_settings.magic_number = SETTINGS_MAGIC;
         storage_save(); 
     } else {

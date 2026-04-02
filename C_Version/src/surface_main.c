@@ -3,29 +3,77 @@
 #include <stdlib.h>
 #include <string.h>
 
-// --- Shared Library Includes ---
+// --- Modular Library Includes ---
 #include "packets.h"
 #include "radio_setup.h"
+#include "surface_link.h"
+#include "data_logger.h"
+#include "surface_fsm.h"
 
-typedef enum {
-  SURFACE_IDLE,
-  SURFACE_WAITING_PROFILE,
-  SURFACE_DOWNLOADING
-} SurfaceState_t;
+// --- Global State ---
+static surface_fsm_t global_fsm;
+static volatile bool operationDoneFlag = false;
 
-const char *SurfaceStateNames[] = {"IDLE", "WAITING_PROFILE", "DOWNLOADING"};
-
-typedef struct {
-  uint16_t company_number;
-  uint32_t time_ms;
-  float depth_m;
-} SensorReading_t;
-
-volatile bool operationDoneFlag = false;
 void onInterrupt(void) { operationDoneFlag = true; }
+
+// --- Dashboard Command Handlers ---
+
+static void handle_profile(const char *params) {
+    surface_fsm_cmd_begin_profile(&global_fsm);
+}
+
+static void handle_pid(const char *params) {
+    float p, i, d;
+    if (sscanf(params, "%f %f %f", &p, &i, &d) == 3) {
+        surface_fsm_cmd_set_pid(&global_fsm, p, i, d);
+    }
+}
+
+static void handle_company(const char *params) {
+    unsigned int id;
+    if (sscanf(params, "%u", &id) == 1) {
+        surface_fsm_cmd_set_company(&global_fsm, (uint16_t)id);
+    }
+}
+
+static void handle_duration(const char *params) {
+    unsigned int seconds;
+    if (sscanf(params, "%u", &seconds) == 1) {
+        surface_fsm_cmd_set_duration(&global_fsm, (uint16_t)seconds);
+    }
+}
+
+static void handle_zero(const char *params) {
+    surface_fsm_cmd_zero_depth(&global_fsm);
+}
+
+static void handle_actuator(const char *params) {
+    unsigned int pos;
+    if (sscanf(params, "%u", &pos) == 1) {
+        surface_fsm_cmd_set_actuator(&global_fsm, (uint16_t)pos);
+    }
+}
+
+static void handle_sync(const char *params) {
+    surface_fsm_cmd_sync(&global_fsm);
+}
+
+static const surface_command_t cmd_table[] = {
+    {'p', handle_profile, "Begin Profile"},
+    {'s', handle_pid, "Set PID (P I D)"},
+    {'c', handle_company, "Set Company ID"},
+    {'t', handle_duration, "Set Duration (Secs)"},
+    {'z', handle_zero, "Zero Depth"},
+    {'a', handle_actuator, "Set Actuator Position (0-4095)"},
+    {'?', handle_sync, "Sync Settings"}
+};
+
+// --- Main Application ---
 
 int main() {
   stdio_init_all();
+  data_logger_init();
+  surface_fsm_init(&global_fsm);
 
   uint32_t waitTime = 0;
   while (!stdio_usb_connected() && waitTime < 5000) {
@@ -33,26 +81,18 @@ int main() {
     waitTime += 100;
   }
 
-  printf("\n\n=== MATE Surface Station Booting ===\n");
+  printf("\n\n=== X18 Surface Station Booting (Ultra Modular) ===\n");
 
   if (!radio_setup_init(onInterrupt)) {
     printf("Radio init failed! Halting.\n");
-    while (true)
-      sleep_ms(1000);
+    while (true) sleep_ms(1000);
   }
+
+  surface_link_init(cmd_table, sizeof(cmd_table) / sizeof(surface_command_t));
 
   printf("Surface Station Ready.\n");
   printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company), "
-         "'t <Sec>' (Time), '?' (Sync)\n");
-
-  SurfaceState_t fsm_state = SURFACE_IDLE;
-  bool currentlyTransmitting = false;
-  uint8_t buffer[256];
-  uint16_t expectedSeqNum = 1;
-
-  SensorReading_t *downloaded_data = NULL;
-  size_t downloaded_count = 0;
-  size_t allocated_capacity = 0;
+         "'t <Sec>' (Time), 'z' (Zero Depth), '?' (Sync)\n");
 
   uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 
@@ -61,199 +101,24 @@ int main() {
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
 
+    // 1. Periodic Debug Info
     if (now - lastDebugPrint >= 2000) {
       printf("[DEBUG] State: %s | Transmitting: %d | IRQ Flag: %d\n",
-             SurfaceStateNames[fsm_state], currentlyTransmitting,
+             surface_fsm_get_state_name(&global_fsm), 
+             surface_fsm_is_transmitting(&global_fsm),
              operationDoneFlag);
       lastDebugPrint = now;
     }
 
-    static char input_line[64];
-    static int input_pos = 0;
+    // 2. Process Serial Interface (Commands from Dashboard)
+    surface_link_update();
 
-    int c;
-    while ((c = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT) {
-      if (c == '\n' || c == '\r') {
-        if (input_pos > 0) {
-          input_line[input_pos] = '\0';
-          printf("\n[SERIAL] Received: %s\n", input_line);
-
-          if (fsm_state == SURFACE_IDLE && !currentlyTransmitting) {
-            if (input_line[0] == 'p' || input_line[0] == 'P') {
-              printf(">> Commanding BEGIN_PROFILE...\n");
-              packet_t tx_pkt = {.command = CMD_BEGIN_PROFILE, .seq_num = 0};
-              tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-              currentlyTransmitting = true;
-              radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-              fsm_state = SURFACE_WAITING_PROFILE;
-            } else if (input_line[0] == 's' || input_line[0] == 'S') {
-              float p, i, d;
-              if (sscanf(input_line + 1, "%f %f %f", &p, &i, &d) == 3) {
-                printf(">> Sending PID: P=%.2f, I=%.2f, D=%.2f\n", p, i, d);
-                packet_t tx_pkt = {.command = CMD_SET_PID, .seq_num = 0};
-                tx_pkt.payload.settings.kp = p;
-                tx_pkt.payload.settings.ki = i;
-                tx_pkt.payload.settings.kd = d;
-                tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-                currentlyTransmitting = true;
-                radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-              }
-            } else if (input_line[0] == 'c' || input_line[0] == 'C') {
-              unsigned int parsed_id;
-              if (sscanf(input_line + 1, "%u", &parsed_id) == 1) {
-                printf(">> Sending Company ID Update: %u\n", parsed_id);
-                packet_t tx_pkt = {.command = CMD_SET_COMPANY, .seq_num = 0};
-                tx_pkt.payload.telemetry.company_number = (uint16_t)parsed_id;
-                tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-                currentlyTransmitting = true;
-                radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-              }
-            } else if (input_line[0] == 't' || input_line[0] == 'T') {
-              unsigned int parsed_time;
-              if (sscanf(input_line + 1, "%u", &parsed_time) == 1) {
-                printf(">> Sending Duration Update: %u sec\n", parsed_time);
-                packet_t tx_pkt = {.command = CMD_SET_DURATION, .seq_num = 0};
-                tx_pkt.payload.settings.profile_duration_s =
-                    (uint16_t)parsed_time;
-                tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-                currentlyTransmitting = true;
-                radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-              }
-            } else if (input_line[0] == '?') {
-              printf(">> Requesting current float settings...\n");
-              packet_t tx_pkt = {.command = CMD_REQ_SETTINGS, .seq_num = 0};
-              tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-              currentlyTransmitting = true;
-              radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-            }
-          }
-          input_pos = 0;
-        }
-      } else if (c == '\b' || c == 127) {
-        if (input_pos > 0) {
-          input_pos--;
-          printf("\b \b");
-        }
-      } else if (c >= 32 && c <= 126) {
-        if (input_pos < sizeof(input_line) - 1) {
-          input_line[input_pos++] = (char)c;
-          putchar(c);
-        }
-      }
-    }
-
+    // 3. Process Radio Interface (Packets and IRQs)
     if (operationDoneFlag) {
       operationDoneFlag = false;
-
-      if (currentlyTransmitting) {
-        radio_finish_transmit();
-        currentlyTransmitting = false;
-        radio_start_receive();
-      } else {
-        int16_t len = radio_read_data(buffer, sizeof(buffer));
-
-        if (len == sizeof(packet_t)) {
-          packet_t rx_pkt;
-          memcpy(&rx_pkt, buffer, sizeof(packet_t));
-
-          if (rx_pkt.checksum != packet_calculate_checksum(&rx_pkt)) {
-            printf("[RADIO] ERROR: Packet Checksum Mismatch! Ignoring.\n");
-          } else {
-            if (fsm_state == SURFACE_IDLE) {
-              if (rx_pkt.command == CMD_REP_SETTINGS) {
-                printf("\n[SYNC] FLOAT_SETTINGS: P=%.2f, I=%.2f, D=%.2f, Co#=%u, "
-                      "Time=%u\n",
-                      rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
-                      rx_pkt.payload.settings.kd,
-                      rx_pkt.payload.settings.company_number,
-                      rx_pkt.payload.settings.profile_duration_s);
-              }
-            } else if (fsm_state == SURFACE_WAITING_PROFILE) {
-              if (rx_pkt.command == CMD_DATA_TRANSMISSION &&
-                  rx_pkt.seq_num == 0) {
-                printf(">> PRE-DIVE Packet Logged: Co# %u | Time %u ms | Depth "
-                      "%.2f m\n",
-                      rx_pkt.payload.telemetry.company_number,
-                      rx_pkt.payload.telemetry.time_ms,
-                      rx_pkt.payload.telemetry.depth_m);
-              } else if (rx_pkt.command == CMD_DONE_PROFILE) {
-                printf(
-                    ">> Float finished profile! Sending SEND_DATA command...\n");
-                if (downloaded_data != NULL)
-                  free(downloaded_data);
-                allocated_capacity = 16;
-                downloaded_count = 0;
-                downloaded_data = (SensorReading_t *)malloc(
-                    allocated_capacity * sizeof(SensorReading_t));
-
-                packet_t tx_pkt = {.command = CMD_SEND_DATA, .seq_num = 0};
-                tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-                currentlyTransmitting = true;
-                radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-
-                fsm_state = SURFACE_DOWNLOADING;
-                expectedSeqNum = 1;
-              }
-            } else if (fsm_state == SURFACE_DOWNLOADING) {
-              if (rx_pkt.command == CMD_DATA_TRANSMISSION) {
-                if (rx_pkt.seq_num == expectedSeqNum) {
-                  if (downloaded_count >= allocated_capacity) {
-                    allocated_capacity *= 2;
-                    SensorReading_t *temp = (SensorReading_t *)realloc(
-                        downloaded_data,
-                        allocated_capacity * sizeof(SensorReading_t));
-                    if (temp != NULL)
-                      downloaded_data = temp;
-                  }
-
-                  if (downloaded_data != NULL) {
-                    downloaded_data[downloaded_count].company_number =
-                        rx_pkt.payload.telemetry.company_number;
-                    downloaded_data[downloaded_count].time_ms =
-                        rx_pkt.payload.telemetry.time_ms;
-                    downloaded_data[downloaded_count].depth_m =
-                        rx_pkt.payload.telemetry.depth_m;
-
-                    printf(">> Stored Data #%d: Co# %u | Time %u ms | Depth "
-                          "%.2f m\n",
-                          rx_pkt.seq_num,
-                          downloaded_data[downloaded_count].company_number,
-                          downloaded_data[downloaded_count].time_ms,
-                          downloaded_data[downloaded_count].depth_m);
-                    downloaded_count++;
-                  }
-                  expectedSeqNum++;
-                } else {
-                  printf(
-                      ">> Received duplicate/old packet #%d. Re-sending ACK.\n",
-                      rx_pkt.seq_num);
-                }
-
-                packet_t ack_pkt = {.command = CMD_ACK,
-                                    .seq_num = rx_pkt.seq_num};
-                ack_pkt.checksum = packet_calculate_checksum(&ack_pkt);
-                currentlyTransmitting = true;
-                radio_start_transmit((uint8_t *)&ack_pkt, sizeof(packet_t));
-              } else if (rx_pkt.command == CMD_DATA_DONE) {
-                printf("\n--- START DATA DUMP ---\n");
-                printf("CompanyNumber,Time(ms),Depth(m)\n");
-                for (size_t i = 0; i < downloaded_count; i++) {
-                  printf("%u,%u,%.2f\n", downloaded_data[i].company_number,
-                        downloaded_data[i].time_ms, downloaded_data[i].depth_m);
-                }
-                printf("--- END DATA DUMP ---\n");
-                printf(">> Download Complete! Total Packets Received: %u\n",
-                      downloaded_count);
-                fsm_state = SURFACE_IDLE;
-              }
-            }
-          }
-        }
-
-        if (!currentlyTransmitting)
-          radio_start_receive();
-      }
+      surface_fsm_process_event(&global_fsm);
     }
+
     sleep_ms(1);
   }
   return 0;

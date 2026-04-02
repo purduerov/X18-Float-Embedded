@@ -20,7 +20,9 @@ typedef enum
     CMD_SET_COMPANY = 0x09,
     CMD_REQ_SETTINGS = 0x0A, 
     CMD_REP_SETTINGS = 0x0B,
-    CMD_SET_DURATION = 0x0C
+    CMD_SET_DURATION = 0x0C,
+    CMD_ZERO_DEPTH = 0x0D,
+    CMD_SET_ACTUATOR = 0x0E
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -39,6 +41,7 @@ typedef struct __attribute__((packed))
             float kd;
             uint16_t company_number;
             uint16_t profile_duration_s; 
+            uint16_t actuator_target;
         } settings; 
         uint8_t raw[MAX_PAYLOAD_SIZE];     
     } payload;

@@ -12,6 +12,7 @@ typedef struct {
     float kd;
     uint16_t company_number;
     uint16_t profile_duration_s; 
+    float depth_offset;
     uint32_t magic_number; 
 } float_settings_t;
 

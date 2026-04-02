@@ -5,7 +5,6 @@
 // --- Configuration ---
 #define SAMPLE_INTERVAL_MS 1000
 #define MAX_PACKETS 400
-#define SENSOR_TOP_OFFSET 0.465f
 
 // --- Internal Data Buffers ---
 static float recorded_depths[MAX_PACKETS];
@@ -18,6 +17,7 @@ void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor) {
     memset(fsm, 0, sizeof(float_fsm_t));
     fsm->state = FLOAT_IDLE;
     fsm->depth_sensor = sensor;
+    fsm->actuator_target = 2000;
     fsm->last_debug_print = to_ms_since_boot(get_absolute_time());
     radio_start_receive();
 }
@@ -73,6 +73,15 @@ void float_fsm_on_interrupt(float_fsm_t *fsm) {
                         printf(">> Profile Duration Updated: %u seconds. Saving to Flash...\n", settings.profile_duration_s);
                         storage_set_settings(&settings);
                         storage_save();
+                    } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
+                        ms5837_read(fsm->depth_sensor);
+                        settings.depth_offset = ms5837_get_depth(fsm->depth_sensor);
+                        printf(">> Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
+                        storage_set_settings(&settings);
+                        storage_save();
+                    } else if (rx_pkt.command == CMD_SET_ACTUATOR) {
+                        fsm->actuator_target = rx_pkt.payload.settings.actuator_target;
+                        printf(">> Radio CMD: Set Actuator Target to %u\n", fsm->actuator_target);
                     } else if (rx_pkt.command == CMD_REQ_SETTINGS) {
                         printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
                         packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
@@ -142,7 +151,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     } else if (fsm->state == FLOAT_PROFILING) {
         if (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS && fsm->sample_index < MAX_PACKETS) {
             ms5837_read(fsm->depth_sensor);
-            recorded_depths[fsm->sample_index] = ms5837_get_depth(fsm->depth_sensor) - SENSOR_TOP_OFFSET;
+            recorded_depths[fsm->sample_index] = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
             recorded_times[fsm->sample_index] = now;
             printf(">> Sample %u/%u: Time %lu ms | Depth %.2f m\n",
                    fsm->sample_index + 1, MAX_PACKETS, recorded_times[fsm->sample_index], recorded_depths[fsm->sample_index]);
