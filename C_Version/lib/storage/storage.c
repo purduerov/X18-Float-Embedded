@@ -57,13 +57,16 @@ static void storage_load(void) {
         current_settings.company_number = 9999;
         current_settings.profile_duration_s = 180; // Default: 3 minutes
         current_settings.depth_offset = 0.0f;
+        current_settings.act_min = 0;
+        current_settings.act_max = 4095;
         current_settings.magic_number = SETTINGS_MAGIC;
         storage_save(); 
     } else {
         printf("[STORAGE] Successfully loaded settings from Flash.\n");
-        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Team: %u | Time: %us\n", 
+        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Team: %u | Time: %us | Bounds: [%u, %u]\n", 
                current_settings.kp, current_settings.ki, current_settings.kd, 
-               current_settings.company_number, current_settings.profile_duration_s);
+               current_settings.company_number, current_settings.profile_duration_s,
+               current_settings.act_min, current_settings.act_max);
     }
 }
 

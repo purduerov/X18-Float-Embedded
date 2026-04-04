@@ -90,6 +90,10 @@ int main() {
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
+      dpid.pos_min = settings.act_min;
+      dpid.pos_max = settings.act_max;
+      dpid.pid.out_min = (double)settings.act_min;
+      dpid.pid.out_max = (double)settings.act_max;
 
       // 3. Calculate target actuator position
       int target_pos = 0;

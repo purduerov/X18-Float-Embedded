@@ -23,7 +23,8 @@ typedef enum
     CMD_SET_DURATION = 0x0C,
     CMD_ZERO_DEPTH = 0x0D,
     CMD_SET_ACTUATOR = 0x0E,
-    CMD_RESET_FSM = 0x0F
+    CMD_RESET_FSM = 0x0F,
+    CMD_SET_ACT_BOUNDS = 0x10
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -44,6 +45,8 @@ typedef struct __attribute__((packed))
             uint16_t profile_duration_s; 
             uint16_t actuator_target;
             uint16_t current_actuator_pos;
+            uint16_t act_min;
+            uint16_t act_max;
         } settings; 
         uint8_t raw[MAX_PAYLOAD_SIZE];     
     } payload;

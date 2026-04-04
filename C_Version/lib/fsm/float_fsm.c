@@ -88,6 +88,13 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             fsm->actuator_target = rx_pkt.payload.settings.actuator_target;
                             fsm->manual_move_pending = true;
                             printf(">> Radio CMD: Set Actuator Target to %u\n", fsm->actuator_target);
+                        } else if (rx_pkt.command == CMD_SET_ACT_BOUNDS) {
+                            settings.act_min = rx_pkt.payload.settings.act_min;
+                            settings.act_max = rx_pkt.payload.settings.act_max;
+                            printf(">> Actuator Bounds Updated: Min=%u, Max=%u. Saving to Flash...\n", 
+                                   settings.act_min, settings.act_max);
+                            storage_set_settings(&settings);
+                            storage_save();
                         } else if (rx_pkt.command == CMD_RESET_FSM) {
                             printf(">> Radio CMD: Resetting FSM to IDLE...\n");
                             fsm->state = FLOAT_IDLE;
@@ -102,6 +109,8 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             tx_pkt.payload.settings.profile_duration_s = settings.profile_duration_s;
                             tx_pkt.payload.settings.actuator_target = fsm->actuator_target;
                             tx_pkt.payload.settings.current_actuator_pos = fsm->current_actuator_pos;
+                            tx_pkt.payload.settings.act_min = settings.act_min;
+                            tx_pkt.payload.settings.act_max = settings.act_max;
                             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
                             fsm->currently_transmitting = true;
                             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));

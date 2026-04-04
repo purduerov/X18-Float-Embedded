@@ -24,7 +24,11 @@ class HardwareManager:
         self.mission_status = "IDLE"
         self.first_timestamp = None
         
-        self.float_settings = {"P": "--", "I": "--", "D": "--", "Co#": "--", "Time": "--", "ADC": "--"}
+        self.float_settings = {
+            "P": "--", "I": "--", "D": "--", 
+            "Co#": "--", "Time": "--", "ADC": "--",
+            "ActMin": "--", "ActMax": "--"
+        }
         
         # Countdown Timer variables
         self.profile_start_time = None
@@ -99,6 +103,11 @@ class HardwareManager:
         self.float_settings["P"] = str(p)
         self.float_settings["I"] = str(i)
         self.float_settings["D"] = str(d)
+
+    def update_bounds(self, min_val, max_val):
+        self.send_command(f"b {min_val} {max_val}")
+        self.float_settings["ActMin"] = str(min_val)
+        self.float_settings["ActMax"] = str(max_val)
 
     def zero_depth(self):
         self.send_command("z")
@@ -228,6 +237,12 @@ with st.sidebar:
         act_pos = st.number_input("Target Position (0-4095)", min_value=0, max_value=4095, value=2000, step=100)
         if st.form_submit_button("MOVE ACTUATOR", width="stretch"): hw.move_actuator(int(act_pos))
 
+    with st.form("bounds_form"):
+        st.write("**Set Limits**")
+        b_min = st.number_input("Min ADC", min_value=0, max_value=4095, value=0)
+        b_max = st.number_input("Max ADC", min_value=0, max_value=4095, value=4095)
+        if st.form_submit_button("UPDATE BOUNDS", width="stretch"): hw.update_bounds(int(b_min), int(b_max))
+
 # --- MAIN DASHBOARD ---
 st.title("🌊 MATE Floats 2026: Mission Control")
 
@@ -286,6 +301,7 @@ def live_dashboard():
         st.markdown("### Active Config")
         st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
+        st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
         st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
         if hw.data_log:

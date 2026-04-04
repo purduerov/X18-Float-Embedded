@@ -55,6 +55,13 @@ static void handle_actuator(const char *params) {
     }
 }
 
+static void handle_bounds(const char *params) {
+    unsigned int min_val, max_val;
+    if (sscanf(params, "%u %u", &min_val, &max_val) == 2) {
+        surface_fsm_cmd_set_act_bounds(&global_fsm, (uint16_t)min_val, (uint16_t)max_val);
+    }
+}
+
 static void handle_sync(const char *params) {
     surface_fsm_cmd_sync(&global_fsm);
 }
@@ -70,6 +77,7 @@ static const surface_command_t cmd_table[] = {
     {'t', handle_duration, "Set Duration (Secs)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
+    {'b', handle_bounds, "Set Actuator Bounds (Min Max)"},
     {'?', handle_sync, "Sync Settings"},
     {'r', handle_reset, "Reset State Machine"}
 };

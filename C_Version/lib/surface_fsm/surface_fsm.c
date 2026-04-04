@@ -88,6 +88,16 @@ void surface_fsm_cmd_set_actuator(surface_fsm_t *fsm, uint16_t position) {
     }
 }
 
+void surface_fsm_cmd_set_act_bounds(surface_fsm_t *fsm, uint16_t min_val, uint16_t max_val) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Actuator Bounds: Min=%u, Max=%u\n", min_val, max_val);
+        packet_t tx_pkt = {.command = CMD_SET_ACT_BOUNDS, .seq_num = 0};
+        tx_pkt.payload.settings.act_min = min_val;
+        tx_pkt.payload.settings.act_max = max_val;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
 void surface_fsm_cmd_sync(surface_fsm_t *fsm) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
         printf(">> Requesting current float settings...\n");
@@ -130,12 +140,14 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u, ADC=%u\n",
+                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u, ADC=%u, ActMin=%u, ActMax=%u\n",
                         rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                         rx_pkt.payload.settings.kd,
                         rx_pkt.payload.settings.company_number,
                         rx_pkt.payload.settings.profile_duration_s,
-                        rx_pkt.payload.settings.current_actuator_pos);
+                        rx_pkt.payload.settings.current_actuator_pos,
+                        rx_pkt.payload.settings.act_min,
+                        rx_pkt.payload.settings.act_max);
                 }
             } else if (fsm->state == SURFACE_WAITING_PROFILE) {
                 if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
