@@ -23,6 +23,7 @@
 #define PIN_POT 26
 #define PIN_EXT 12
 #define PIN_RET 13
+#define PIN_VREF 27
 
 static float_fsm_t global_fsm;
 static volatile bool float_radio_irq_flag = false;
@@ -59,6 +60,9 @@ int main() {
   // --- Initialize Actuator ---
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
+  gpio_init(PIN_VREF);
+  gpio_set_dir(PIN_VREF, GPIO_OUT);
+  gpio_put(PIN_VREF, 1); // Enable full power to motor driver
 
   // --- Initialize Depth PID ---
   DepthPID dpid;
@@ -107,10 +111,23 @@ int main() {
 
       // 4. Command Actuator & Update monitoring (stop if reached)
       int current_pos = actuator_get_position(&act);
-      if (abs(current_pos - target_pos) <= POS_TOL) {
-        actuator_set_move_pins(&act, 0);
+      
+      // If we are in IDLE and need to move, enter a blocking loop to move it quickly
+      if (global_fsm.state == FLOAT_IDLE && abs(current_pos - target_pos) > POS_TOL) {
+          printf(">> Actuator Moving to %d...\n", target_pos);
+          while (abs(actuator_get_position(&act) - target_pos) > POS_TOL) {
+              actuator_move_to(&act, target_pos);
+              sleep_ms(20);
+          }
+          actuator_set_move_pins(&act, 0);
+          printf(">> Actuator Target Reached.\n");
       } else {
-        actuator_move_to(&act, target_pos);
+          // Normal non-blocking PID operation during profiling
+          if (abs(current_pos - target_pos) <= POS_TOL) {
+            actuator_set_move_pins(&act, 0);
+          } else {
+            actuator_move_to(&act, target_pos);
+          }
       }
 
       last_pid_time = now;
