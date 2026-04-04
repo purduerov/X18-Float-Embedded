@@ -24,7 +24,7 @@ class HardwareManager:
         self.mission_status = "IDLE"
         self.first_timestamp = None
         
-        self.float_settings = {"P": "--", "I": "--", "D": "--", "Co#": "67", "Time": "40"}
+        self.float_settings = {"P": "--", "I": "--", "D": "--", "Co#": "--", "Time": "--", "ADC": "--"}
         
         # Countdown Timer variables
         self.profile_start_time = None
@@ -286,6 +286,7 @@ def live_dashboard():
         st.markdown("### Active Config")
         st.write(f"**ID:** {hw.float_settings['Co#']} | **Time:** {hw.float_settings['Time']}s")
         st.write(f"**PID:** {hw.float_settings['P']} / {hw.float_settings['I']} / {hw.float_settings['D']}")
+        st.write(f"**Live ADC:** {hw.float_settings['ADC']}")
         
         if hw.data_log:
             df_csv = pd.DataFrame(hw.data_log).to_csv(index=False).encode('utf-8')

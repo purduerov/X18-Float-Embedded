@@ -130,19 +130,19 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u\n",
+                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u, ADC=%u\n",
                         rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                         rx_pkt.payload.settings.kd,
                         rx_pkt.payload.settings.company_number,
-                        rx_pkt.payload.settings.profile_duration_s);
+                        rx_pkt.payload.settings.profile_duration_s,
+                        rx_pkt.payload.settings.current_actuator_pos);
                 }
             } else if (fsm->state == SURFACE_WAITING_PROFILE) {
                 if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
-                    printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m | ADC %u\n",
+                    printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m\n",
                            rx_pkt.payload.telemetry.company_number,
                            rx_pkt.payload.telemetry.time_ms,
-                           rx_pkt.payload.telemetry.depth_m,
-                           rx_pkt.payload.telemetry.actuator_pos);
+                           rx_pkt.payload.telemetry.depth_m);
                 } else if (rx_pkt.command == CMD_DONE_PROFILE) {
                     printf(">> Float finished profile! Sending SEND_DATA command...\n");
                     data_logger_reset();
@@ -160,15 +160,13 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     if (rx_pkt.seq_num == fsm->expected_seq_num) {
                         data_logger_add_sample(rx_pkt.payload.telemetry.company_number,
                                              rx_pkt.payload.telemetry.time_ms,
-                                             rx_pkt.payload.telemetry.depth_m,
-                                             rx_pkt.payload.telemetry.actuator_pos);
+                                             rx_pkt.payload.telemetry.depth_m);
 
-                        printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m | ADC %u\n",
+                        printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m\n",
                                rx_pkt.seq_num,
                                rx_pkt.payload.telemetry.company_number,
                                rx_pkt.payload.telemetry.time_ms,
-                               rx_pkt.payload.telemetry.depth_m,
-                               rx_pkt.payload.telemetry.actuator_pos);
+                               rx_pkt.payload.telemetry.depth_m);
                         fsm->expected_seq_num++;
                     } else {
                         printf(">> Received duplicate/old packet #%d. Re-sending ACK.\n", rx_pkt.seq_num);

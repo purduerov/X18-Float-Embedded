@@ -24,7 +24,7 @@ void data_logger_reset(void) {
     data_capacity = 0;
 }
 
-void data_logger_add_sample(uint16_t co, uint32_t time, float depth, uint16_t actuator_pos) {
+void data_logger_add_sample(uint16_t co, uint32_t time, float depth) {
     if (data_count >= data_capacity) {
         size_t new_capacity = (data_capacity == 0) ? INITIAL_CAPACITY : data_capacity * 2;
         SensorReading_t *new_buffer = (SensorReading_t *)realloc(data_buffer, new_capacity * sizeof(SensorReading_t));
@@ -41,19 +41,17 @@ void data_logger_add_sample(uint16_t co, uint32_t time, float depth, uint16_t ac
     data_buffer[data_count].company_number = co;
     data_buffer[data_count].time_ms = time;
     data_buffer[data_count].depth_m = depth;
-    data_buffer[data_count].actuator_pos = actuator_pos;
     data_count++;
 }
 
 void data_logger_dump_csv(void) {
     printf("\n--- START DATA DUMP ---\n");
-    printf("CompanyNumber,Time(ms),Depth(m),ActuatorADC\n");
+    printf("CompanyNumber,Time(ms),Depth(m)\n");
     for (size_t i = 0; i < data_count; i++) {
-        printf("%u,%lu,%.2f,%u\n", 
+        printf("%u,%lu,%.2f\n", 
                data_buffer[i].company_number,
                data_buffer[i].time_ms,
-               data_buffer[i].depth_m,
-               data_buffer[i].actuator_pos);
+               data_buffer[i].depth_m);
     }
     printf("--- END DATA DUMP ---\n");
 }
