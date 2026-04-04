@@ -105,12 +105,40 @@ int main() {
       // If we are in IDLE and need to move, enter a blocking loop to move it quickly
       if (global_fsm.state == FLOAT_IDLE && abs(current_pos - target_pos) > POS_TOL) {
           printf(">> Actuator Moving to %d...\n", target_pos);
+          
+          uint32_t start_time = to_ms_since_boot(get_absolute_time());
+          uint32_t last_move_time = start_time;
+          int last_pos = current_pos;
+
           while (abs(actuator_get_position(&act) - target_pos) > POS_TOL) {
               actuator_move_to(&act, target_pos);
               sleep_ms(20);
+              
+              int p = actuator_get_position(&act);
+              uint32_t t_now = to_ms_since_boot(get_absolute_time());
+              
+              if (abs(p - last_pos) > 2) {
+                  last_pos = p;
+                  last_move_time = t_now;
+              }
+              
+              if (t_now - last_move_time > 500) {
+                  printf(">> Actuator Stalled! Stopping to prevent damage.\n");
+                  break;
+              }
+              
+              if (t_now - start_time > 5000) {
+                  printf(">> Actuator Timeout! Stopping.\n");
+                  break;
+              }
           }
+          
           actuator_set_move_pins(&act, 0);
-          printf(">> Actuator Target Reached.\n");
+          
+          // Update the global target so we don't immediately re-trigger the loop
+          // if we broke out due to stall or timeout.
+          global_fsm.actuator_target = actuator_get_position(&act);
+          printf(">> Actuator Stopped at %d.\n", global_fsm.actuator_target);
       } else {
           // Normal non-blocking PID operation during profiling
           if (abs(current_pos - target_pos) <= POS_TOL) {
