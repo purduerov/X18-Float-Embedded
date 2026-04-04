@@ -3,6 +3,7 @@
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 // --- Custom Library Includes ---
 #include "actuator.h"
@@ -24,8 +25,9 @@
 #define PIN_RET 13
 
 static float_fsm_t global_fsm;
+static volatile bool float_radio_irq_flag = false;
 
-void onInterrupt(void) { float_fsm_on_interrupt(&global_fsm); }
+void onInterrupt(void) { float_radio_irq_flag = true; }
 
 int main() {
   stdio_init_all();
@@ -113,18 +115,10 @@ int main() {
 
     float_fsm_update(&global_fsm);
 
-    // OTA Reflash Check - use StartReceive/ReadData to avoid blocking the USB stack
-    // We check the IRQ pin (GPIO 9) directly. 
-    if (gpio_get(9)) {
-        uint8_t rx_buffer[256];
-        int16_t state = RadioLib_SX127x_ReadData(radio_get_instance(), rx_buffer, sizeof(rx_buffer));
-        if (state > 0) {
-            if (reflash_target_process_packet(radio_get_instance(), rx_buffer, (size_t)state)) {
-                // Packet consumed by reflasher
-            }
-        }
-        // Always return to listening mode after processing a packet or noise
-        RadioLib_SX127x_StartReceive(radio_get_instance());
+    // Process Radio Events outside of ISR
+    if (float_radio_irq_flag) {
+        float_radio_irq_flag = false;
+        float_fsm_process_event(&global_fsm);
     }
 
     sleep_ms(1);

@@ -27,6 +27,11 @@ typedef struct {
 void surface_link_init(const surface_command_t *commands, size_t num_commands);
 
 /**
+ * Process a single character from serial
+ */
+void surface_link_handle_char(char c);
+
+/**
  * Process serial input and dispatch commands
  */
 void surface_link_update(void);

@@ -22,7 +22,8 @@ typedef enum
     CMD_REP_SETTINGS = 0x0B,
     CMD_SET_DURATION = 0x0C,
     CMD_ZERO_DEPTH = 0x0D,
-    CMD_SET_ACTUATOR = 0x0E
+    CMD_SET_ACTUATOR = 0x0E,
+    CMD_RESET_FSM = 0x0F
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))

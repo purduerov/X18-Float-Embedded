@@ -10,11 +10,11 @@
 #define SLOT_SIZE     0x00100000 // 1MB
 
 typedef enum {
-    REFLASH_MSG_START = 0x01,
-    REFLASH_MSG_DATA  = 0x02,
-    REFLASH_MSG_ACK   = 0x03,
-    REFLASH_MSG_NACK  = 0x04,
-    REFLASH_MSG_DONE  = 0x05
+    REFLASH_MSG_START = 0xF1,
+    REFLASH_MSG_DATA  = 0xF2,
+    REFLASH_MSG_ACK   = 0xF3,
+    REFLASH_MSG_NACK  = 0xF4,
+    REFLASH_MSG_DONE  = 0xF5
 } reflash_msg_type_t;
 
 typedef struct __attribute__((packed)) {

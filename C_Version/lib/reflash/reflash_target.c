@@ -71,12 +71,15 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
         
         printf("[OTA] Start Msg: Size %lu, CRC 0x%08lX. Erasing Slot 1...\n", total_size, expected_master_crc);
         
-        // 1. Send ACK immediately so the Surface knows we are starting
+        // 1. Switch to high-speed OTA bandwidth
+        RadioLib_SX127x_SetBandwidth(lora, 500.0);
+
+        // 2. Send ACK immediately so the Surface knows we are starting
         send_ack(lora, 0xFFFFFFFF);
         page_buffer_idx = 0;
         current_flash_addr = SLOT_1_OFFSET;
         
-        // 2. Erase only what is needed for this binary (rounded up to 4KB sectors)
+        // 3. Erase only what is needed for this binary (rounded up to 4KB sectors)
         uint32_t erase_len = (total_size + (FLASH_SECTOR_SIZE - 1)) & ~(FLASH_SECTOR_SIZE - 1);
         printf("[OTA] Erasing Slot 1 (%lu bytes)...\n", erase_len);
 

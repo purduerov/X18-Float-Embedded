@@ -1,4 +1,5 @@
 #include "float_fsm.h"
+#include "reflash_target.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -22,10 +23,10 @@ void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor) {
     radio_start_receive();
 }
 
-void float_fsm_on_interrupt(float_fsm_t *fsm) {
+void float_fsm_process_event(float_fsm_t *fsm) {
     // This is called when the radio signals an operation is done (TX finished or RX arrived)
     uint8_t buffer[256];
-    
+
     if (fsm->currently_transmitting) {
         radio_finish_transmit();
         fsm->currently_transmitting = false;
@@ -40,81 +41,90 @@ void float_fsm_on_interrupt(float_fsm_t *fsm) {
         radio_start_receive();
     } else {
         int16_t len = radio_read_data(buffer, sizeof(buffer));
-        if (len == sizeof(packet_t)) {
-            packet_t rx_pkt;
-            memcpy(&rx_pkt, buffer, sizeof(packet_t));
+        if (len > 0) {
+            // Give the OTA Reflasher the first chance at the packet
+            if (reflash_target_process_packet(radio_get_instance(), buffer, len)) {
+                // Packet consumed by OTA reflasher, do nothing more
+            } else if (len == sizeof(packet_t)) {
+                packet_t rx_pkt;
+                memcpy(&rx_pkt, buffer, sizeof(packet_t));
 
-            // Verify checksum before processing
-            if (rx_pkt.checksum != packet_calculate_checksum(&rx_pkt)) {
-                printf("[RADIO] ERROR: Packet Checksum Mismatch! Ignoring.\n");
-            } else {
-                float_settings_t settings;
-                storage_get_settings(&settings);
+                // Verify checksum before processing
+                if (rx_pkt.checksum != packet_calculate_checksum(&rx_pkt)) {
+                    printf("[RADIO] ERROR: Packet Checksum Mismatch! Ignoring.\n");
+                } else {
+                    float_settings_t settings;
+                    storage_get_settings(&settings);
 
-                if (fsm->state == FLOAT_IDLE) {
-                    if (rx_pkt.command == CMD_BEGIN_PROFILE) {
-                        printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive Transmission...\n");
-                        fsm->state = FLOAT_PRE_DIVE;
-                    } else if (rx_pkt.command == CMD_SET_PID) {
-                        settings.kp = rx_pkt.payload.settings.kp;
-                        settings.ki = rx_pkt.payload.settings.ki;
-                        settings.kd = rx_pkt.payload.settings.kd;
-                        printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n", 
-                               settings.kp, settings.ki, settings.kd);
-                        storage_set_settings(&settings);
-                        storage_save();
-                    } else if (rx_pkt.command == CMD_SET_COMPANY) {
-                        settings.company_number = rx_pkt.payload.telemetry.company_number;
-                        printf(">> Company ID Updated: %u. Saving to Flash...\n", settings.company_number);
-                        storage_set_settings(&settings);
-                        storage_save();
-                    } else if (rx_pkt.command == CMD_SET_DURATION) {
-                        settings.profile_duration_s = rx_pkt.payload.settings.profile_duration_s;
-                        printf(">> Profile Duration Updated: %u seconds. Saving to Flash...\n", settings.profile_duration_s);
-                        storage_set_settings(&settings);
-                        storage_save();
-                    } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
-                        ms5837_read(fsm->depth_sensor);
-                        settings.depth_offset = ms5837_get_depth(fsm->depth_sensor);
-                        printf(">> Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
-                        storage_set_settings(&settings);
-                        storage_save();
-                    } else if (rx_pkt.command == CMD_SET_ACTUATOR) {
-                        fsm->actuator_target = rx_pkt.payload.settings.actuator_target;
-                        printf(">> Radio CMD: Set Actuator Target to %u\n", fsm->actuator_target);
-                    } else if (rx_pkt.command == CMD_REQ_SETTINGS) {
-                        printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
-                        packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
-                        tx_pkt.payload.settings.kp = settings.kp;
-                        tx_pkt.payload.settings.ki = settings.ki;
-                        tx_pkt.payload.settings.kd = settings.kd;
-                        tx_pkt.payload.settings.company_number = settings.company_number;
-                        tx_pkt.payload.settings.profile_duration_s = settings.profile_duration_s;
-                        tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-                        fsm->currently_transmitting = true;
-                        radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-                    }
-                } else if (fsm->state == FLOAT_PROFILE_DONE) {
-                    if (rx_pkt.command == CMD_SEND_DATA) {
-                        printf(">> Received SEND_DATA command. Starting data dump for scoring...\n");
-                        fsm->state = FLOAT_DUMPING_DATA;
-                        fsm->current_seq_num = 1;
-                        fsm->last_tx_time = 0;
-                    }
-                } else if (fsm->state == FLOAT_DUMPING_DATA) {
-                    if (rx_pkt.command == CMD_ACK && rx_pkt.seq_num == fsm->current_seq_num) {
-                        printf(">> Received ACK for packet %d.\n", fsm->current_seq_num);
-                        fsm->current_seq_num++;
-
-                        if (fsm->current_seq_num > fsm->sample_index) {
-                            printf(">> All data sent. Sending DATA_DONE...\n");
-                            packet_t done_pkt = {.command = CMD_DATA_DONE, .seq_num = 0};
-                            done_pkt.checksum = packet_calculate_checksum(&done_pkt);
-                            fsm->currently_transmitting = true;
-                            radio_start_transmit((uint8_t *)&done_pkt, sizeof(packet_t));
+                    if (fsm->state == FLOAT_IDLE) {
+                        if (rx_pkt.command == CMD_BEGIN_PROFILE) {
+                            printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive Transmission...\n");
+                            fsm->state = FLOAT_PRE_DIVE;
+                        } else if (rx_pkt.command == CMD_SET_PID) {
+                            settings.kp = rx_pkt.payload.settings.kp;
+                            settings.ki = rx_pkt.payload.settings.ki;
+                            settings.kd = rx_pkt.payload.settings.kd;
+                            printf(">> PID Updated: P=%.2f, I=%.2f, D=%.2f. Saving to Flash...\n", 
+                                   settings.kp, settings.ki, settings.kd);
+                            storage_set_settings(&settings);
+                            storage_save();
+                        } else if (rx_pkt.command == CMD_SET_COMPANY) {
+                            settings.company_number = rx_pkt.payload.telemetry.company_number;
+                            printf(">> Company ID Updated: %u. Saving to Flash...\n", settings.company_number);
+                            storage_set_settings(&settings);
+                            storage_save();
+                        } else if (rx_pkt.command == CMD_SET_DURATION) {
+                            settings.profile_duration_s = rx_pkt.payload.settings.profile_duration_s;
+                            printf(">> Profile Duration Updated: %u seconds. Saving to Flash...\n", settings.profile_duration_s);
+                            storage_set_settings(&settings);
+                            storage_save();
+                        } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
+                            ms5837_read(fsm->depth_sensor);
+                            settings.depth_offset = ms5837_get_depth(fsm->depth_sensor);
+                            printf(">> Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
+                            storage_set_settings(&settings);
+                            storage_save();
+                        } else if (rx_pkt.command == CMD_SET_ACTUATOR) {
+                            fsm->actuator_target = rx_pkt.payload.settings.actuator_target;
+                            printf(">> Radio CMD: Set Actuator Target to %u\n", fsm->actuator_target);
+                        } else if (rx_pkt.command == CMD_RESET_FSM) {
+                            printf(">> Radio CMD: Resetting FSM to IDLE...\n");
                             fsm->state = FLOAT_IDLE;
-                        } else {
+                            fsm->currently_transmitting = false;
+                        } else if (rx_pkt.command == CMD_REQ_SETTINGS) {
+                            printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
+                            packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
+                            tx_pkt.payload.settings.kp = settings.kp;
+                            tx_pkt.payload.settings.ki = settings.ki;
+                            tx_pkt.payload.settings.kd = settings.kd;
+                            tx_pkt.payload.settings.company_number = settings.company_number;
+                            tx_pkt.payload.settings.profile_duration_s = settings.profile_duration_s;
+                            tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
+                            fsm->currently_transmitting = true;
+                            radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
+                        }
+                    } else if (fsm->state == FLOAT_PROFILE_DONE) {
+                        if (rx_pkt.command == CMD_SEND_DATA) {
+                            printf(">> Received SEND_DATA command. Starting data dump for scoring...\n");
+                            fsm->state = FLOAT_DUMPING_DATA;
+                            fsm->current_seq_num = 1;
                             fsm->last_tx_time = 0;
+                        }
+                    } else if (fsm->state == FLOAT_DUMPING_DATA) {
+                        if (rx_pkt.command == CMD_ACK && rx_pkt.seq_num == fsm->current_seq_num) {
+                            printf(">> Received ACK for packet %d.\n", fsm->current_seq_num);
+                            fsm->current_seq_num++;
+
+                            if (fsm->current_seq_num > fsm->sample_index) {
+                                printf(">> All data sent. Sending DATA_DONE...\n");
+                                packet_t done_pkt = {.command = CMD_DATA_DONE, .seq_num = 0};
+                                done_pkt.checksum = packet_calculate_checksum(&done_pkt);
+                                fsm->currently_transmitting = true;
+                                radio_start_transmit((uint8_t *)&done_pkt, sizeof(packet_t));
+                                fsm->state = FLOAT_IDLE;
+                            } else {
+                                fsm->last_tx_time = 0;
+                            }
                         }
                     }
                 }

@@ -1,6 +1,7 @@
 #include "surface_fsm.h"
 #include "radio_setup.h"
 #include "data_logger.h"
+#include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -24,6 +25,7 @@ bool surface_fsm_is_transmitting(surface_fsm_t *fsm) {
 }
 
 static void send_packet(surface_fsm_t *fsm, packet_t *pkt) {
+    sleep_ms(100);
     pkt->checksum = packet_calculate_checksum(pkt);
     fsm->currently_transmitting = true;
     radio_start_transmit((uint8_t *)pkt, sizeof(packet_t));
@@ -94,6 +96,17 @@ void surface_fsm_cmd_sync(surface_fsm_t *fsm) {
     }
 }
 
+void surface_fsm_cmd_reset(surface_fsm_t *fsm) {
+    printf(">> FORCING FSM RESET TO IDLE...\n");
+    fsm->state = SURFACE_IDLE;
+    fsm->currently_transmitting = false;
+    fsm->expected_seq_num = 1;
+    
+    packet_t tx_pkt = {.command = CMD_RESET_FSM, .seq_num = 0};
+    send_packet(fsm, &tx_pkt);
+    // radio_start_receive() will be called when transmission finishes in process_event
+}
+
 // --- Radio Event Processor ---
 
 void surface_fsm_process_event(surface_fsm_t *fsm) {
@@ -138,7 +151,11 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     fsm->expected_seq_num = 1;
                 }
             } else if (fsm->state == SURFACE_DOWNLOADING) {
-                if (rx_pkt.command == CMD_DATA_TRANSMISSION) {
+                if (rx_pkt.command == CMD_DONE_PROFILE) {
+                    printf(">> Float missed SEND_DATA. Re-sending...\n");
+                    packet_t tx_pkt = {.command = CMD_SEND_DATA, .seq_num = 0};
+                    send_packet(fsm, &tx_pkt);
+                } else if (rx_pkt.command == CMD_DATA_TRANSMISSION) {
                     if (rx_pkt.seq_num == fsm->expected_seq_num) {
                         data_logger_add_sample(rx_pkt.payload.telemetry.company_number,
                                              rx_pkt.payload.telemetry.time_ms,

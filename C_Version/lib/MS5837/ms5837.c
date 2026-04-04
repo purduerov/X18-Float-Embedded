@@ -246,12 +246,8 @@ float ms5837_get_temperature(MS5837_t *sensor)
 
 float ms5837_get_depth(MS5837_t *sensor)
 {
-    printf("ms5837 getting depth\n");
-
     // Uses the standard atmospheric pressure of 101300 Pa as a baseline
     return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
-
-    printf("done\n");
 }
 
 float ms5837_get_altitude(MS5837_t *sensor)

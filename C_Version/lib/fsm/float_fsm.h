@@ -34,6 +34,6 @@ typedef struct {
 // --- Public API ---
 void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor);
 void float_fsm_update(float_fsm_t *fsm);
-void float_fsm_on_interrupt(float_fsm_t *fsm);
+void float_fsm_process_event(float_fsm_t *fsm);
 
 #endif // FLOAT_FSM_H

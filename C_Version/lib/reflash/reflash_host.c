@@ -60,7 +60,13 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
     bool started = false;
     for (int retry = 0; retry < 5; retry++) {
+        // Ensure we transmit START at 125kHz so the target hears it
+        RadioLib_SX127x_SetBandwidth(lora, 125.0);
         RadioLib_SX127x_Transmit(lora, (uint8_t *)&start_msg, sizeof(start_msg));
+        
+        // Immediately switch to 500kHz to await the target's high-speed ACK
+        RadioLib_SX127x_SetBandwidth(lora, 500.0);
+        
         if (wait_for_ack(lora, 0xFFFFFFFF)) {
             started = true;
             break;
@@ -70,6 +76,7 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
     if (!started) {
         printf("[HOST] Failed to start reflash (no ACK from receiver)\n");
+        RadioLib_SX127x_SetBandwidth(lora, 125.0); // Reset bandwidth on failure
         return; // Return to normal operations
     }
 

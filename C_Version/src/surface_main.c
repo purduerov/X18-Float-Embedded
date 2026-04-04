@@ -59,6 +59,10 @@ static void handle_sync(const char *params) {
     surface_fsm_cmd_sync(&global_fsm);
 }
 
+static void handle_reset(const char *params) {
+    surface_fsm_cmd_reset(&global_fsm);
+}
+
 static const surface_command_t cmd_table[] = {
     {'p', handle_profile, "Begin Profile"},
     {'s', handle_pid, "Set PID (P I D)"},
@@ -66,7 +70,8 @@ static const surface_command_t cmd_table[] = {
     {'t', handle_duration, "Set Duration (Secs)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
-    {'?', handle_sync, "Sync Settings"}
+    {'?', handle_sync, "Sync Settings"},
+    {'r', handle_reset, "Reset State Machine"}
 };
 
 // --- Main Application ---
@@ -114,10 +119,14 @@ int main() {
 
     // 2. Process Serial Interface (Commands from Dashboard)
     int c = getchar_timeout_us(0);
-    if (c == 'S') {
-        reflash_host_stream_from_serial(radio_get_instance());
-    } else if (c != PICO_ERROR_TIMEOUT) {
-        ungetc(c, stdin); // Put it back for surface_link_update to read
+    while (c != PICO_ERROR_TIMEOUT) {
+        if (c == 'S') {
+            reflash_host_stream_from_serial(radio_get_instance());
+        } else {
+            // Forward everything else to the surface_link character processor
+            surface_link_handle_char((char)c);
+        }
+        c = getchar_timeout_us(0);
     }
     surface_link_update();
 

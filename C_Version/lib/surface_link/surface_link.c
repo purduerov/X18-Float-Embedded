@@ -38,26 +38,28 @@ static void dispatch_command(const char *line) {
     printf("\n[SERIAL] Unknown command: %c\n", cmd_char);
 }
 
+void surface_link_handle_char(char c) {
+    if (c == '\n' || c == '\r') {
+        if (input_pos > 0) {
+            input_line[input_pos] = '\0';
+            printf("\n[SERIAL] Received: %s\n", input_line);
+            dispatch_command(input_line);
+            input_pos = 0;
+        }
+    } else if (c == '\b' || c == 127) {
+        if (input_pos > 0) {
+            input_pos--;
+        }
+    } else if (c >= 32 && c <= 126) {
+        if (input_pos < sizeof(input_line) - 1) {
+            input_line[input_pos++] = c;
+        }
+    }
+}
+
 void surface_link_update(void) {
     int c;
     while ((c = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT) {
-        if (c == '\n' || c == '\r') {
-            if (input_pos > 0) {
-                input_line[input_pos] = '\0';
-                printf("\n[SERIAL] Received: %s\n", input_line);
-                dispatch_command(input_line);
-                input_pos = 0;
-            }
-        } else if (c == '\b' || c == 127) {
-            if (input_pos > 0) {
-                input_pos--;
-                // Note: We don't putchar back for terminal control here 
-                // to keep it simple and dashboard-friendly.
-            }
-        } else if (c >= 32 && c <= 126) {
-            if (input_pos < sizeof(input_line) - 1) {
-                input_line[input_pos++] = (char)c;
-            }
-        }
+        surface_link_handle_char((char)c);
     }
 }
