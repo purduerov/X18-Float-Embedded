@@ -99,15 +99,18 @@ int main() {
 
       // 3. Calculate target actuator position
       int target_pos = 0;
-      depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
+      if (global_fsm.state == FLOAT_PROFILING) {
+          depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
+      } else {
+          target_pos = global_fsm.actuator_target;
+      }
 
-      // 4. Command Actuator
-      actuator_move_to(&act, target_pos);
-
-      // 5. Update monitoring (stop if reached)
+      // 4. Command Actuator & Update monitoring (stop if reached)
       int current_pos = actuator_get_position(&act);
-      if (abs(current_pos - target_pos) < POS_TOL) {
+      if (abs(current_pos - target_pos) <= POS_TOL) {
         actuator_set_move_pins(&act, 0);
+      } else {
+        actuator_move_to(&act, target_pos);
       }
 
       last_pid_time = now;
