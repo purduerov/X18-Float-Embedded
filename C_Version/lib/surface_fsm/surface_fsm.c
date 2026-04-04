@@ -138,10 +138,11 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                 }
             } else if (fsm->state == SURFACE_WAITING_PROFILE) {
                 if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
-                    printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m\n",
+                    printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m | ADC %u\n",
                            rx_pkt.payload.telemetry.company_number,
                            rx_pkt.payload.telemetry.time_ms,
-                           rx_pkt.payload.telemetry.depth_m);
+                           rx_pkt.payload.telemetry.depth_m,
+                           rx_pkt.payload.telemetry.actuator_pos);
                 } else if (rx_pkt.command == CMD_DONE_PROFILE) {
                     printf(">> Float finished profile! Sending SEND_DATA command...\n");
                     data_logger_reset();
@@ -159,13 +160,15 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     if (rx_pkt.seq_num == fsm->expected_seq_num) {
                         data_logger_add_sample(rx_pkt.payload.telemetry.company_number,
                                              rx_pkt.payload.telemetry.time_ms,
-                                             rx_pkt.payload.telemetry.depth_m);
+                                             rx_pkt.payload.telemetry.depth_m,
+                                             rx_pkt.payload.telemetry.actuator_pos);
 
-                        printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m\n",
+                        printf(">> Stored Data #%d: Co# %u | Time %lu ms | Depth %.2f m | ADC %u\n",
                                rx_pkt.seq_num,
                                rx_pkt.payload.telemetry.company_number,
                                rx_pkt.payload.telemetry.time_ms,
-                               rx_pkt.payload.telemetry.depth_m);
+                               rx_pkt.payload.telemetry.depth_m,
+                               rx_pkt.payload.telemetry.actuator_pos);
                         fsm->expected_seq_num++;
                     } else {
                         printf(">> Received duplicate/old packet #%d. Re-sending ACK.\n", rx_pkt.seq_num);

@@ -151,6 +151,7 @@ int main() {
       last_pid_time = now;
     }
 
+    global_fsm.current_actuator_pos = actuator_get_position(&act);
     float_fsm_update(&global_fsm);
 
     // Process Radio Events outside of ISR
