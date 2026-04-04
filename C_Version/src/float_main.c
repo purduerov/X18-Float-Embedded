@@ -102,8 +102,9 @@ int main() {
       // 4. Command Actuator & Update monitoring (stop if reached)
       int current_pos = actuator_get_position(&act);
       
-      // If we are in IDLE and need to move, enter a blocking loop to move it quickly
-      if (global_fsm.state == FLOAT_IDLE && abs(current_pos - target_pos) > POS_TOL) {
+      // If a manual move command is pending, enter the blocking loop once
+      if (global_fsm.state == FLOAT_IDLE && global_fsm.manual_move_pending) {
+          global_fsm.manual_move_pending = false; // Reset immediately to prevent re-triggering
           printf(">> Actuator Moving to %d...\n", target_pos);
           
           uint32_t start_time = to_ms_since_boot(get_absolute_time());
@@ -134,13 +135,9 @@ int main() {
           }
           
           actuator_set_move_pins(&act, 0);
-          
-          // Update the global target so we don't immediately re-trigger the loop
-          // if we broke out due to stall or timeout.
-          global_fsm.actuator_target = actuator_get_position(&act);
-          printf(">> Actuator Stopped at %d.\n", global_fsm.actuator_target);
+          printf(">> Actuator Stopped at %d.\n", actuator_get_position(&act));
       } else {
-          // Normal non-blocking PID operation during profiling
+          // Normal non-blocking PID operation during profiling or idle maintenance
           if (abs(current_pos - target_pos) <= POS_TOL) {
             actuator_set_move_pins(&act, 0);
           } else {

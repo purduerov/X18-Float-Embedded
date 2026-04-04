@@ -29,6 +29,7 @@ typedef struct {
     uint16_t sample_index;
     uint16_t actuator_target;
     uint16_t current_actuator_pos;
+    bool manual_move_pending;
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

@@ -86,6 +86,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             storage_save();
                         } else if (rx_pkt.command == CMD_SET_ACTUATOR) {
                             fsm->actuator_target = rx_pkt.payload.settings.actuator_target;
+                            fsm->manual_move_pending = true;
                             printf(">> Radio CMD: Set Actuator Target to %u\n", fsm->actuator_target);
                         } else if (rx_pkt.command == CMD_RESET_FSM) {
                             printf(">> Radio CMD: Resetting FSM to IDLE...\n");

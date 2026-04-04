@@ -284,9 +284,9 @@ def live_dashboard():
         st.button("🔄 SYNC FROM FLOAT", width="stretch", on_click=lambda: hw.send_command('?'))
         
         st.markdown("### Active Config")
-        st.write(f"**ID:** {hw.float_settings['Co#']} | **Time:** {hw.float_settings['Time']}s")
-        st.write(f"**PID:** {hw.float_settings['P']} / {hw.float_settings['I']} / {hw.float_settings['D']}")
-        st.write(f"**Live ADC:** {hw.float_settings['ADC']}")
+        st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
+        st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
+        st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
         if hw.data_log:
             df_csv = pd.DataFrame(hw.data_log).to_csv(index=False).encode('utf-8')
