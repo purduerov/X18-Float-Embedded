@@ -13,17 +13,7 @@
 #include "radio_setup.h"
 #include "storage.h"
 #include "reflash_target.h"
-
-// --- I2C / Sensor Setup ---
-#define I2C_PORT i2c1
-#define PIN_SDA 2
-#define PIN_SCL 3
-
-// --- Actuator Pins ---
-#define PIN_POT 26
-#define PIN_EXT 12
-#define PIN_RET 13
-#define PIN_VREF 27
+#include "hw_config.h"
 
 static float_fsm_t global_fsm;
 static volatile bool float_radio_irq_flag = false;

@@ -4,15 +4,7 @@
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
-
-// --- Hardcoded Radio Pins ---
-static const uint32_t SPI_MOSI = 19;
-static const uint32_t SPI_MISO = 20;
-static const uint32_t SPI_SCK = 18;
-static const uint32_t CS_PIN = 24;
-static const uint32_t RST_PIN = 25;
-static const uint32_t EN_PIN = 8;
-static const uint32_t IRQ_PIN = 9;
+#include "hw_config.h"
 
 static RadioLibHal_t *hal;
 static RadioLibModule_t radioModule;
@@ -20,16 +12,16 @@ static RadioLibSX127x_t lora;
 
 bool radio_setup_init(void (*interrupt_callback)(void)) {
     // Power on the radio module
-    gpio_init(EN_PIN);
-    gpio_set_dir(EN_PIN, GPIO_OUT);
-    gpio_put(EN_PIN, 1);
+    gpio_init(PIN_EN);
+    gpio_set_dir(PIN_EN, GPIO_OUT);
+    gpio_put(PIN_EN, 1);
     sleep_ms(100);
 
     // Initialize hardware abstraction
-    hal = RadioLib_Pico_Create(spi0, SPI_SCK, SPI_MOSI, SPI_MISO, 8000000);
+    hal = RadioLib_Pico_Create(spi0, PIN_SPI_SCK, PIN_SPI_MOSI, PIN_SPI_MISO, 8000000);
     memset(&radioModule, 0, sizeof(RadioLibModule_t)); 
-    RadioLib_Module_Create(&radioModule, hal, CS_PIN, IRQ_PIN, RST_PIN, RADIOLIB_NC);
-    radioModule.enPin = EN_PIN;
+    RadioLib_Module_Create(&radioModule, hal, PIN_CS, PIN_IRQ, PIN_RST, RADIOLIB_NC);
+    radioModule.enPin = PIN_EN;
 
     uint32_t gPins[] = {RADIOLIB_NC, 29, 6, 7, 10, 11};
     for (int i = 0; i < 6; i++) {
