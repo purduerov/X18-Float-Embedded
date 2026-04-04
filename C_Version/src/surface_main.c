@@ -9,6 +9,7 @@
 #include "surface_link.h"
 #include "data_logger.h"
 #include "surface_fsm.h"
+#include "reflash_host.h"
 
 // --- Global State ---
 static surface_fsm_t global_fsm;
@@ -72,6 +73,7 @@ static const surface_command_t cmd_table[] = {
 
 int main() {
   stdio_init_all();
+  stdio_set_translate_crlf(&stdio_usb, false); // Binary safe
   data_logger_init();
   surface_fsm_init(&global_fsm);
 
@@ -111,6 +113,12 @@ int main() {
     }
 
     // 2. Process Serial Interface (Commands from Dashboard)
+    int c = getchar_timeout_us(0);
+    if (c == 'S') {
+        reflash_host_stream_from_serial(radio_get_instance());
+    } else if (c != PICO_ERROR_TIMEOUT) {
+        ungetc(c, stdin); // Put it back for surface_link_update to read
+    }
     surface_link_update();
 
     // 3. Process Radio Interface (Packets and IRQs)

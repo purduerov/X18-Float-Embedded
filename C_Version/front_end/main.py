@@ -216,6 +216,7 @@ st.set_page_config(page_title="Mission Control", layout="wide", page_icon="🌊"
 
 # --- SIDEBAR (CONNECTION & SETTINGS) ---
 with st.sidebar:
+    st.title("🌊 MATE Floats")
     st.header("🔌 Connection")
     available_ports = hw.get_available_ports()
     

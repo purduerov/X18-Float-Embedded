@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 // --- Custom Library Includes ---
 #include "actuator.h"
 #include "depth_pid.h"
@@ -12,7 +11,7 @@
 #include "packets.h"
 #include "radio_setup.h"
 #include "storage.h"
-
+#include "reflash_target.h"
 
 // --- I2C / Sensor Setup ---
 #define I2C_PORT i2c1
@@ -109,13 +108,25 @@ int main() {
         actuator_set_move_pins(&act, 0);
       }
 
-      // printf("[PID] Depth: %.2f m | Target Pos: %d | Current Pos: %d\n",
-      //        current_depth, target_pos, current_pos);
-
       last_pid_time = now;
     }
 
     float_fsm_update(&global_fsm);
+
+    // OTA Reflash Check - use StartReceive/ReadData to avoid blocking the USB stack
+    // We check the IRQ pin (GPIO 9) directly. 
+    if (gpio_get(9)) {
+        uint8_t rx_buffer[256];
+        int16_t state = RadioLib_SX127x_ReadData(radio_get_instance(), rx_buffer, sizeof(rx_buffer));
+        if (state > 0) {
+            if (reflash_target_process_packet(radio_get_instance(), rx_buffer, (size_t)state)) {
+                // Packet consumed by reflasher
+            }
+        }
+        // Always return to listening mode after processing a packet or noise
+        RadioLib_SX127x_StartReceive(radio_get_instance());
+    }
+
     sleep_ms(1);
   }
 

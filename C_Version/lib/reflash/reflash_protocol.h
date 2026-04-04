@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define REFLASH_CHUNK_SIZE 256
+#define REFLASH_CHUNK_SIZE 220
 #define SLOT_0_OFFSET 0x00000000
 #define SLOT_1_OFFSET 0x00100000 // 1MB Offset
 #define SLOT_SIZE     0x00100000 // 1MB

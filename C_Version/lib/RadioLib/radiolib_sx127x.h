@@ -34,7 +34,7 @@
 #define RADIOLIB_SX127X_RXCONTINUOUS 0x05
 
 // State Structure
-typedef struct
+typedef struct RadioLibSX127x
 {
     RadioLibModule_t *mod;
     float frequency;

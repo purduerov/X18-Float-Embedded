@@ -31,8 +31,8 @@ Autonomous underwater float project designed for oceanographic research and envi
 
 ### Embedded Firmware
 1. Install [PlatformIO](https://platformio.org/).
-2. Build: `pio run`
-3. Flash: `pio run --target upload`
+2. **User Handled:** Build (`pio run`) and Flash (`pio run --target upload`). 
+   - *Note: The AI agent is forbidden from running these commands.*
 
 ### Mission Control Dashboard
 1. Install Python 3.8+.
