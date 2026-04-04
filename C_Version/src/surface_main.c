@@ -136,7 +136,6 @@ int main() {
         }
         c = getchar_timeout_us(0);
     }
-    surface_link_update();
 
     // 3. Process Radio Interface (Packets and IRQs)
     if (operationDoneFlag) {

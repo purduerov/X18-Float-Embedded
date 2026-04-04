@@ -32,12 +32,12 @@ typedef struct __attribute__((packed))
     uint8_t command;
     uint16_t seq_num;
     union {
-        struct {
+        struct __attribute__((packed)) {
             uint16_t company_number;
             uint32_t time_ms;
             float depth_m;
         } telemetry;         
-        struct {
+        struct __attribute__((packed)) {
             float kp;
             float ki;
             float kd;

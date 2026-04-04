@@ -59,7 +59,7 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
   // 100ms (10Hz) update rate
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, 0, 4095);
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, settings.act_min, settings.act_max);
   depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
 
   // --- Initialize Radio ---
@@ -92,8 +92,8 @@ int main() {
       dpid.pid.kd = settings.kd;
       dpid.pos_min = settings.act_min;
       dpid.pos_max = settings.act_max;
-      dpid.pid.out_min = (double)settings.act_min;
-      dpid.pid.out_max = (double)settings.act_max;
+      dpid.pid.output_min = (double)settings.act_min;
+      dpid.pid.output_max = (double)settings.act_max;
 
       // 3. Calculate target actuator position
       int target_pos = 0;
@@ -102,6 +102,10 @@ int main() {
       } else {
           target_pos = global_fsm.actuator_target;
       }
+
+      // Safety Clamp: Ensure target is within configured bounds
+      if (target_pos < settings.act_min) target_pos = settings.act_min;
+      if (target_pos > settings.act_max) target_pos = settings.act_max;
 
       // 4. Command Actuator & Update monitoring (stop if reached)
       int current_pos = actuator_get_position(&act);

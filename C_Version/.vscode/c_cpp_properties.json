@@ -9,10 +9,7 @@
             "name": "PlatformIO",
             "includePath": [
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/src",
-                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/storage",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/comms",
-                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
-                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/actuator",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/MS5837",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/BN085",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/fsm",
@@ -124,17 +121,17 @@
                 "C:/pio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                 "C:/pio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                 "C:/pio/packages/framework-picosdk/lib/tinyusb/src",
+                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/actuator",
+                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
                 "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/scheduler",
+                "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/storage",
                 ""
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/src",
-                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/storage",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/comms",
-                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
-                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/actuator",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/MS5837",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/BN085",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/fsm",
@@ -246,7 +243,10 @@
                     "C:/pio/packages/framework-picosdk/src/rp2_common/pico_stdlib/include",
                     "C:/pio/packages/framework-picosdk/src/rp2040/boot_stage2/asminclude",
                     "C:/pio/packages/framework-picosdk/lib/tinyusb/src",
+                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/actuator",
+                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/pid",
                     "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/scheduler",
+                    "C:/Users/aman/Documents/Programming/X18-Float-Embedded/C_Version/lib/storage",
                     ""
                 ]
             },
