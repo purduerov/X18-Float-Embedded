@@ -112,29 +112,32 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
 
 void ms5837_read(MS5837_t *sensor)
 {
+    if (!sensor->i2c_inst) return;
+
     uint8_t cmd;
     uint8_t buffer[3];
+    const uint32_t timeout = 50000; // 50ms timeout
 
     // Request D1 (Pressure) conversion
     cmd = 0x4A; // MS5837_CONVERT_D1_8192
-    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
     sleep_ms(20);
 
     // Read D1 ADC
     cmd = 0x00; // MS5837_ADC_READ
-    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
-    i2c_read_blocking(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false);
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
+    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return;
     sensor->D1 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
     // Request D2 (Temperature) conversion
     cmd = 0x5A; // MS5837_CONVERT_D2_8192
-    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
     sleep_ms(20);
 
     // Read D2 ADC
     cmd = 0x00;
-    i2c_write_blocking(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false);
-    i2c_read_blocking(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false);
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
+    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return;
     sensor->D2 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
     ms5837_calculate(sensor);
