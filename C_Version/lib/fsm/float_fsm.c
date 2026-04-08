@@ -155,8 +155,7 @@ void float_fsm_update(float_fsm_t *fsm) {
 
     // Debug Printing
     if (now - fsm->last_debug_print >= 2000) {
-        printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u\n",
-               FloatStateNames[fsm->state], fsm->currently_transmitting, fsm->current_actuator_pos);
+        printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u\n", FloatStateNames[fsm->state], fsm->currently_transmitting, fsm->current_actuator_pos);
         fsm->last_debug_print = now;
     }
 

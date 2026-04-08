@@ -24,10 +24,10 @@ int main() {
   stdio_init_all();
 
   uint32_t waitTime = 0;
-  // while (!stdio_usb_connected() && waitTime < 5000) {
-  //   sleep_ms(100);
-  //   waitTime += 100;
-  // }
+  while (!stdio_usb_connected() && waitTime < 5000) {
+    sleep_ms(100);
+    // waitTime += 100; // spin forever until usb is connected, no timeout
+  }
 
   printf("\n\n=== MATE Float Station Booting (PID Enabled) ===\n");
 
@@ -58,33 +58,32 @@ int main() {
   DepthPID dpid;
   float_settings_t settings;
   storage_get_settings(&settings);
-  // 100ms (10Hz) update rate
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1,
-                 settings.act_min, settings.act_max);
+
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, settings.act_min, settings.act_max); // 100ms (10Hz) update rate
   depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
 
   // --- Initialize Radio ---
   if (!radio_setup_init(onInterrupt)) {
-    printf("Radio init failed! Halting.\n");
+    printf("CRITICAL ERROR: RADIO FAILED to initialize\n");
     while (true)
       sleep_ms(1000);
   }
 
   // --- Initialize State Machine ---
   float_fsm_init(&global_fsm, &depth_sensor);
-
   printf("Float System Ready. Target Depth: %.2f m\n", dpid.target_depth);
 
   uint32_t last_pid_time = to_ms_since_boot(get_absolute_time());
-
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
 
     // Run PID loop at 10Hz
     if (now - last_pid_time >= 100) {
       // 1. Refresh depth sensor
-      ms5837_read(&depth_sensor);
-      double current_depth = ms5837_get_depth(&depth_sensor);
+      double current_depth = 0.0f;
+      if (ms5837_read(&depth_sensor)) {
+        current_depth = ms5837_get_depth(&depth_sensor);
+      }
 
       // 2. Refresh PID constants (in case they were updated via radio)
       storage_get_settings(&settings);

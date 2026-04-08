@@ -1,6 +1,7 @@
 #include "actuator.h"
 #include "hardware/adc.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->pos_pin = pos_pin;
@@ -52,6 +53,10 @@ void actuator_move_to(Actuator *act, int new_position) {
     act->move_target = new_position;
     int current_pos = actuator_get_position(act);
     int direction = (new_position > current_pos) ? 1 : -1;
+
+    if (abs(new_position - current_pos) <= 30) {
+        direction = 0; // Within tolerance, stop
+    }
     actuator_set_move_pins(act, direction);
 }
 

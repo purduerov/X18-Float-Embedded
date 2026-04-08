@@ -76,11 +76,18 @@ void ms5837_init_struct(MS5837_t *sensor)
 
 bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
 {
+    printf("Initializing MS5837 Sensor...\n");
     sensor->i2c_inst = i2c_inst;
 
     // Reset the sensor
     uint8_t reset_cmd = MS5837_RESET_CMD;
-    i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &reset_cmd, 1, false, 100000);
+    int result = i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &reset_cmd, 1, false, 1000 * 50 /* 50 ms */);
+    if (result == PICO_ERROR_GENERIC || result == PICO_ERROR_TIMEOUT) {
+        printf("ERROR: Failed to send reset command to MS5837 (code %d)\n", result);
+        sensor->i2c_inst = NULL; // Mark as unusable
+        return false;
+    }
+
     sleep_ms(100);
 
     // Read PROM coefficients
@@ -110,9 +117,9 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
     return true;
 }
 
-void ms5837_read(MS5837_t *sensor)
+bool ms5837_read(MS5837_t *sensor)
 {
-    if (!sensor->i2c_inst) return;
+    if (!sensor->i2c_inst) return false;
 
     uint8_t cmd;
     uint8_t buffer[3];
@@ -120,27 +127,28 @@ void ms5837_read(MS5837_t *sensor)
 
     // Request D1 (Pressure) conversion
     cmd = 0x4A; // MS5837_CONVERT_D1_8192
-    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return false;
     sleep_ms(20);
 
     // Read D1 ADC
     cmd = 0x00; // MS5837_ADC_READ
-    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
-    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return;
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return false;
+    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return false;
     sensor->D1 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
     // Request D2 (Temperature) conversion
     cmd = 0x5A; // MS5837_CONVERT_D2_8192
-    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return false;
     sleep_ms(20);
 
     // Read D2 ADC
     cmd = 0x00;
-    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return;
-    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return;
+    if (i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &cmd, 1, false, timeout) < 0) return false;
+    if (i2c_read_timeout_us(sensor->i2c_inst, MS5837_ADDR, buffer, 3, false, timeout) < 0) return false;
     sensor->D2 = ((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | buffer[2];
 
     ms5837_calculate(sensor);
+    return true;
 }
 
 void ms5837_calculate(MS5837_t *sensor)
@@ -243,18 +251,24 @@ float ms5837_get_pressure(MS5837_t *sensor, float conversion)
 
 float ms5837_get_temperature(MS5837_t *sensor)
 {
+    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 temperature
+    
     // TEMP is calculated in centidegrees (100 * deg C)
     return (float)sensor->TEMP / 100.0f;
 }
 
 float ms5837_get_depth(MS5837_t *sensor)
 {
+    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 depth
+
     // Uses the standard atmospheric pressure of 101300 Pa as a baseline
     return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
 }
 
 float ms5837_get_altitude(MS5837_t *sensor)
 {
+    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 altitude
+    
     // Standard altitude formula using 1013.25 mbar as sea level pressure
     return (1.0f - powf((ms5837_get_pressure(sensor, 1.0f) / 1013.25f), 0.190284f)) * 145366.45f * 0.3048f;
 }
