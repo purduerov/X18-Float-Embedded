@@ -10,22 +10,22 @@ The main loop in `src/surface_main.c` manages communications between the radio a
 
 ```mermaid
 flowchart TD
-    Start([Start]) --> Init[Initialize Hardware & Data Logger]
+    Start([Start]) --> Init[Initialize Hardware &<br/>Data Logger]
     Init --> Loop[Main Loop]
     
     subgraph LoopSection [Main Execution Loop]
-        Loop --> DebugTimer{Debug Timer: 2s?}
-        DebugTimer -- Yes --> PrintDebug[Print Status to Console]
+        Loop --> DebugTimer{Debug Timer:<br/>2s?}
+        DebugTimer -- Yes --> PrintDebug[Print Status to<br/>Console]
         PrintDebug --> SerialIn{Serial Input?}
         
         DebugTimer -- No --> SerialIn
         
-        SerialIn -- Yes --> HandleCmd[Parse Command from Dashboard]
-        HandleCmd --> RadioIRQ{Radio Interrupt?}
+        SerialIn -- Yes --> HandleCmd[Parse Command from<br/>Dashboard]
+        HandleCmd --> RadioIRQ{Radio<br/>Interrupt?}
         
         SerialIn -- No --> RadioIRQ
         
-        RadioIRQ -- Yes --> ProcessRadio[Process Incoming Packet / ACK]
+        RadioIRQ -- Yes --> ProcessRadio[Process Incoming<br/>Packet / ACK]
         ProcessRadio --> Sleep[Sleep 1ms]
         
         RadioIRQ -- No --> Sleep
@@ -43,17 +43,17 @@ The Surface Station FSM coordinates the mission stages and handles data logging 
 stateDiagram-v2
     [*] --> SURFACE_IDLE
     
-    SURFACE_IDLE --> SURFACE_WAITING_PROFILE : Dashboard: Begin Profile\n(Sends CMD_BEGIN_PROFILE)
+    SURFACE_IDLE --> SURFACE_WAITING_PROFILE : Dashboard: Begin\nProfile\n(Sends CMD_BEGIN_PROFILE)
     
-    SURFACE_WAITING_PROFILE --> SURFACE_DOWNLOADING : Received CMD_DONE_PROFILE\n(Sends CMD_SEND_DATA)
-    SURFACE_WAITING_PROFILE --> SURFACE_WAITING_PROFILE : Logging Pre-dive Telemetry
+    SURFACE_WAITING_PROFILE --> SURFACE_DOWNLOADING : Received\nCMD_DONE_PROFILE\n(Sends CMD_SEND_DATA)
+    SURFACE_WAITING_PROFILE --> SURFACE_WAITING_PROFILE : Logging Pre-dive\nTelemetry
     
     state SURFACE_DOWNLOADING {
         [*] --> ReceivingData
-        ReceivingData --> ReceivingData : Store Packet & Send ACK
+        ReceivingData --> ReceivingData : Store Packet &\nSend ACK
     }
     
-    SURFACE_DOWNLOADING --> SURFACE_IDLE : Received CMD_DATA_DONE\n(Dumps CSV)
+    SURFACE_DOWNLOADING --> SURFACE_IDLE : Received\nCMD_DATA_DONE\n(Dumps CSV)
     
     %% Global Reset
     SURFACE_WAITING_PROFILE --> SURFACE_IDLE : Dashboard: Reset\n(Sends CMD_RESET_FSM)

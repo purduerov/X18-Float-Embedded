@@ -10,22 +10,22 @@ The main loop in `src/float_main.c` executes periodic tasks like PID control and
 
 ```mermaid
 flowchart TD
-    Start([Start]) --> Init[Initialize Hardware & Flash Storage]
-    Init --> ReadSettings[Read PID & Mission Settings from Flash]
+    Start([Start]) --> Init[Initialize Hardware &<br/>Flash Storage]
+    Init --> ReadSettings[Read PID & Mission<br/>Settings from Flash]
     ReadSettings --> Loop[Main Loop]
     
     subgraph LoopSection [Main Execution Loop]
-        Loop --> TimerPID{PID Timer: 100ms?}
+        Loop --> TimerPID{PID Timer:<br/>100ms?}
         TimerPID -- Yes --> ReadSensor[Read Depth Sensor]
-        ReadSensor --> CalcPID[Calculate Target Actuator Position]
-        CalcPID --> MoveAct[Command Actuator Movement]
-        MoveAct --> SafetyCheck[Safety: Stall & Timeout Detection]
-        SafetyCheck --> FSMUpdate[Update FSM & Log Data]
+        ReadSensor --> CalcPID[Calculate Target<br/>Actuator Position]
+        CalcPID --> MoveAct[Command Actuator<br/>Movement]
+        MoveAct --> SafetyCheck[Safety: Stall &<br/>Timeout Detection]
+        SafetyCheck --> FSMUpdate[Update FSM &<br/>Log Data]
         
         TimerPID -- No --> FSMUpdate
         
-        FSMUpdate --> RadioIRQ{Radio Interrupt?}
-        RadioIRQ -- Yes --> ProcessPacket[Process Packet / Event]
+        FSMUpdate --> RadioIRQ{Radio<br/>Interrupt?}
+        RadioIRQ -- Yes --> ProcessPacket[Process Packet /<br/>Event]
         ProcessPacket --> Sleep[Sleep 1ms]
         RadioIRQ -- No --> Sleep
         Sleep --> Loop
@@ -42,10 +42,10 @@ The Float FSM manages the mission lifecycle, from waiting for surface commands t
 stateDiagram-v2
     [*] --> FLOAT_IDLE
     
-    FLOAT_IDLE --> FLOAT_PRE_DIVE : Received CMD_BEGIN_PROFILE
-    FLOAT_IDLE --> FLOAT_TEST_CALIBRATE : Received CMD_ENTER_TEST
+    FLOAT_IDLE --> FLOAT_PRE_DIVE : Received\nCMD_BEGIN_PROFILE
+    FLOAT_IDLE --> FLOAT_TEST_CALIBRATE : Received\nCMD_ENTER_TEST
     
-    FLOAT_PRE_DIVE --> FLOAT_PROFILING : Pre-dive TX Finished
+    FLOAT_PRE_DIVE --> FLOAT_PROFILING : Pre-dive TX\nFinished
     
     state FLOAT_PROFILING {
         [*] --> Sampling
@@ -54,20 +54,20 @@ stateDiagram-v2
     
     FLOAT_PROFILING --> FLOAT_PROFILE_DONE : Duration Reached
     
-    FLOAT_PROFILE_DONE --> FLOAT_DUMPING_DATA : Received CMD_SEND_DATA
-    FLOAT_PROFILE_DONE --> FLOAT_PROFILE_DONE : Broadcast DONE_PROFILE (3s)
+    FLOAT_PROFILE_DONE --> FLOAT_DUMPING_DATA : Received\nCMD_SEND_DATA
+    FLOAT_PROFILE_DONE --> FLOAT_PROFILE_DONE : Broadcast\nDONE_PROFILE (3s)
     
-    FLOAT_DUMPING_DATA --> FLOAT_IDLE : All Data Sent (CMD_DATA_DONE)
-    FLOAT_DUMPING_DATA --> FLOAT_DUMPING_DATA : Wait for ACKs / Retransmit
+    FLOAT_DUMPING_DATA --> FLOAT_IDLE : All Data Sent\n(CMD_DATA_DONE)
+    FLOAT_DUMPING_DATA --> FLOAT_DUMPING_DATA : Wait for ACKs /\nRetransmit
     
-    FLOAT_TEST_CALIBRATE --> FLOAT_TEST_CALIBRATE : Broadcast Live Telemetry (1s)
+    FLOAT_TEST_CALIBRATE --> FLOAT_TEST_CALIBRATE : Broadcast Live\nTelemetry (1s)
     
     %% Global Reset
-    FLOAT_PRE_DIVE --> FLOAT_IDLE : Received CMD_RESET_FSM
-    FLOAT_PROFILING --> FLOAT_IDLE : Received CMD_RESET_FSM
-    FLOAT_PROFILE_DONE --> FLOAT_IDLE : Received CMD_RESET_FSM
-    FLOAT_DUMPING_DATA --> FLOAT_IDLE : Received CMD_RESET_FSM
-    FLOAT_TEST_CALIBRATE --> FLOAT_IDLE : Received CMD_RESET_FSM
+    FLOAT_PRE_DIVE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
+    FLOAT_PROFILING --> FLOAT_IDLE : Received\nCMD_RESET_FSM
+    FLOAT_PROFILE_DONE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
+    FLOAT_DUMPING_DATA --> FLOAT_IDLE : Received\nCMD_RESET_FSM
+    FLOAT_TEST_CALIBRATE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
 ```
 
 ---
