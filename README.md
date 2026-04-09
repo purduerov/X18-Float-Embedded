@@ -7,7 +7,6 @@ Autonomous underwater float project designed for oceanographic research and envi
 - **`src/`**: Main firmware entry points (C/C++).
 - **`lib/`**: Embedded drivers and modular libraries.
 - **`front_end/`**: Mission Control Dashboard (Python/Streamlit).
-- **`conductor/`**: Project documentation, tech stack, and workflow guides.
 - **`.gemini/`**: Gemini CLI configuration and hardware maps.
 
 ## 🏗️ Software Architecture
