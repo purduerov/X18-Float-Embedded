@@ -18,7 +18,7 @@ bool radio_setup_init(void (*interrupt_callback)(void)) {
     sleep_ms(100);
 
     // Initialize hardware abstraction
-    hal = RadioLib_Pico_Create(spi0, PIN_SPI_SCK, PIN_SPI_MOSI, PIN_SPI_MISO, 8000000);
+    hal = RadioLib_Pico_Create(spi0, PIN_SPI_SCK, PIN_SPI_MOSI, PIN_SPI_MISO, SPI_BAUDRATE);
     memset(&radioModule, 0, sizeof(RadioLibModule_t)); 
     RadioLib_Module_Create(&radioModule, hal, PIN_CS, PIN_IRQ, PIN_RST, RADIOLIB_NC);
     radioModule.enPin = PIN_EN;

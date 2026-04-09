@@ -11,6 +11,7 @@
 #define I2C_PORT i2c1
 #define PIN_SDA 2
 #define PIN_SCL 3
+#define I2C_BAUDRATE (10 * 1000) //  10 kHz for better noise immunity
 
 // --- Actuator Pins ---
 #define PIN_POT 26
@@ -38,6 +39,7 @@
 #define RADIO_POWER 17       // dBm
 #define RADIO_CR 5           // Coding Rate (4/5)
 #define RADIO_SYNC_WORD 0x12 // LoRa Sync Word
+#define SPI_BAUDRATE 8000000 // 8 MHz
 
 // --- Actuator Parameters ---
 #define DEFAULT_ACTUATOR_POS 4095 // Default to fully extended

@@ -3,6 +3,7 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "bno08x_driver.h" // Assuming files are in lib/bno085/
+#include "hw_config.h"
 
 // Hardware configuration
 #define I2C_INST i2c1
@@ -93,7 +94,7 @@ int imu_main()
 {
     stdio_init_all();
 
-    i2c_init(I2C_INST, 400 * 1000);
+    i2c_init(I2C_INST, I2C_BAUDRATE);
     gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
     gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(PIN_SDA);

@@ -10,6 +10,7 @@
 #include "depth_pid.h"
 #include "float_fsm.h"
 #include "hw_config.h"
+#include "hw_init.h"
 #include "packets.h"
 #include "radio_setup.h"
 #include "reflash_target.h"
@@ -34,16 +35,11 @@ int main() {
   // --- Initialize Persistent Storage ---
   storage_init();
 
-  // --- Initialize I2C and MS5837 ---
-  i2c_init(I2C_PORT, 10 * 1000);
-  gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
-  gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
-  gpio_pull_up(PIN_SDA);
-  gpio_pull_up(PIN_SCL);
+  // --- Initialize Hardware (I2C & Sensors) ---
+  hw_init_i2c();
 
   MS5837_t depth_sensor;
-  ms5837_init_struct(&depth_sensor);
-  if (!ms5837_begin(&depth_sensor, I2C_PORT, MS5837_02BA)) {
+  if (!hw_init_depth_sensor(&depth_sensor)) {
     printf("CRITICAL ERROR: MS5837 FAILED to initialize\n");
   }
 

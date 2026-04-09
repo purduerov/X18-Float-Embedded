@@ -13,17 +13,8 @@
 #include "storage.h"
 #include "actuator.h"
 #include "pid.h"
-
-// --- I2C / Sensor Setup ---
-#define I2C_PORT i2c1
-#define PIN_SDA 2
-#define PIN_SCL 3
-
-// --- Actuator Hardware Setup ---
-#define PIN_POT 26
-#define PIN_EXT 12
-#define PIN_RET 13
-#define PIN_VREF 27
+#include "hw_config.h"
+#include "hw_init.h"
 
 // --- Actuator PID Tuning ---
 #define ACT_KP 0.8
@@ -92,16 +83,11 @@ int main() {
   // --- Initialize Persistent Storage ---
   storage_init();
 
-  // --- Initialize I2C and MS5837 ---
-  i2c_init(I2C_PORT, 100 * 1000);
-  gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
-  gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
-  gpio_pull_up(PIN_SDA);
-  gpio_pull_up(PIN_SCL);
+  // --- Initialize Hardware (I2C & Sensors) ---
+  hw_init_i2c();
 
   MS5837_t depth_sensor;
-  ms5837_init_struct(&depth_sensor);
-  if (!ms5837_begin(&depth_sensor, I2C_PORT, MS5837_02BA)) {
+  if (!hw_init_depth_sensor(&depth_sensor)) {
     printf("CRITICAL ERROR: MS5837 FAILED to initialize\n");
   }
 

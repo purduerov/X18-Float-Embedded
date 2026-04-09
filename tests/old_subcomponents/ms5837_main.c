@@ -2,6 +2,7 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "ms5837.h"
+#include "hw_config.h"
 
 // I2C hardware configuration for Raspberry Pi Pico
 #define I2C_PORT i2c1
@@ -14,7 +15,7 @@ int ms5837_main()
     stdio_init_all();
 
     // Initialize I2C at 400kHz
-    i2c_init(I2C_PORT, 400 * 1000);
+    i2c_init(I2C_PORT, I2C_BAUDRATE);
     gpio_set_function(SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(SCL_PIN, GPIO_FUNC_I2C);
 

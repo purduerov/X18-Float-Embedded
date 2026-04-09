@@ -9,6 +9,7 @@
 #include "bno08x_driver.h"
 #include "radiolib_sx1276.h"
 #include "radiolib_hal_pico.h"
+#include "hw_config.h"
 
 // --- Hardware Configuration ---
 #define I2C_PORT i2c1
@@ -43,7 +44,7 @@ int tx_main() {
 
     // 2. I2C INITIALIZATION
     printf("Initializing I2C Bus...");
-    i2c_init(I2C_PORT, 400 * 1000);
+    i2c_init(I2C_PORT, I2C_BAUDRATE);
     gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
     gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(PIN_SDA);

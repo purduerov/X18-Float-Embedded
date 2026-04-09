@@ -1,4 +1,5 @@
 #include "float_fsm.h"
+#include "hw_config.h"
 #include "reflash_target.h"
 #include "pico/bootrom.h"
 #include <stdio.h>
@@ -19,7 +20,7 @@ void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor) {
     memset(fsm, 0, sizeof(float_fsm_t));
     fsm->state = FLOAT_IDLE;
     fsm->depth_sensor = sensor;
-    fsm->actuator_target = 2048;
+    fsm->actuator_target = DEFAULT_ACTUATOR_POS;
     fsm->last_debug_print = to_ms_since_boot(get_absolute_time());
     radio_start_receive();
 }
@@ -218,14 +219,6 @@ void float_fsm_update(float_fsm_t *fsm) {
             tx_pkt.payload.test_data.live_depth = live_depth;
             tx_pkt.payload.test_data.live_adc = fsm->current_actuator_pos;
             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
-            
-            fsm->currently_transmitting = true;
-            radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
-            fsm->last_tx_time = now;
-        }
-    }
-}
-        tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
             
             fsm->currently_transmitting = true;
             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));

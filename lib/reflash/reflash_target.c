@@ -22,6 +22,7 @@ static uint32_t current_flash_addr = SLOT_1_OFFSET;
 static void __no_inline_not_in_flash_func(critical_swap_routine)() {
     // 1. Disable all interrupts and watchdog
     uint32_t ints = save_and_disable_interrupts();
+    (void)ints; // Suppress unused warning, we are rebooting anyway
     
     // Disable watchdog so it doesn't reboot us during the long copy process
     hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);

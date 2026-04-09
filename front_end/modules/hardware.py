@@ -1,0 +1,175 @@
+import serial
+import serial.tools.list_ports
+import threading
+import time
+import re
+
+class HardwareManager:
+    """Manages the serial connection and state behind the scenes."""
+    def __init__(self):
+        self.ser = None
+        self.data_log = []
+        self.console_log = []
+        self.lock = threading.Lock()
+        self.mission_status = "IDLE"
+        self.first_timestamp = None
+        
+        self.float_settings = {
+            "P": "--", "I": "--", "D": "--", 
+            "Co#": "--", "Time": "--", "ADC": "--",
+            "ActMin": "--", "ActMax": "--",
+            "LiveDepth": "--"
+        }
+        
+        # Countdown Timer variables
+        self.profile_start_time = None
+        self.active_duration = 0
+        
+        self.running = True
+        self.thread = threading.Thread(target=self.serial_listener, daemon=True)
+        self.thread.start()
+
+    def get_available_ports(self):
+        ports = serial.tools.list_ports.comports()
+        return [port.device for port in ports]
+
+    def connect(self, port, baud=115200):
+        with self.lock:
+            if self.ser and self.ser.is_open:
+                try:
+                    self.ser.close()
+                except:
+                    pass
+            try:
+                # Use shorter timeout for better responsiveness
+                self.ser = serial.Serial(port, baud, timeout=0.05, write_timeout=0.5)
+                # Force DTR/RTS to reset Pico serial if needed
+                self.ser.dtr = False
+                self.ser.rts = False
+                time.sleep(0.1)
+                self.ser.dtr = True
+                self.ser.rts = True
+                
+                self.console_log.append(f"🟢 Connected to {port} at {baud} baud.")
+                self.mission_status = "IDLE"
+            except Exception as e:
+                self.ser = None
+                self.console_log.append(f"🔴 ERROR: Could not connect to {port}. {e}")
+
+    def disconnect(self):
+        with self.lock:
+            if self.ser:
+                try:
+                    self.ser.close()
+                except:
+                    pass
+                self.ser = None
+                self.console_log.append("⚪ Disconnected.")
+                self.mission_status = "DISCONNECTED"
+
+    def send_command(self, cmd):
+        with self.lock:
+            if self.ser and self.ser.is_open:
+                try:
+                    self.ser.write(f"{cmd}\n".encode('utf-8'))
+                    self.console_log.append(f"🔵 > Sent: {cmd}")
+                except (serial.SerialException, OSError) as e:
+                    self.console_log.append(f"🔴 Connection Lost: {e}")
+                    self.ser = None
+                    self.mission_status = "DISCONNECTED"
+            else:
+                self.console_log.append("🔴 Cannot send command: Not connected.")
+
+    def update_team_id(self, val):
+        self.send_command(f"c {val}")
+        self.float_settings["Co#"] = str(val)
+        
+    def update_duration(self, val):
+        self.send_command(f"t {val}")
+        self.float_settings["Time"] = str(val)
+        
+    def update_pid(self, p, i, d):
+        self.send_command(f"s {p} {i} {d}")
+        self.float_settings["P"] = str(p)
+        self.float_settings["I"] = str(i)
+        self.float_settings["D"] = str(d)
+
+    def update_bounds(self, min_val, max_val):
+        self.send_command(f"b {min_val} {max_val}")
+        self.float_settings["ActMin"] = str(min_val)
+        self.float_settings["ActMax"] = str(max_val)
+
+    def zero_depth(self):
+        self.send_command("z")
+
+    def reset_fsm(self):
+        self.send_command("r")
+        self.mission_status = "IDLE"
+        self.console_log.append("⚠️ > Sent: r (Forced FSM Reset)")
+
+    def move_actuator(self, val):
+        self.send_command(f"a {val}")
+
+    def test_mode(self):
+        self.send_command("k")
+
+    def start_profile(self):
+        """Triggers the start command and starts the timer ONLY."""
+        self.send_command('p') 
+        try:
+            self.active_duration = int(self.float_settings.get("Time", 40))
+        except ValueError:
+            self.active_duration = 40
+        self.profile_start_time = time.time()
+
+    def serial_listener(self):
+        while self.running:
+            if self.ser and self.ser.is_open:
+                try:
+                    if self.ser.in_waiting > 0:
+                        line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        if line:
+                            self.console_log.append(line)
+                            if len(self.console_log) > 100: 
+                                self.console_log.pop(0)
+                            
+                            if "PREDIVE_READY" in line: 
+                                self.mission_status = "PRE-DIVE READY"
+                            elif "START DATA DUMP" in line:
+                                self.mission_status = "DOWNLOADING DATA"
+                                self.data_log.clear() 
+                                self.first_timestamp = None 
+                            elif "DATA_DONE" in line: 
+                                self.mission_status = "MISSION COMPLETE"
+                            elif "[SYNC]" in line:
+                                matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
+                                if matches:
+                                    for key, value in matches:
+                                        if key in self.float_settings:
+                                            self.float_settings[key] = value
+                                    self.console_log.append(f"✅ UI Synced Successfully.")
+                                    
+                            parts = line.split(',')
+                            if len(parts) == 3 and parts[0].isdigit():
+                                try:
+                                    abs_time_ms = int(parts[1])
+                                    depth_m = float(parts[2])
+                                    if self.first_timestamp is None:
+                                        self.first_timestamp = abs_time_ms
+                                    rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
+                                    self.data_log.append({
+                                        "Time (s)": rel_time_s,
+                                        "Depth (m)": depth_m
+                                    })
+                                except ValueError:
+                                    pass
+                except (serial.SerialException, OSError, Exception) as e:
+                    with self.lock:
+                        if self.ser:
+                            try: self.ser.close()
+                            except: pass
+                            self.ser = None
+                            self.mission_status = "DISCONNECTED"
+                            self.console_log.append(f"🔴 Serial error: {e}")
+            else:
+                time.sleep(0.01)
