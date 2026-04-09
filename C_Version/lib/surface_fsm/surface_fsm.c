@@ -117,6 +117,14 @@ void surface_fsm_cmd_reset(surface_fsm_t *fsm) {
     // radio_start_receive() will be called when transmission finishes in process_event
 }
 
+void surface_fsm_cmd_test_mode(surface_fsm_t *fsm) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending ENTER_TEST command via radio...\n");
+        packet_t tx_pkt = {.command = CMD_ENTER_TEST, .seq_num = 0};
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
 // --- Radio Event Processor ---
 
 void surface_fsm_process_event(surface_fsm_t *fsm) {
@@ -141,16 +149,19 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
                     printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u, ADC=%u, ActMin=%u, ActMax=%u\n",
-                        rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
-                        rx_pkt.payload.settings.kd,
-                        rx_pkt.payload.settings.company_number,
-                        rx_pkt.payload.settings.profile_duration_s,
-                        rx_pkt.payload.settings.current_actuator_pos,
-                        rx_pkt.payload.settings.act_min,
-                        rx_pkt.payload.settings.act_max);
+                    rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
+                    rx_pkt.payload.settings.kd,
+                    rx_pkt.payload.settings.company_number,
+                    rx_pkt.payload.settings.profile_duration_s,
+                    rx_pkt.payload.settings.current_actuator_pos,
+                    rx_pkt.payload.settings.act_min,
+                    rx_pkt.payload.settings.act_max);
+                } else if (rx_pkt.command == CMD_REP_TEST_DATA) {
+                    printf("\n[SYNC] LiveDepth=%.3f ADC=%u\n",
+                           rx_pkt.payload.test_data.live_depth,
+                           rx_pkt.payload.test_data.live_adc);
                 }
-            } else if (fsm->state == SURFACE_WAITING_PROFILE) {
-                if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
+            } else if (fsm->state == SURFACE_WAITING_PROFILE) {                if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
                     printf(">> PRE-DIVE Packet Logged: Co# %u | Time %lu ms | Depth %.2f m\n",
                            rx_pkt.payload.telemetry.company_number,
                            rx_pkt.payload.telemetry.time_ms,

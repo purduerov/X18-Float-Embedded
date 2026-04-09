@@ -24,10 +24,10 @@ int main() {
   stdio_init_all();
 
   uint32_t waitTime = 0;
-  while (!stdio_usb_connected() && waitTime < 5000) {
-    sleep_ms(100);
-    // waitTime += 100; // spin forever until usb is connected, no timeout
-  }
+  // while (!stdio_usb_connected() && waitTime < 5000) {
+  //   sleep_ms(100);
+  //   waitTime += 100; // spin forever until usb is connected, no timeout
+  // }
 
   printf("\n\n=== MATE Float Station Booting (PID Enabled) ===\n");
 
@@ -35,7 +35,7 @@ int main() {
   storage_init();
 
   // --- Initialize I2C and MS5837 ---
-  i2c_init(I2C_PORT, 400 * 1000);
+  i2c_init(I2C_PORT, 10 * 1000);
   gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
   gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
   gpio_pull_up(PIN_SDA);
@@ -59,7 +59,9 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
 
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, settings.act_min, settings.act_max); // 100ms (10Hz) update rate
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1,
+                 settings.act_min,
+                 settings.act_max); // 100ms (10Hz) update rate
   depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
 
   // --- Initialize Radio ---
@@ -112,42 +114,53 @@ int main() {
       // 4. Command Actuator & Update monitoring (stop if reached)
       int current_pos = actuator_get_position(&act);
 
-      // If a manual move command is pending, enter the blocking loop once
-      if (global_fsm.state == FLOAT_IDLE && global_fsm.manual_move_pending) {
-        global_fsm.manual_move_pending =
-            false; // Reset immediately to prevent re-triggering
-        printf(">> Actuator Moving to %d...\n", target_pos);
+      // If a manual move command is pending, we just let the target_pos drive
+      // it
+      if ((global_fsm.state == FLOAT_IDLE ||
+           global_fsm.state == FLOAT_TEST_CALIBRATE) &&
+          global_fsm.manual_move_pending) {
+        if (abs(current_pos - target_pos) <= POS_TOL) {
+          printf(">> Actuator reached target %d.\n", target_pos);
+          global_fsm.manual_move_pending = false;
+          actuator_set_move_pins(&act, 0);
+        } else {
+          // Check for stall or timeout
+          static uint32_t move_start_time = 0;
+          static int last_p = 0;
+          static uint32_t last_p_time = 0;
 
-        uint32_t start_time = to_ms_since_boot(get_absolute_time());
-        uint32_t last_move_time = start_time;
-        int last_pos = current_pos;
-
-        while (abs(actuator_get_position(&act) - target_pos) > POS_TOL) {
-          actuator_move_to(&act, target_pos);
-          sleep_ms(20);
-
-          int p = actuator_get_position(&act);
           uint32_t t_now = to_ms_since_boot(get_absolute_time());
 
-          if (abs(p - last_pos) > 2) {
-            last_pos = p;
-            last_move_time = t_now;
+          // Initialization of move tracking
+          if (move_start_time == 0 || last_p_time == 0) {
+            move_start_time = t_now;
+            last_p = current_pos;
+            last_p_time = t_now;
+            printf(">> Starting non-blocking move to %d...\n", target_pos);
           }
 
-          if (t_now - last_move_time > 500) {
-            printf(">> Actuator Stalled! Stopping to prevent damage.\n");
-            break;
+          if (abs(current_pos - last_p) > 2) {
+            last_p = current_pos;
+            last_p_time = t_now;
           }
 
-          if (t_now - start_time > 5000) {
+          if (t_now - last_p_time > 1000) {
+            printf(">> Actuator Stalled! Stopping.\n");
+            global_fsm.manual_move_pending = false;
+            move_start_time = 0;
+            actuator_set_move_pins(&act, 0);
+          } else if (t_now - move_start_time > 8000) {
             printf(">> Actuator Timeout! Stopping.\n");
-            break;
+            global_fsm.manual_move_pending = false;
+            move_start_time = 0;
+            actuator_set_move_pins(&act, 0);
+          } else {
+            actuator_move_to(&act, target_pos);
           }
         }
-
-        actuator_set_move_pins(&act, 0);
-        printf(">> Actuator Stopped at %d.\n", actuator_get_position(&act));
       } else {
+        // Reset move start time when not in a manual move
+        // This is a bit of a hack using a static, but works for now
         // Normal non-blocking PID operation during profiling or idle
         // maintenance
         if (abs(current_pos - target_pos) <= POS_TOL) {

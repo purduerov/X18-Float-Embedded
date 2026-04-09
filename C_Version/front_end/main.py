@@ -27,7 +27,8 @@ class HardwareManager:
         self.float_settings = {
             "P": "--", "I": "--", "D": "--", 
             "Co#": "--", "Time": "--", "ADC": "--",
-            "ActMin": "--", "ActMax": "--"
+            "ActMin": "--", "ActMax": "--",
+            "LiveDepth": "--"
         }
         
         # Countdown Timer variables
@@ -120,6 +121,9 @@ class HardwareManager:
     def move_actuator(self, val):
         self.send_command(f"a {val}")
 
+    def test_mode(self):
+        self.send_command("k")
+
     def start_profile(self):
         """Triggers the start command and starts the timer ONLY."""
         self.send_command('p') 
@@ -149,7 +153,7 @@ class HardwareManager:
                             elif "DATA_DONE" in line: 
                                 self.mission_status = "MISSION COMPLETE"
                             elif "[SYNC]" in line:
-                                matches = re.findall(r'([A-Za-z0-9#]+)=([\d\.]+)', line)
+                                matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
                                 if matches:
                                     for key, value in matches:
                                         if key in self.float_settings:
@@ -216,6 +220,10 @@ with st.sidebar:
     if st.button("⚠️ RESET FSM", width="stretch", type="primary"):
         hw.reset_fsm()
     st.caption("Forces the Surface and Float back to IDLE.")
+
+    if st.button("🧪 TEST / CALIBRATE MODE", width="stretch", type="secondary"):
+        hw.test_mode()
+    st.caption("Continuously stream live depth and ADC.")
 
     with st.form("team_id_form"):
         new_id = st.number_input("Team ID", step=1, value=67)
@@ -302,6 +310,7 @@ def live_dashboard():
         st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
+        st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")
         st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
         if hw.data_log:

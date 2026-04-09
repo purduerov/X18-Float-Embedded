@@ -70,6 +70,10 @@ static void handle_reset(const char *params) {
     surface_fsm_cmd_reset(&global_fsm);
 }
 
+static void handle_test(const char *params) {
+    surface_fsm_cmd_test_mode(&global_fsm);
+}
+
 static const surface_command_t cmd_table[] = {
     {'p', handle_profile, "Begin Profile"},
     {'s', handle_pid, "Set PID (P I D)"},
@@ -79,7 +83,8 @@ static const surface_command_t cmd_table[] = {
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
     {'b', handle_bounds, "Set Actuator Bounds (Min Max)"},
     {'?', handle_sync, "Sync Settings"},
-    {'r', handle_reset, "Reset State Machine"}
+    {'r', handle_reset, "Reset State Machine"},
+    {'k', handle_test, "Enter Test Mode"}
 };
 
 // --- Main Application ---

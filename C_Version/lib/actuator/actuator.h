@@ -2,10 +2,11 @@
 #define ACTUATOR_H
 
 #include "pico/stdlib.h"
+#include "hw_config.h"
 
 // Constants using raw 12-bit ADC values (0-4095)
-#define POS_TOL 41         // ~1% of 4095
-#define ADC_MAX_VAL 4095   
+#define POS_TOL ACT_POS_TOL
+#define ADC_MAX_VAL ACT_ADC_MAX   
 
 typedef struct {
     uint pos_pin;    // ADC pin (e.g., GPIO 26 for A0)

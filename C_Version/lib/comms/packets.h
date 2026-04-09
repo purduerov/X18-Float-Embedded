@@ -24,7 +24,10 @@ typedef enum
     CMD_ZERO_DEPTH = 0x0D,
     CMD_SET_ACTUATOR = 0x0E,
     CMD_RESET_FSM = 0x0F,
-    CMD_SET_ACT_BOUNDS = 0x10
+    CMD_SET_ACT_BOUNDS = 0x10,
+    CMD_ENTER_TEST = 0x11,
+    CMD_REP_TEST_DATA = 0x12,
+    CMD_BOOTLOADER = 0x13
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -48,6 +51,10 @@ typedef struct __attribute__((packed))
             uint16_t act_min;
             uint16_t act_max;
         } settings; 
+        struct __attribute__((packed)) {
+            float live_depth;
+            uint16_t live_adc;
+        } test_data;
         uint8_t raw[MAX_PAYLOAD_SIZE];     
     } payload;
     uint8_t checksum; // XOR checksum of all preceding bytes

@@ -1,6 +1,7 @@
 #include "ms5837.h"
 #include <math.h>
 #include "hardware/i2c.h"
+#include "pico/stdlib.h"
 #include <stdio.h> // Required for debug prints
 
 // These constants define the commands sent over I2C to control the sensor.
@@ -78,6 +79,10 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
 {
     printf("Initializing MS5837 Sensor...\n");
     sensor->i2c_inst = i2c_inst;
+
+    // RP2040: Enable internal pull-ups for I2C pins 2 and 3
+    gpio_pull_up(2);
+    gpio_pull_up(3);
 
     // Reset the sensor
     uint8_t reset_cmd = MS5837_RESET_CMD;

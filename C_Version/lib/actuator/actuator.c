@@ -8,7 +8,7 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->ext_pin = ext_pin;
     act->ret_pin = ret_pin;
     act->moving = 0;
-    act->move_target = 2048; // Default to mid-range
+    act->move_target = DEFAULT_ACTUATOR_POS;
 
     adc_init();
     adc_gpio_init(act->pos_pin);
@@ -54,7 +54,7 @@ void actuator_move_to(Actuator *act, int new_position) {
     int current_pos = actuator_get_position(act);
     int direction = (new_position > current_pos) ? 1 : -1;
 
-    if (abs(new_position - current_pos) <= 30) {
+    if (abs(new_position - current_pos) <= POS_TOL) {
         direction = 0; // Within tolerance, stop
     }
     actuator_set_move_pins(act, direction);

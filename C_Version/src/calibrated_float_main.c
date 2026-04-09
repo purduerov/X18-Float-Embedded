@@ -93,7 +93,7 @@ int main() {
   storage_init();
 
   // --- Initialize I2C and MS5837 ---
-  i2c_init(I2C_PORT, 400 * 1000);
+  i2c_init(I2C_PORT, 100 * 1000);
   gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
   gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
   gpio_pull_up(PIN_SDA);

@@ -14,7 +14,8 @@ typedef enum
     FLOAT_PRE_DIVE,      
     FLOAT_PROFILING,
     FLOAT_PROFILE_DONE,
-    FLOAT_DUMPING_DATA
+    FLOAT_DUMPING_DATA,
+    FLOAT_TEST_CALIBRATE
 } FloatState_t;
 
 // --- FSM Structure to hold all runtime context ---

@@ -22,6 +22,12 @@ int main() {
   printf("This is the test_reflashed_main.c running on the Float.\n");
   printf("Waiting for more OTA updates...\n");
 
+  // Initialize I2C Pins 2 and 3 with pull-ups
+  gpio_set_function(2, GPIO_FUNC_I2C);
+  gpio_set_function(3, GPIO_FUNC_I2C);
+  gpio_pull_up(2);
+  gpio_pull_up(3);
+
   // Initialize Radio
   if (!radio_setup_init(NULL)) {
     printf("Radio init failed! Halting.\n");

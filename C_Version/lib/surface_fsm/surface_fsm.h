@@ -54,5 +54,6 @@ void surface_fsm_cmd_set_actuator(surface_fsm_t *fsm, uint16_t position);
 void surface_fsm_cmd_set_act_bounds(surface_fsm_t *fsm, uint16_t min_val, uint16_t max_val);
 void surface_fsm_cmd_sync(surface_fsm_t *fsm);
 void surface_fsm_cmd_reset(surface_fsm_t *fsm);
+void surface_fsm_cmd_test_mode(surface_fsm_t *fsm);
 
 #endif // SURFACE_FSM_H

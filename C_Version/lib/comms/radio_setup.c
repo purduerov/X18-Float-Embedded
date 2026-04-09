@@ -31,9 +31,8 @@ bool radio_setup_init(void (*interrupt_callback)(void)) {
     RadioLib_SX127x_Create(&lora, &radioModule);
 
     printf("[RADIO] Initializing SX1276...\n");
-    // SF7, 125kHz BW, CR 4/5 for standard telemetry
-    // Frequency 915.0 MHz, Power increased to 17 dBm
-    int16_t status = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 17);
+    // Use centralized config from hw_config.h
+    int16_t status = RadioLib_SX1276_Begin(&lora, RADIO_FREQ, RADIO_BW, RADIO_SF, RADIO_POWER);
     
     if (status != RADIOLIB_ERR_NONE) {
         printf("[RADIO] CRITICAL ERROR: Init failed, code %d\n", status);

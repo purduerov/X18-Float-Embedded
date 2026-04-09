@@ -1,5 +1,6 @@
 #include "float_fsm.h"
 #include "reflash_target.h"
+#include "pico/bootrom.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -12,13 +13,13 @@ static float recorded_depths[MAX_PACKETS];
 static uint32_t recorded_times[MAX_PACKETS];
 
 const char *FloatStateNames[] = {
-    "IDLE", "PRE_DIVE", "PROFILING", "PROFILE_DONE", "DUMPING_DATA"};
+    "IDLE", "PRE_DIVE", "PROFILING", "PROFILE_DONE", "DUMPING_DATA", "TEST_CALIBRATE"};
 
 void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor) {
     memset(fsm, 0, sizeof(float_fsm_t));
     fsm->state = FLOAT_IDLE;
     fsm->depth_sensor = sensor;
-    fsm->actuator_target = 2000;
+    fsm->actuator_target = 2048;
     fsm->last_debug_print = to_ms_since_boot(get_absolute_time());
     radio_start_receive();
 }
@@ -56,10 +57,18 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                     float_settings_t settings;
                     storage_get_settings(&settings);
 
-                    if (fsm->state == FLOAT_IDLE) {
-                        if (rx_pkt.command == CMD_BEGIN_PROFILE) {
+                    if (rx_pkt.command == CMD_RESET_FSM) {
+                        printf(">> Radio CMD: Resetting FSM to IDLE...\n");
+                        fsm->state = FLOAT_IDLE;
+                        fsm->currently_transmitting = false;
+                    } else if (fsm->state == FLOAT_IDLE || fsm->state == FLOAT_TEST_CALIBRATE) {
+                        if (rx_pkt.command == CMD_BEGIN_PROFILE && fsm->state == FLOAT_IDLE) {
                             printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive Transmission...\n");
                             fsm->state = FLOAT_PRE_DIVE;
+                        } else if (rx_pkt.command == CMD_ENTER_TEST && fsm->state == FLOAT_IDLE) {
+                            printf(">> Received ENTER_TEST. Starting live telemetry dump...\n");
+                            fsm->state = FLOAT_TEST_CALIBRATE;
+                            fsm->last_tx_time = 0; // Trigger immediate transmit
                         } else if (rx_pkt.command == CMD_SET_PID) {
                             settings.kp = rx_pkt.payload.settings.kp;
                             settings.ki = rx_pkt.payload.settings.ki;
@@ -95,10 +104,6 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                                    settings.act_min, settings.act_max);
                             storage_set_settings(&settings);
                             storage_save();
-                        } else if (rx_pkt.command == CMD_RESET_FSM) {
-                            printf(">> Radio CMD: Resetting FSM to IDLE...\n");
-                            fsm->state = FLOAT_IDLE;
-                            fsm->currently_transmitting = false;
                         } else if (rx_pkt.command == CMD_REQ_SETTINGS) {
                             printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
                             packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
@@ -200,6 +205,28 @@ void float_fsm_update(float_fsm_t *fsm) {
             tx_pkt.payload.telemetry.time_ms = recorded_times[fsm->current_seq_num - 1];
             tx_pkt.payload.telemetry.depth_m = recorded_depths[fsm->current_seq_num - 1];
             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
+            fsm->currently_transmitting = true;
+            radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
+            fsm->last_tx_time = now;
+        }
+    } else if (fsm->state == FLOAT_TEST_CALIBRATE && !fsm->currently_transmitting) {
+        if (now - fsm->last_tx_time >= 1000) {
+            ms5837_read(fsm->depth_sensor);
+            float live_depth = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
+            
+            packet_t tx_pkt = {.command = CMD_REP_TEST_DATA, .seq_num = 0};
+            tx_pkt.payload.test_data.live_depth = live_depth;
+            tx_pkt.payload.test_data.live_adc = fsm->current_actuator_pos;
+            tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
+            
+            fsm->currently_transmitting = true;
+            radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
+            fsm->last_tx_time = now;
+        }
+    }
+}
+        tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
+            
             fsm->currently_transmitting = true;
             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
             fsm->last_tx_time = now;
