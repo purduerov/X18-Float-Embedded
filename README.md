@@ -14,7 +14,9 @@ Autonomous underwater float project designed for oceanographic research and envi
 Detailed documentation for the system components:
 - **[Float Unit (Underwater)](docs/float_architecture.md)**: Main loop flow, state machine, and safety mechanisms.
 - **[Surface Station](docs/surface_architecture.md)**: Dashboard link, recovery FSM, and data logging.
-- **[Hardware & Pinouts](.gemini/hardware_map.md)**: **CRITICAL** GPIO, I2C, and SPI wiring reference.
+- **[Communication Protocol](docs/communication_protocol.md)**: Detailed packet structures, command codes, and reliability ARQ.
+- **[Hardware & Pinouts](docs/hardware_specifications.md)**: GPIO mapping, I2C/SPI peripherals, and actuator control logic.
+- **[Hardware Map (Internal)](.gemini/hardware_map.md)**: **CRITICAL** Wiring reference (restricted).
 
 ## ✨ Key Features
 
