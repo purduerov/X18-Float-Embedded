@@ -1,2 +1,36 @@
+# Gemini AI Context
 .gemini/
-gha-creds-*.json
+.geminiignore
+
+# Conductor
+conductor/
+
+# PlatformIO
+.pio/
+libdeps/
+
+# IDE and Cache
+.cache/
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Binary Artifacts
+*.bin
+*.elf
+*.uf2
+*.hex
+*.map
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+
+RESEARCH.md
+TEST.md
+ACT.md
+PLAN.md
+TODO.md

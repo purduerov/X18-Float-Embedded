@@ -1,37 +1,10 @@
 # Surface Station Architecture
 
-This document describes the software architecture for the surface station, including its state machine and main loop execution flow.
+This document describes the software architecture for the surface station, including its program flow and state machine logic.
 
 ---
 
-## 1. Surface FSM (State Transitions)
-
-The Surface Station FSM coordinates the mission stages and handles data logging from the float.
-
-```mermaid
-stateDiagram-v2
-    [*] --> SURFACE_IDLE
-    
-    SURFACE_IDLE --> SURFACE_WAITING_PROFILE : Dashboard: Begin Profile\n(Sends CMD_BEGIN_PROFILE)
-    
-    SURFACE_WAITING_PROFILE --> SURFACE_DOWNLOADING : Received CMD_DONE_PROFILE\n(Sends CMD_SEND_DATA)
-    SURFACE_WAITING_PROFILE --> SURFACE_WAITING_PROFILE : Logging Pre-dive Telemetry
-    
-    state SURFACE_DOWNLOADING {
-        [*] --> ReceivingData
-        ReceivingData --> ReceivingData : Store Packet & Send ACK
-    }
-    
-    SURFACE_DOWNLOADING --> SURFACE_IDLE : Received CMD_DATA_DONE\n(Dumps CSV)
-    
-    %% Global Reset
-    SURFACE_WAITING_PROFILE --> SURFACE_IDLE : Dashboard: Reset\n(Sends CMD_RESET_FSM)
-    SURFACE_DOWNLOADING --> SURFACE_IDLE : Dashboard: Reset\n(Sends CMD_RESET_FSM)
-```
-
----
-
-## 2. Surface Program Flow (Main Loop)
+## 1. Surface Program Flow (Main Loop)
 
 The main loop in `src/surface_main.c` manages communications between the radio and the Streamlit dashboard.
 
@@ -58,6 +31,33 @@ flowchart TD
         RadioIRQ -- No --> Sleep
         Sleep --> Loop
     end
+```
+
+---
+
+## 2. Surface FSM (State Transitions)
+
+The Surface Station FSM coordinates the mission stages and handles data logging from the float.
+
+```mermaid
+stateDiagram-v2
+    [*] --> SURFACE_IDLE
+    
+    SURFACE_IDLE --> SURFACE_WAITING_PROFILE : Dashboard: Begin Profile\n(Sends CMD_BEGIN_PROFILE)
+    
+    SURFACE_WAITING_PROFILE --> SURFACE_DOWNLOADING : Received CMD_DONE_PROFILE\n(Sends CMD_SEND_DATA)
+    SURFACE_WAITING_PROFILE --> SURFACE_WAITING_PROFILE : Logging Pre-dive Telemetry
+    
+    state SURFACE_DOWNLOADING {
+        [*] --> ReceivingData
+        ReceivingData --> ReceivingData : Store Packet & Send ACK
+    }
+    
+    SURFACE_DOWNLOADING --> SURFACE_IDLE : Received CMD_DATA_DONE\n(Dumps CSV)
+    
+    %% Global Reset
+    SURFACE_WAITING_PROFILE --> SURFACE_IDLE : Dashboard: Reset\n(Sends CMD_RESET_FSM)
+    SURFACE_DOWNLOADING --> SURFACE_IDLE : Dashboard: Reset\n(Sends CMD_RESET_FSM)
 ```
 
 ---
