@@ -24,7 +24,7 @@ void onInterrupt(void) { float_radio_irq_flag = true; }
 int main() {
   stdio_init_all();
 
-  uint32_t waitTime = 0;
+  // uint32_t waitTime = 0;
   // while (!stdio_usb_connected() && waitTime < 5000) {
   //   sleep_ms(100);
   //   waitTime += 100; // spin forever until usb is connected, no timeout
