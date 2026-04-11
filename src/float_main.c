@@ -67,105 +67,69 @@ static const console_command_t cmd_table[] = {
     {'?', handle_sync, "Sync Settings"}};
 
 int main() {
-  stdio_init_all();
-  hw_wait_for_usb(FLOAT_ENABLE_USB_WAIT, 5000);
-
-  printf("\n\n=== MATE Float Station Booting (Enhanced Control) ===\n");
-
-  // --- Initialize Persistent Storage ---
-  storage_init();
-
-  // --- Initialize Hardware (I2C & Sensors) ---
-  hw_init_i2c();
-
-  if (!hw_init_depth_sensor(&depth_sensor)) {
-    printf("CRITICAL ERROR: MS5837 FAILED to initialize\n");
+  // 1. system_init now handles EVERYTHING (stdio, storage, I2C, MS5837, Actuator VREF, AND Radio)
+  if (!system_init(onInterrupt, &depth_sensor)) {
+      while (true) sleep_ms(1000);
   }
 
-  // --- Initialize Actuator ---
-  actuator_vref_init();
+  printf("=== MATE Float Station Booting (Full Integrated Init) ===\n");
+
+  // 2. Initialize Actuator Instance
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
 
-  // --- Initialize Depth PID ---
   float_settings_t settings;
   storage_get_settings(&settings);
 
   depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1,
                  settings.act_min,
-                 settings.act_max); // 100ms (10Hz) update rate
-  depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
+                 settings.act_max);
+  depth_pid_set_target(&dpid, 1.0);
 
-  // --- Initialize Radio ---
-  if (!radio_setup_init(onInterrupt)) {
-    printf("CRITICAL ERROR: RADIO FAILED to initialize\n");
-    while (true)
-      sleep_ms(1000);
-  }
-
-  // --- Initialize Console ---
+  // 3. Application setup
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
-
-  // --- Initialize State Machine ---
   float_fsm_init(&global_fsm, &depth_sensor);
-  printf("Float System Ready. Target Depth: %.2f m\n", dpid.target_depth);
-  printf("Serial Commands: 'z' (Zero), 'a <pos>' (Actuator), 'p' (Profile), '?' (Sync)\n");
+
+  printf("Float System Ready.\n");
 
   uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
   uint32_t last_act_loop_time = last_depth_pid_time;
 
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
-
-    // --- 1. Console Interface (Non-blocking) ---
     console_update();
 
-    // --- 2. Outer Depth PID Loop (10Hz / 100ms) ---
     if (now - last_depth_pid_time >= 100) {
       double current_depth = 0.0f;
       if (ms5837_read(&depth_sensor)) {
         current_depth = ms5837_get_depth(&depth_sensor);
       }
-
       storage_get_settings(&settings);
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
       dpid.pos_min = settings.act_min;
       dpid.pos_max = settings.act_max;
-
       if (global_fsm.state == FLOAT_PROFILING) {
         int target_pos = 0;
         depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
         global_fsm.actuator_target = target_pos;
       }
-
       last_depth_pid_time = now;
     }
 
-    // --- 3. Inner Actuator Control Loop (50Hz / 20ms) ---
     if (now - last_act_loop_time >= ACT_LOOP_MS) {
       int target_pos = global_fsm.actuator_target;
-
-      // Safety Clamp
       storage_get_settings(&settings);
       if (target_pos < settings.act_min) target_pos = settings.act_min;
       if (target_pos > settings.act_max) target_pos = settings.act_max;
-
       actuator_set_target(&act, target_pos);
       actuator_tick(&act);
-
-      // Manual Move Status Update
       if (global_fsm.manual_move_pending) {
           if (act.stalled || act.timeout || act.in_deadzone || act.hard_locked) {
               global_fsm.manual_move_pending = false;
-              if (act.stalled) printf(">> [MAIN] Manual move stalled!\n");
-              if (act.timeout) printf(">> [MAIN] Manual move timeout!\n");
-              if (act.in_deadzone) printf(">> [MAIN] Manual move reached target.\n");
-              if (act.hard_locked) printf(">> [MAIN] Manual move hard locked!\n");
           }
       }
-
       last_act_loop_time = now;
     }
 
@@ -176,9 +140,7 @@ int main() {
       radio_event_flag = false;
       float_fsm_process_event(&global_fsm);
     }
-
     sleep_ms(1);
   }
-
   return 0;
 }
