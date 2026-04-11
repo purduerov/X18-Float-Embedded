@@ -19,11 +19,11 @@
 #include "console.h"
 
 static float_fsm_t global_fsm;
-static volatile bool float_radio_irq_flag = false;
+static volatile bool radio_event_flag = false;
 static MS5837_t depth_sensor;
 static DepthPID dpid;
 
-void onInterrupt(void) { float_radio_irq_flag = true; }
+void onInterrupt(void) { radio_event_flag = true; }
 
 // --- Console Command Handlers ---
 
@@ -172,8 +172,8 @@ int main() {
     global_fsm.current_actuator_pos = actuator_get_position(&act);
     float_fsm_update(&global_fsm);
 
-    if (float_radio_irq_flag) {
-      float_radio_irq_flag = false;
+    if (radio_event_flag) {
+      radio_event_flag = false;
       float_fsm_process_event(&global_fsm);
     }
 

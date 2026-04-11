@@ -15,9 +15,9 @@
 
 // --- Global State ---
 static surface_fsm_t global_fsm;
-static volatile bool operationDoneFlag = false;
+static volatile bool radio_event_flag = false;
 
-void onInterrupt(void) { operationDoneFlag = true; }
+void onInterrupt(void) { radio_event_flag = true; }
 
 // --- Dashboard Command Handlers ---
 
@@ -124,7 +124,7 @@ int main() {
     if (now - lastDebugPrint >= 2000) {
       printf("[DEBUG] State: %s | Transmitting: %d | IRQ Flag: %d\n",
              surface_fsm_get_state_name(&global_fsm),
-             surface_fsm_is_transmitting(&global_fsm), operationDoneFlag);
+             surface_fsm_is_transmitting(&global_fsm), radio_event_flag);
       lastDebugPrint = now;
     }
 
@@ -141,8 +141,8 @@ int main() {
     }
 
     // 3. Process Radio Interface (Packets and IRQs)
-    if (operationDoneFlag) {
-      operationDoneFlag = false;
+    if (radio_event_flag) {
+      radio_event_flag = false;
       surface_fsm_process_event(&global_fsm);
     }
 
