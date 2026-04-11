@@ -1,4 +1,4 @@
-﻿#ifndef HW_CONFIG_H
+#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -57,10 +57,20 @@
 #define ACT_KI 0.05f
 #define ACT_KD 0.15f
 #define ACT_LOOP_MS 20 // 50Hz control loop
+#define ACT_PID_LIMIT 500.0f
+
+// --- Actuator VREF (PWM Power) ---
+#define ACT_VREF_PWM_WRAP 65535
+#define ACT_VREF_MIN_DUTY 19859 // ~30% power (minimum to move under load)
+#define ACT_VREF_MAX_DUTY 65535 // 100% power
 
 // --- Hysteresis / Deadzone ---
 #define ACT_DEADZONE_ENTER 20
 #define ACT_DEADZONE_EXIT 50
+
+// --- Control Loop Timings ---
+#define DEPTH_PID_LOOP_MS 100 // 10Hz outer loop
+#define SURFACE_DEBUG_INTERVAL_MS 2000
 
 // --- PID Defaults (If not synced) ---
 #define DEFAULT_PID_P 3.2f

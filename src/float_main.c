@@ -99,17 +99,22 @@ int main() {
     uint32_t now = to_ms_since_boot(get_absolute_time());
     console_update();
 
-    if (now - last_depth_pid_time >= 100) {
+    // Hot-reload settings once per loop for both PID and Clamp
+    storage_get_settings(&settings);
+
+    // --- 2. Outer Depth PID Loop (10Hz / 100ms) ---
+    if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 0.0f;
       if (ms5837_read(&depth_sensor)) {
         current_depth = ms5837_get_depth(&depth_sensor);
       }
-      storage_get_settings(&settings);
+
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
       dpid.pos_min = settings.act_min;
       dpid.pos_max = settings.act_max;
+
       if (global_fsm.state == FLOAT_PROFILING) {
         int target_pos = 0;
         depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
@@ -118,11 +123,14 @@ int main() {
       last_depth_pid_time = now;
     }
 
+    // --- 3. Inner Actuator Control Loop (50Hz / 20ms) ---
     if (now - last_act_loop_time >= ACT_LOOP_MS) {
       int target_pos = global_fsm.actuator_target;
-      storage_get_settings(&settings);
+
+      // Safety Clamp
       if (target_pos < settings.act_min) target_pos = settings.act_min;
       if (target_pos > settings.act_max) target_pos = settings.act_max;
+
       actuator_set_target(&act, target_pos);
       actuator_tick(&act);
       if (global_fsm.manual_move_pending) {

@@ -112,7 +112,7 @@ int main() {
     uint32_t now = to_ms_since_boot(get_absolute_time());
 
     // 1. Periodic Debug Info
-    if (now - lastDebugPrint >= 2000) {
+    if (now - lastDebugPrint >= SURFACE_DEBUG_INTERVAL_MS) {
       printf("[DEBUG] State: %s | Transmitting: %d | IRQ Flag: %d\n",
              surface_fsm_get_state_name(&global_fsm),
              surface_fsm_is_transmitting(&global_fsm), radio_event_flag);

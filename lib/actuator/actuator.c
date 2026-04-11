@@ -5,11 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Dynamic VREF Settings (PWM duty cycle)
-#define VREF_PWM_WRAP 65535
-#define VREF_MIN_DUTY 19859 // ~30% power (minimum to move under load)
-#define VREF_MAX_DUTY 65535 // 100% power
-
 void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->pos_pin = pos_pin;
     act->ext_pin = ext_pin;
@@ -32,7 +27,7 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->retry_timer = 0;
 
     // Initialize PID Controller
-    pid_init(&act->pid, ACT_KP, ACT_KI, ACT_KD, (ACT_LOOP_MS / 1000.0), -500.0, 500.0);
+    pid_init(&act->pid, ACT_KP, ACT_KI, ACT_KD, (ACT_LOOP_MS / 1000.0), -ACT_PID_LIMIT, ACT_PID_LIMIT);
     act->in_deadzone = false;
 
     adc_init();
@@ -188,8 +183,8 @@ void actuator_tick(Actuator *act) {
 void actuator_vref_init(void) {
     gpio_set_function(PIN_VREF, GPIO_FUNC_PWM);
     uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
-    pwm_set_wrap(slice_num, VREF_PWM_WRAP);
-    pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), VREF_MAX_DUTY);
+    pwm_set_wrap(slice_num, ACT_VREF_PWM_WRAP);
+    pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), ACT_VREF_MAX_DUTY);
     pwm_set_enabled(slice_num, true);
     printf("[ACTUATOR] VREF PWM Initialized on Pin %d\n", PIN_VREF);
 }
@@ -198,9 +193,9 @@ void actuator_vref_set(double pid_output) {
     uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
     double abs_out = abs((int)pid_output);
     
-    // Scale 0-500 PID range to PWM duty cycle
-    if (abs_out > 500.0) abs_out = 500.0;
+    // Scale PID range to PWM duty cycle
+    if (abs_out > ACT_PID_LIMIT) abs_out = ACT_PID_LIMIT;
     
-    uint32_t duty = VREF_MIN_DUTY + (uint32_t)((abs_out / 500.0) * (VREF_MAX_DUTY - VREF_MIN_DUTY));
+    uint32_t duty = ACT_VREF_MIN_DUTY + (uint32_t)((abs_out / ACT_PID_LIMIT) * (ACT_VREF_MAX_DUTY - ACT_VREF_MIN_DUTY));
     pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), duty);
 }
