@@ -4,12 +4,14 @@
 #include <string.h>
 
 // --- Modular Library Includes ---
+#include "data_logger.h"
+#include "hw_config.h"
+#include "hw_init.h"
 #include "packets.h"
 #include "radio_setup.h"
-#include "surface_link.h"
-#include "data_logger.h"
-#include "surface_fsm.h"
 #include "reflash_host.h"
+#include "surface_fsm.h"
+#include "surface_link.h"
 
 // --- Global State ---
 static surface_fsm_t global_fsm;
@@ -20,58 +22,59 @@ void onInterrupt(void) { operationDoneFlag = true; }
 // --- Dashboard Command Handlers ---
 
 static void handle_profile(const char *params) {
-    surface_fsm_cmd_begin_profile(&global_fsm);
+  surface_fsm_cmd_begin_profile(&global_fsm);
 }
 
 static void handle_pid(const char *params) {
-    float p, i, d;
-    if (sscanf(params, "%f %f %f", &p, &i, &d) == 3) {
-        surface_fsm_cmd_set_pid(&global_fsm, p, i, d);
-    }
+  float p, i, d;
+  if (sscanf(params, "%f %f %f", &p, &i, &d) == 3) {
+    surface_fsm_cmd_set_pid(&global_fsm, p, i, d);
+  }
 }
 
 static void handle_company(const char *params) {
-    unsigned int id;
-    if (sscanf(params, "%u", &id) == 1) {
-        surface_fsm_cmd_set_company(&global_fsm, (uint16_t)id);
-    }
+  unsigned int id;
+  if (sscanf(params, "%u", &id) == 1) {
+    surface_fsm_cmd_set_company(&global_fsm, (uint16_t)id);
+  }
 }
 
 static void handle_duration(const char *params) {
-    unsigned int seconds;
-    if (sscanf(params, "%u", &seconds) == 1) {
-        surface_fsm_cmd_set_duration(&global_fsm, (uint16_t)seconds);
-    }
+  unsigned int seconds;
+  if (sscanf(params, "%u", &seconds) == 1) {
+    surface_fsm_cmd_set_duration(&global_fsm, (uint16_t)seconds);
+  }
 }
 
 static void handle_zero(const char *params) {
-    surface_fsm_cmd_zero_depth(&global_fsm);
+  surface_fsm_cmd_zero_depth(&global_fsm);
 }
 
 static void handle_actuator(const char *params) {
-    unsigned int pos;
-    if (sscanf(params, "%u", &pos) == 1) {
-        surface_fsm_cmd_set_actuator(&global_fsm, (uint16_t)pos);
-    }
+  unsigned int pos;
+  if (sscanf(params, "%u", &pos) == 1) {
+    surface_fsm_cmd_set_actuator(&global_fsm, (uint16_t)pos);
+  }
 }
 
 static void handle_bounds(const char *params) {
-    unsigned int min_val, max_val;
-    if (sscanf(params, "%u %u", &min_val, &max_val) == 2) {
-        surface_fsm_cmd_set_act_bounds(&global_fsm, (uint16_t)min_val, (uint16_t)max_val);
-    }
+  unsigned int min_val, max_val;
+  if (sscanf(params, "%u %u", &min_val, &max_val) == 2) {
+    surface_fsm_cmd_set_act_bounds(&global_fsm, (uint16_t)min_val,
+                                   (uint16_t)max_val);
+  }
 }
 
 static void handle_sync(const char *params) {
-    surface_fsm_cmd_sync(&global_fsm);
+  surface_fsm_cmd_sync(&global_fsm);
 }
 
 static void handle_reset(const char *params) {
-    surface_fsm_cmd_reset(&global_fsm);
+  surface_fsm_cmd_reset(&global_fsm);
 }
 
 static void handle_test(const char *params) {
-    surface_fsm_cmd_test_mode(&global_fsm);
+  surface_fsm_cmd_test_mode(&global_fsm);
 }
 
 static const surface_command_t cmd_table[] = {
@@ -84,8 +87,7 @@ static const surface_command_t cmd_table[] = {
     {'b', handle_bounds, "Set Actuator Bounds (Min Max)"},
     {'?', handle_sync, "Sync Settings"},
     {'r', handle_reset, "Reset State Machine"},
-    {'k', handle_test, "Enter Test Mode"}
-};
+    {'k', handle_test, "Enter Test Mode"}};
 
 // --- Main Application ---
 
@@ -101,7 +103,8 @@ int main() {
 
   if (!radio_setup_init(onInterrupt)) {
     printf("Radio init failed! Halting.\n");
-    while (true) sleep_ms(1000);
+    while (true)
+      sleep_ms(1000);
   }
 
   surface_link_init(cmd_table, sizeof(cmd_table) / sizeof(surface_command_t));
@@ -120,22 +123,21 @@ int main() {
     // 1. Periodic Debug Info
     if (now - lastDebugPrint >= 2000) {
       printf("[DEBUG] State: %s | Transmitting: %d | IRQ Flag: %d\n",
-             surface_fsm_get_state_name(&global_fsm), 
-             surface_fsm_is_transmitting(&global_fsm),
-             operationDoneFlag);
+             surface_fsm_get_state_name(&global_fsm),
+             surface_fsm_is_transmitting(&global_fsm), operationDoneFlag);
       lastDebugPrint = now;
     }
 
     // 2. Process Serial Interface (Commands from Dashboard)
     int c = getchar_timeout_us(0);
     while (c != PICO_ERROR_TIMEOUT) {
-        if (c == 'S') {
-            reflash_host_stream_from_serial(radio_get_instance());
-        } else {
-            // Forward everything else to the surface_link character processor
-            surface_link_handle_char((char)c);
-        }
-        c = getchar_timeout_us(0);
+      if (c == 'S') {
+        reflash_host_stream_from_serial(radio_get_instance());
+      } else {
+        // Forward everything else to the surface_link character processor
+        surface_link_handle_char((char)c);
+      }
+      c = getchar_timeout_us(0);
     }
 
     // 3. Process Radio Interface (Packets and IRQs)

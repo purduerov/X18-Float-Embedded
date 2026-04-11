@@ -1,5 +1,11 @@
-## graphify
+# X18-Float-Embedded
 
+## Table of Contents
+- [Project Overview & Core Mandates](.gemini/gemini.md)
+- [Conductor Documentation](conductor/index.md)
+- [Hardware Map & Pinouts](.gemini/hardware_map.md)
+
+## Knowledge Graph (graphify)
 This project has a graphify knowledge graph at graphify-out/.
 
 Rules:
