@@ -34,10 +34,10 @@
 
 // --- Radio Configuration ---
 #define RADIO_FREQ 915.0f    // MHz
-#define RADIO_BW 125.0f      // kHz
-#define RADIO_SF 7           // Spreading Factor
-#define RADIO_POWER 17       // dBm
-#define RADIO_CR 5           // Coding Rate (4/5)
+#define RADIO_BW 7.8f        // kHz
+#define RADIO_SF 12           // Spreading Factor
+#define RADIO_POWER 29       // dBm
+#define RADIO_CR 8           // Coding Rate (4/n)
 #define RADIO_SYNC_WORD 0x12 // LoRa Sync Word
 #define SPI_BAUDRATE 8000000 // 8 MHz
 
