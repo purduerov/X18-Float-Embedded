@@ -11,7 +11,7 @@
 #include "radio_setup.h"
 #include "reflash_host.h"
 #include "surface_fsm.h"
-#include "surface_link.h"
+#include "console.h"
 
 // --- Global State ---
 static surface_fsm_t global_fsm;
@@ -77,7 +77,7 @@ static void handle_test(const char *params) {
   surface_fsm_cmd_test_mode(&global_fsm);
 }
 
-static const surface_command_t cmd_table[] = {
+static const console_command_t cmd_table[] = {
     {'p', handle_profile, "Begin Profile"},
     {'s', handle_pid, "Set PID (P I D)"},
     {'c', handle_company, "Set Company ID"},
@@ -107,7 +107,7 @@ int main() {
       sleep_ms(1000);
   }
 
-  surface_link_init(cmd_table, sizeof(cmd_table) / sizeof(surface_command_t));
+  console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
 
   printf("Surface Station Ready.\n");
   printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company), "
@@ -134,8 +134,8 @@ int main() {
       if (c == 'S') {
         reflash_host_stream_from_serial(radio_get_instance());
       } else {
-        // Forward everything else to the surface_link character processor
-        surface_link_handle_char((char)c);
+        // Forward everything else to the console character processor
+        console_handle_char((char)c);
       }
       c = getchar_timeout_us(0);
     }
