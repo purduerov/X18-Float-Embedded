@@ -19,11 +19,11 @@
 #include "console.h"
 
 static float_fsm_t global_fsm;
-static volatile bool radio_event_flag = false;
+static volatile bool float_radio_irq_flag = false;
 static MS5837_t depth_sensor;
 static DepthPID dpid;
 
-void onInterrupt(void) { radio_event_flag = true; }
+void onInterrupt(void) { float_radio_irq_flag = true; }
 
 // --- Console Command Handlers ---
 
@@ -67,11 +67,23 @@ static const console_command_t cmd_table[] = {
     {'?', handle_sync, "Sync Settings"}};
 
 int main() {
-  if (!system_init(onInterrupt, &depth_sensor)) {
-    while (true) sleep_ms(1000);
+  stdio_init_all();
+  hw_wait_for_usb(FLOAT_ENABLE_USB_WAIT, 5000);
+
+  printf("\n\n=== MATE Float Station Booting (Enhanced Control) ===\n");
+
+  // --- Initialize Persistent Storage ---
+  storage_init();
+
+  // --- Initialize Hardware (I2C & Sensors) ---
+  hw_init_i2c();
+
+  if (!hw_init_depth_sensor(&depth_sensor)) {
+    printf("CRITICAL ERROR: MS5837 FAILED to initialize\n");
   }
 
   // --- Initialize Actuator ---
+  actuator_vref_init();
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
 
@@ -83,6 +95,13 @@ int main() {
                  settings.act_min,
                  settings.act_max); // 100ms (10Hz) update rate
   depth_pid_set_target(&dpid, 1.0); // Set default target depth to 1.0m
+
+  // --- Initialize Radio ---
+  if (!radio_setup_init(onInterrupt)) {
+    printf("CRITICAL ERROR: RADIO FAILED to initialize\n");
+    while (true)
+      sleep_ms(1000);
+  }
 
   // --- Initialize Console ---
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
@@ -153,8 +172,8 @@ int main() {
     global_fsm.current_actuator_pos = actuator_get_position(&act);
     float_fsm_update(&global_fsm);
 
-    if (radio_event_flag) {
-      radio_event_flag = false;
+    if (float_radio_irq_flag) {
+      float_radio_irq_flag = false;
       float_fsm_process_event(&global_fsm);
     }
 
