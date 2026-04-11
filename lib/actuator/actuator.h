@@ -25,6 +25,11 @@ typedef struct {
     int last_pos;
     bool stalled;
     bool timeout;
+
+    // New fields for recovery
+    int retry_count;
+    bool hard_locked;
+    uint32_t retry_timer;
 } Actuator;
 
 /**
