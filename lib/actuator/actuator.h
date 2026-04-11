@@ -55,6 +55,11 @@ void actuator_set_move_pins(Actuator *act, int direction);
 void actuator_move_to(Actuator *act, int new_position);
 
 /**
+ * @brief Sets a new target position and resets monitoring state if the target has changed.
+ */
+void actuator_set_target(Actuator *act, int target_pos);
+
+/**
  * @brief Monitors the move progress, handles stall detection and timeouts.
  * Should be called periodically in the main loop (~10-100Hz).
  */

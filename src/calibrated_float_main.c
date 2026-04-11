@@ -162,6 +162,7 @@ int main() {
 
     // --- Actuator Control Loop (20ms) ---
     if (now - last_act_update >= LOOP_DELAY_MS) {
+        actuator_set_target(&act, global_fsm.actuator_target);
         actuator_tick(&act); 
         
         int current_pos = get_filtered_pos(&act);

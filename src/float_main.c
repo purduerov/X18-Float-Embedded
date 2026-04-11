@@ -151,6 +151,8 @@ int main() {
       if (target_pos < settings.act_min) target_pos = settings.act_min;
       if (target_pos > settings.act_max) target_pos = settings.act_max;
 
+      actuator_set_target(&act, target_pos);
+
       double error = (double)target_pos - (double)current_pos;
       double control_signal = 0;
 

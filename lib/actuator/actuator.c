@@ -80,19 +80,22 @@ void actuator_set_move_pins(Actuator *act, int direction) {
     }
 }
 
-void actuator_move_to(Actuator *act, int new_position) {
-    // If target changed, reset stall/timeout timers
-    if (act->move_target != new_position) {
-        act->move_target = new_position;
+void actuator_set_target(Actuator *act, int target_pos) {
+    if (act->move_target != target_pos) {
+        act->move_target = target_pos;
         act->move_start_time = to_ms_since_boot(get_absolute_time());
         act->last_pos_time = act->move_start_time;
         act->last_pos = actuator_get_position(act);
         act->stalled = false;
         act->timeout = false;
-        act->retry_count = 0;    // Reset retries on new command
-        act->hard_locked = false; // Clear lock on new command
-        act->retry_timer = 0;    // Reset retry timer
+        act->retry_count = 0;
+        act->hard_locked = false;
+        act->retry_timer = 0;
     }
+}
+
+void actuator_move_to(Actuator *act, int new_position) {
+    actuator_set_target(act, new_position);
 
     int current_pos = actuator_get_position(act);
     int direction = (new_position > current_pos) ? 1 : -1;
