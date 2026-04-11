@@ -16,57 +16,12 @@
 #include "hw_config.h"
 #include "hw_init.h"
 
-// --- Actuator PID Tuning ---
-#define ACT_KP 0.8
-#define ACT_KI 0.05
-#define ACT_KD 0.15
-#define LOOP_DELAY_MS 20
-
-// Hysteresis Logic
-#define DEADZONE_ENTER 20
-#define DEADZONE_EXIT 50
-static bool act_in_deadzone = false;
-
 // Dynamic VREF Settings
 #define PWM_WRAP 65535
-#define VREF_MIN_DUTY 19859
-#define VREF_MAX_DUTY 65535
-
-// Moving Average Filter
-#define FILTER_SIZE 5
-static int pos_history[FILTER_SIZE] = {0};
-static int filter_idx = 0;
 
 static float_fsm_t global_fsm;
 
 void onInterrupt(void) { float_fsm_on_interrupt(&global_fsm); }
-
-// Initialize Pin 27 for Hardware PWM
-void init_vref_pwm() {
-  gpio_set_function(PIN_VREF, GPIO_FUNC_PWM);
-  uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
-  pwm_set_wrap(slice_num, PWM_WRAP);
-  pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), VREF_MAX_DUTY);
-  pwm_set_enabled(slice_num, true);
-}
-
-// Map PID output to a safe VREF voltage
-void set_vref_voltage(double pid_output) {
-  uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
-  double abs_out = abs((int)pid_output);
-  if (abs_out > 500) abs_out = 500;
-  uint32_t duty = VREF_MIN_DUTY + (uint32_t)((abs_out / 500.0) * (VREF_MAX_DUTY - VREF_MIN_DUTY));
-  pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), duty);
-}
-
-// Get noise-filtered ADC position
-int get_filtered_pos(Actuator *act) {
-  pos_history[filter_idx] = actuator_get_position(act);
-  filter_idx = (filter_idx + 1) % FILTER_SIZE;
-  long sum = 0;
-  for (int i = 0; i < FILTER_SIZE; i++) sum += pos_history[i];
-  return (int)(sum / FILTER_SIZE);
-}
 
 int main() {
   stdio_init_all();
@@ -92,14 +47,9 @@ int main() {
   }
 
   // --- Initialize Actuator ---
-  init_vref_pwm();
+  actuator_vref_init();
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
-  
-  PIDController act_pid;
-  pid_init(&act_pid, ACT_KP, ACT_KI, ACT_KD, (LOOP_DELAY_MS / 1000.0), -500.0, 500.0);
-
-  for (int i = 0; i < FILTER_SIZE; i++) get_filtered_pos(&act);
 
   // --- Initialize Radio ---
   if (!radio_setup_init(onInterrupt)) {
@@ -161,34 +111,9 @@ int main() {
     }
 
     // --- Actuator Control Loop (20ms) ---
-    if (now - last_act_update >= LOOP_DELAY_MS) {
+    if (now - last_act_update >= ACT_LOOP_MS) {
         actuator_set_target(&act, global_fsm.actuator_target);
         actuator_tick(&act); 
-        
-        int current_pos = get_filtered_pos(&act);
-        double error = (double)global_fsm.actuator_target - (double)current_pos;
-        double control_signal = 0;
-
-        if (!act_in_deadzone && abs((int)error) <= DEADZONE_ENTER) {
-            act_in_deadzone = true;
-        } else if (act_in_deadzone && abs((int)error) > DEADZONE_EXIT) {
-            act_in_deadzone = false;
-        }
-
-        if (act.hard_locked || act.stalled) {
-            actuator_set_move_pins(&act, 0);
-            pid_reset(&act_pid);
-            set_vref_voltage(0);
-        } else if (act_in_deadzone) {
-            actuator_set_move_pins(&act, 0);
-            pid_reset(&act_pid);
-            set_vref_voltage(0);
-        } else {
-            pid_update(&act_pid, error, &control_signal);
-            set_vref_voltage(control_signal);
-            int direction = (control_signal > 0) ? 1 : -1;
-            actuator_set_move_pins(&act, direction);
-        }
         last_act_update = now;
     }
 

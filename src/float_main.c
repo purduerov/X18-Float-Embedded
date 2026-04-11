@@ -19,7 +19,6 @@
 
 static float_fsm_t global_fsm;
 static volatile bool float_radio_irq_flag = false;
-static bool act_in_deadzone = false;
 
 void onInterrupt(void) { float_radio_irq_flag = true; }
 
@@ -44,10 +43,6 @@ int main() {
   actuator_vref_init();
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
-  
-  // Inner Actuator PID
-  PIDController act_pid;
-  pid_init(&act_pid, ACT_KP, ACT_KI, ACT_KD, (ACT_LOOP_MS / 1000.0), -500.0, 500.0);
 
   // --- Initialize Depth PID ---
   DepthPID dpid;
@@ -143,7 +138,6 @@ int main() {
 
     // --- 3. Inner Actuator Control Loop (50Hz / 20ms) ---
     if (now - last_act_loop_time >= ACT_LOOP_MS) {
-      int current_pos = actuator_get_position(&act);
       int target_pos = global_fsm.actuator_target;
 
       // Safety Clamp
@@ -152,42 +146,15 @@ int main() {
       if (target_pos > settings.act_max) target_pos = settings.act_max;
 
       actuator_set_target(&act, target_pos);
-
-      double error = (double)target_pos - (double)current_pos;
-      double control_signal = 0;
-
-      // Hysteresis Logic
-      if (!act_in_deadzone && abs((int)error) <= ACT_DEADZONE_ENTER) {
-          act_in_deadzone = true;
-      } else if (act_in_deadzone && abs((int)error) > ACT_DEADZONE_EXIT) {
-          act_in_deadzone = false;
-      }
-
-      if (act.hard_locked || act.stalled) {
-          // Stay stopped if locked or waiting for retry
-          actuator_set_move_pins(&act, 0);
-          actuator_vref_set(0);
-          pid_reset(&act_pid);
-      } else if (act_in_deadzone) {
-          actuator_set_move_pins(&act, 0);
-          pid_reset(&act_pid);
-          actuator_vref_set(0);
-      } else {
-          pid_update(&act_pid, error, &control_signal);
-          actuator_vref_set(control_signal);
-          int direction = (control_signal > 0) ? 1 : -1;
-          actuator_set_move_pins(&act, direction);
-      }
-      
       actuator_tick(&act);
 
       // Manual Move Status Update
       if (global_fsm.manual_move_pending) {
-          if (act.stalled || act.timeout || act_in_deadzone || act.hard_locked) {
+          if (act.stalled || act.timeout || act.in_deadzone || act.hard_locked) {
               global_fsm.manual_move_pending = false;
               if (act.stalled) printf(">> [MAIN] Manual move stalled!\n");
               if (act.timeout) printf(">> [MAIN] Manual move timeout!\n");
-              if (act_in_deadzone) printf(">> [MAIN] Manual move reached target.\n");
+              if (act.in_deadzone) printf(">> [MAIN] Manual move reached target.\n");
               if (act.hard_locked) printf(">> [MAIN] Manual move hard locked!\n");
           }
       }

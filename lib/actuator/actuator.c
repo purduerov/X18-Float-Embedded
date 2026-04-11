@@ -31,6 +31,10 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->hard_locked = false;
     act->retry_timer = 0;
 
+    // Initialize PID Controller
+    pid_init(&act->pid, ACT_KP, ACT_KI, ACT_KD, (ACT_LOOP_MS / 1000.0), -500.0, 500.0);
+    act->in_deadzone = false;
+
     adc_init();
     adc_gpio_init(act->pos_pin);
 
@@ -96,75 +100,89 @@ void actuator_set_target(Actuator *act, int target_pos) {
 
 void actuator_move_to(Actuator *act, int new_position) {
     actuator_set_target(act, new_position);
-
-    int current_pos = actuator_get_position(act);
-    int direction = (new_position > current_pos) ? 1 : -1;
-
-    if (abs(new_position - current_pos) <= POS_TOL) {
-        direction = 0; // Within tolerance, stop
-    }
-    
-    actuator_set_move_pins(act, direction);
 }
 
 void actuator_tick(Actuator *act) {
-    if (act->moving == 0 && !act->stalled) return; // Allow tick while stalled for retry timer
-
     uint32_t t_now = to_ms_since_boot(get_absolute_time());
-    
-    // Handle Auto-Retry Timer
+    int current_pos = actuator_get_position(act);
+    double error = (double)act->move_target - (double)current_pos;
+    double control_signal = 0;
+
+    // 1. Hysteresis (Deadzone) Logic
+    if (!act->in_deadzone && abs((int)error) <= ACT_DEADZONE_ENTER) {
+        act->in_deadzone = true;
+    } else if (act->in_deadzone && abs((int)error) > ACT_DEADZONE_EXIT) {
+        act->in_deadzone = false;
+    }
+
+    // 2. Handle Auto-Retry Timer (If stalled but not hard-locked)
     if (act->stalled && !act->hard_locked) {
         if (t_now - act->retry_timer > ACT_RETRY_BACKOFF_MS) {
             printf(">> [ACTUATOR] Attempting auto-retry...\n");
             act->stalled = false;
-            act->last_pos_time = t_now; // Reset stall timer for the retry
-            // The main loop will naturally set pins in the next 20ms cycle
+            act->last_pos_time = t_now; 
+            act->last_pos = current_pos;
+            pid_reset(&act->pid);
+        } else {
+            actuator_set_move_pins(act, 0);
+            actuator_vref_set(0);
+            return; 
         }
-        return; 
     }
 
-    if (act->hard_locked || act->moving == 0) return;
+    // 3. Stop if Hard Locked, Stalled (waiting for timer), or in Deadzone
+    if (act->hard_locked || act->stalled || act->in_deadzone) {
+        actuator_set_move_pins(act, 0);
+        actuator_vref_set(0);
+        pid_reset(&act->pid);
+        
+        // Reset move timer if in deadzone so next move starts fresh
+        if (act->in_deadzone) {
+            act->move_start_time = 0;
+        }
+        return;
+    }
 
-    int current_pos = actuator_get_position(act);
-
-    // Initial timer setup if move_to wasn't used or reset
+    // 4. Movement Monitoring (Stall & Timeout)
     if (act->move_start_time == 0) {
         act->move_start_time = t_now;
         act->last_pos_time = t_now;
         act->last_pos = current_pos;
     }
 
-    // Check for movement progress (reset stall timer)
     if (abs(current_pos - act->last_pos) >= ACT_STALL_THRESHOLD) {
         act->last_pos = current_pos;
         act->last_pos_time = t_now;
     }
 
-    // Check for Stall
     if (t_now - act->last_pos_time > ACT_STALL_MS) {
         actuator_set_move_pins(act, 0);
+        actuator_vref_set(0);
+        pid_reset(&act->pid);
         if (act->retry_count < ACT_MAX_RETRIES) {
             act->stalled = true;
             act->retry_count++;
             act->retry_timer = t_now;
-            printf("!! [ACTUATOR] STALL DETECTED at %d. Retrying in %d ms...\n", 
-                   current_pos, ACT_RETRY_BACKOFF_MS);
+            printf("!! [ACTUATOR] STALL DETECTED at %d. Retrying in %d ms...\n", current_pos, ACT_RETRY_BACKOFF_MS);
         } else {
             act->hard_locked = true;
-            printf("!! [ACTUATOR] HARD LOCK: Multiple stalls at %d. Manual reset required.\n", current_pos);
+            printf("!! [ACTUATOR] HARD LOCK: Multiple stalls at %d.\n", current_pos);
         }
-    } 
-    // Check for Timeout
-    else if (t_now - act->move_start_time > ACT_MOVE_TIMEOUT_MS) {
-        printf("!! [ACTUATOR] MOVE TIMEOUT at %d. Stopping.\n", current_pos);
+        return;
+    } else if (t_now - act->move_start_time > ACT_MOVE_TIMEOUT_MS) {
+        printf("!! [ACTUATOR] MOVE TIMEOUT at %d.\n", current_pos);
         actuator_set_move_pins(act, 0);
+        actuator_vref_set(0);
+        pid_reset(&act->pid);
         act->timeout = true;
+        return;
     }
 
-    // Stop if target reached
-    if (abs(act->move_target - current_pos) <= POS_TOL) {
-        actuator_set_move_pins(act, 0);
-    }
+    // 5. Active Control (PID)
+    pid_update(&act->pid, error, &control_signal);
+    actuator_vref_set(control_signal);
+    int direction = (control_signal > 0) ? 1 : -1;
+    actuator_set_move_pins(act, direction);
 }
 
 void actuator_vref_init(void) {

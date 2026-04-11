@@ -3,6 +3,7 @@
 
 #include "pico/stdlib.h"
 #include "hw_config.h"
+#include "pid.h"
 
 // Constants using raw 12-bit ADC values (0-4095)
 #define POS_TOL ACT_POS_TOL
@@ -30,6 +31,10 @@ typedef struct {
     int retry_count;
     bool hard_locked;
     uint32_t retry_timer;
+
+    // Encapsulated Control Intelligence
+    PIDController pid;
+    bool in_deadzone;
 } Actuator;
 
 /**
