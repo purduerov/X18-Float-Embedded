@@ -10,6 +10,8 @@ conductor/
 libdeps/
 
 # IDE and Cache
+graphify-out/
+tools/graphify/
 .cache/
 .vscode/
 compile_commands.json

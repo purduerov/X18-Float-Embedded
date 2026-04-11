@@ -95,11 +95,7 @@ int main() {
   data_logger_init();
   surface_fsm_init(&global_fsm);
 
-  uint32_t waitTime = 0;
-  while (!stdio_usb_connected() && waitTime < 5000) {
-    sleep_ms(100);
-    waitTime += 100;
-  }
+  hw_wait_for_usb(SURFACE_ENABLE_USB_WAIT, 5000);
 
   printf("\n\n=== X18 Surface Station Booting (Ultra Modular) ===\n");
 

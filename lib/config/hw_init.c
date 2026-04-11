@@ -18,3 +18,13 @@ bool hw_init_depth_sensor(MS5837_t *sensor) {
     }
     return true;
 }
+
+void hw_wait_for_usb(bool enabled, uint32_t timeout_ms) {
+    if (!enabled) return;
+    
+    uint32_t waitTime = 0;
+    while (!stdio_usb_connected() && waitTime < timeout_ms) {
+        sleep_ms(100);
+        waitTime += 100;
+    }
+}

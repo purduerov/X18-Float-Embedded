@@ -18,4 +18,12 @@ void hw_init_i2c(void);
  */
 bool hw_init_depth_sensor(MS5837_t *sensor);
 
+/**
+ * @brief Waits for a USB connection for a specified duration.
+ * 
+ * @param enabled If false, the function returns immediately.
+ * @param timeout_ms Maximum time to wait in milliseconds.
+ */
+void hw_wait_for_usb(bool enabled, uint32_t timeout_ms);
+
 #endif // HW_INIT_H

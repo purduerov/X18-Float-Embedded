@@ -15,22 +15,19 @@
 #include "radio_setup.h"
 #include "reflash_target.h"
 #include "storage.h"
+#include "pid.h" // Generic PID for Actuator position
 
 static float_fsm_t global_fsm;
 static volatile bool float_radio_irq_flag = false;
+static bool act_in_deadzone = false;
 
 void onInterrupt(void) { float_radio_irq_flag = true; }
 
 int main() {
   stdio_init_all();
+  hw_wait_for_usb(FLOAT_ENABLE_USB_WAIT, 5000);
 
-  uint32_t waitTime = 0;
-  // while (!stdio_usb_connected() && waitTime < 5000) {
-  //   sleep_ms(100);
-  //   waitTime += 100; // spin forever until usb is connected, no timeout
-  // }
-
-  printf("\n\n=== MATE Float Station Booting (PID Enabled) ===\n");
+  printf("\n\n=== MATE Float Station Booting (Enhanced Control) ===\n");
 
   // --- Initialize Persistent Storage ---
   storage_init();
@@ -44,11 +41,13 @@ int main() {
   }
 
   // --- Initialize Actuator ---
+  actuator_vref_init();
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
-  gpio_init(PIN_VREF);
-  gpio_set_dir(PIN_VREF, GPIO_OUT);
-  gpio_put(PIN_VREF, 1); // Enable full power to motor driver
+  
+  // Inner Actuator PID
+  PIDController act_pid;
+  pid_init(&act_pid, ACT_KP, ACT_KI, ACT_KD, (ACT_LOOP_MS / 1000.0), -500.0, 500.0);
 
   // --- Initialize Depth PID ---
   DepthPID dpid;
@@ -70,109 +69,127 @@ int main() {
   // --- Initialize State Machine ---
   float_fsm_init(&global_fsm, &depth_sensor);
   printf("Float System Ready. Target Depth: %.2f m\n", dpid.target_depth);
+  printf("Serial Commands: 'z' (Zero Depth), 'a <pos>' (Actuator Position), 'p' (Profile), '?' (Sync)\n");
 
-  uint32_t last_pid_time = to_ms_since_boot(get_absolute_time());
+  uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
+  uint32_t last_act_loop_time = last_depth_pid_time;
+
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
 
-    // Run PID loop at 10Hz
-    if (now - last_pid_time >= 100) {
-      // 1. Refresh depth sensor
+    // --- 1. Serial Command Handling (Dashboard Interface) ---
+    static char input_line[64];
+    static int input_pos = 0;
+    int c;
+    while ((c = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT) {
+      if (c == '\n' || c == '\r') {
+        if (input_pos > 0) {
+          input_line[input_pos] = '\0';
+          storage_get_settings(&settings);
+
+          if (input_line[0] == 'z' || input_line[0] == 'Z') {
+            ms5837_read(&depth_sensor);
+            settings.depth_offset = ms5837_get_depth(&depth_sensor);
+            printf(">> [SERIAL] Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
+            storage_set_settings(&settings);
+            storage_save();
+          } else if (input_line[0] == 'a' || input_line[0] == 'A') {
+            int parsed_pos;
+            if (sscanf(input_line + 1, "%d", &parsed_pos) == 1) {
+                global_fsm.actuator_target = parsed_pos;
+                global_fsm.manual_move_pending = true;
+                printf(">> [SERIAL] New Actuator Target: %d\n", global_fsm.actuator_target);
+            }
+          } else if (input_line[0] == 'p' || input_line[0] == 'P') {
+            printf(">> [SERIAL] Starting Profile command via serial...\n");
+            // FSM will handle profile transition if appropriate
+          } else if (input_line[0] == '?') {
+             printf("[SYNC] P=%.2f I=%.2f D=%.2f Co#=%u Time=%u Off=%.3f Act=%d\n",
+                   settings.kp, settings.ki, settings.kd, 
+                   settings.company_number, settings.profile_duration_s, 
+                   settings.depth_offset, global_fsm.actuator_target);
+          }
+          input_pos = 0;
+        }
+      } else if (c >= 32 && c <= 126) {
+        if (input_pos < sizeof(input_line) - 1) {
+          input_line[input_pos++] = (char)c;
+        }
+      }
+    }
+
+    // --- 2. Outer Depth PID Loop (10Hz / 100ms) ---
+    if (now - last_depth_pid_time >= 100) {
       double current_depth = 0.0f;
       if (ms5837_read(&depth_sensor)) {
         current_depth = ms5837_get_depth(&depth_sensor);
       }
 
-      // 2. Refresh PID constants (in case they were updated via radio)
       storage_get_settings(&settings);
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
       dpid.pos_min = settings.act_min;
       dpid.pos_max = settings.act_max;
-      dpid.pid.output_min = (double)settings.act_min;
-      dpid.pid.output_max = (double)settings.act_max;
 
-      // 3. Calculate target actuator position
-      int target_pos = 0;
       if (global_fsm.state == FLOAT_PROFILING) {
+        int target_pos = 0;
         depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
-      } else {
-        target_pos = global_fsm.actuator_target;
+        global_fsm.actuator_target = target_pos;
       }
 
-      // Safety Clamp: Ensure target is within configured bounds
-      if (target_pos < settings.act_min)
-        target_pos = settings.act_min;
-      if (target_pos > settings.act_max)
-        target_pos = settings.act_max;
+      last_depth_pid_time = now;
+    }
 
-      // 4. Command Actuator & Update monitoring (stop if reached)
+    // --- 3. Inner Actuator Control Loop (50Hz / 20ms) ---
+    if (now - last_act_loop_time >= ACT_LOOP_MS) {
       int current_pos = actuator_get_position(&act);
+      int target_pos = global_fsm.actuator_target;
 
-      // If a manual move command is pending, we just let the target_pos drive
-      // it
-      if ((global_fsm.state == FLOAT_IDLE ||
-           global_fsm.state == FLOAT_TEST_CALIBRATE) &&
-          global_fsm.manual_move_pending) {
-        if (abs(current_pos - target_pos) <= POS_TOL) {
-          printf(">> Actuator reached target %d.\n", target_pos);
-          global_fsm.manual_move_pending = false;
-          actuator_set_move_pins(&act, 0);
-        } else {
-          // Check for stall or timeout
-          static uint32_t move_start_time = 0;
-          static int last_p = 0;
-          static uint32_t last_p_time = 0;
+      // Safety Clamp
+      storage_get_settings(&settings);
+      if (target_pos < settings.act_min) target_pos = settings.act_min;
+      if (target_pos > settings.act_max) target_pos = settings.act_max;
 
-          uint32_t t_now = to_ms_since_boot(get_absolute_time());
+      double error = (double)target_pos - (double)current_pos;
+      double control_signal = 0;
 
-          // Initialization of move tracking
-          if (move_start_time == 0 || last_p_time == 0) {
-            move_start_time = t_now;
-            last_p = current_pos;
-            last_p_time = t_now;
-            printf(">> Starting non-blocking move to %d...\n", target_pos);
-          }
-
-          if (abs(current_pos - last_p) > 2) {
-            last_p = current_pos;
-            last_p_time = t_now;
-          }
-
-          if (t_now - last_p_time > 1000) {
-            printf(">> Actuator Stalled! Stopping.\n");
-            global_fsm.manual_move_pending = false;
-            move_start_time = 0;
-            actuator_set_move_pins(&act, 0);
-          } else if (t_now - move_start_time > 8000) {
-            printf(">> Actuator Timeout! Stopping.\n");
-            global_fsm.manual_move_pending = false;
-            move_start_time = 0;
-            actuator_set_move_pins(&act, 0);
-          } else {
-            actuator_move_to(&act, target_pos);
-          }
-        }
-      } else {
-        // Reset move start time when not in a manual move
-        // This is a bit of a hack using a static, but works for now
-        // Normal non-blocking PID operation during profiling or idle
-        // maintenance
-        if (abs(current_pos - target_pos) <= POS_TOL) {
-          actuator_set_move_pins(&act, 0);
-        } else {
-          actuator_move_to(&act, target_pos);
-        }
+      // Hysteresis Logic
+      if (!act_in_deadzone && abs((int)error) <= ACT_DEADZONE_ENTER) {
+          act_in_deadzone = true;
+      } else if (act_in_deadzone && abs((int)error) > ACT_DEADZONE_EXIT) {
+          act_in_deadzone = false;
       }
 
-      last_pid_time = now;
+      if (act_in_deadzone) {
+          actuator_set_move_pins(&act, 0);
+          pid_reset(&act_pid);
+          actuator_vref_set(0);
+      } else {
+          pid_update(&act_pid, error, &control_signal);
+          actuator_vref_set(control_signal);
+          int direction = (control_signal > 0) ? 1 : -1;
+          actuator_set_move_pins(&act, direction);
+      }
+      
+      actuator_tick(&act);
+
+      // Manual Move Status Update
+      if (global_fsm.manual_move_pending) {
+          if (act.stalled || act.timeout || act_in_deadzone) {
+              global_fsm.manual_move_pending = false;
+              if (act.stalled) printf(">> [MAIN] Manual move stalled!\n");
+              if (act.timeout) printf(">> [MAIN] Manual move timeout!\n");
+              if (act_in_deadzone) printf(">> [MAIN] Manual move reached target.\n");
+          }
+      }
+
+      last_act_loop_time = now;
     }
 
     global_fsm.current_actuator_pos = actuator_get_position(&act);
     float_fsm_update(&global_fsm);
 
-    // Process Radio Events outside of ISR
     if (float_radio_irq_flag) {
       float_radio_irq_flag = false;
       float_fsm_process_event(&global_fsm);
