@@ -92,21 +92,12 @@ static const console_command_t cmd_table[] = {
 // --- Main Application ---
 
 int main() {
-  stdio_init_all();
-  stdio_set_translate_crlf(&stdio_usb, false); // Binary safe
-  data_logger_init();
-  surface_fsm_init(&global_fsm);
-
-  hw_wait_for_usb(SURFACE_ENABLE_USB_WAIT, 5000);
-
-  printf("\n\n=== X18 Surface Station Booting (Ultra Modular) ===\n");
-
-  if (!radio_setup_init(onInterrupt)) {
-    printf("Radio init failed! Halting.\n");
-    while (true)
-      sleep_ms(1000);
+  // Use unified system init (handles stdio, data_logger, radio, etc)
+  if (!system_init(onInterrupt, NULL)) {
+    while (true) sleep_ms(1000);
   }
 
+  surface_fsm_init(&global_fsm);
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
 
   printf("Surface Station Ready.\n");
