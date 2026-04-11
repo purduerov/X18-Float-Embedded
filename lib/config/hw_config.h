@@ -1,4 +1,4 @@
-#ifndef HW_CONFIG_H
+﻿#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -43,10 +43,12 @@
 
 // --- Actuator Parameters ---
 #define DEFAULT_ACTUATOR_POS 4095 // Default to fully extended
-#define ACT_POS_TOL 50            // ADC units (~2% of 4095)
+#define ACT_POS_TOL 30            // ADC units (~2% of 4095)
 #define ACT_ADC_MAX 4095          // 12-bit ADC max
 #define ACT_MOVE_TIMEOUT_MS 8000  // Max time to reach target
 #define ACT_STALL_MS 1000         // Max time without ADC change before stall
+#define ACT_RETRY_BACKOFF_MS 2000 // Time to wait before auto-retrying
+#define ACT_MAX_RETRIES 1         // Number of allowed retries
 #define ACT_FILTER_SIZE 5         // Moving average filter size for ADC
 #define ACT_STALL_THRESHOLD 2     // Minimum ADC change to reset stall timer
 
@@ -54,7 +56,7 @@
 #define ACT_KP 0.8f
 #define ACT_KI 0.05f
 #define ACT_KD 0.15f
-#define ACT_LOOP_MS 20           // 50Hz control loop
+#define ACT_LOOP_MS 20 // 50Hz control loop
 
 // --- Hysteresis / Deadzone ---
 #define ACT_DEADZONE_ENTER 20
@@ -71,7 +73,7 @@
 
 // --- USB Wait Toggles ---
 // Set to 1 for testing (waits for serial), 0 for production (immediate boot)
-#define FLOAT_ENABLE_USB_WAIT 1
+#define FLOAT_ENABLE_USB_WAIT 0
 #define SURFACE_ENABLE_USB_WAIT 1
 
 #endif // HW_CONFIG_H
