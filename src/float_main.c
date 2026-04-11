@@ -1,4 +1,4 @@
-#include "hardware/i2c.h"
+﻿#include "hardware/i2c.h"
 #include "ms5837.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
@@ -161,7 +161,12 @@ int main() {
           act_in_deadzone = false;
       }
 
-      if (act_in_deadzone) {
+      if (act.hard_locked || act.stalled) {
+          // Stay stopped if locked or waiting for retry
+          actuator_set_move_pins(&act, 0);
+          actuator_vref_set(0);
+          pid_reset(&act_pid);
+      } else if (act_in_deadzone) {
           actuator_set_move_pins(&act, 0);
           pid_reset(&act_pid);
           actuator_vref_set(0);
@@ -176,11 +181,12 @@ int main() {
 
       // Manual Move Status Update
       if (global_fsm.manual_move_pending) {
-          if (act.stalled || act.timeout || act_in_deadzone) {
+          if (act.stalled || act.timeout || act_in_deadzone || act.hard_locked) {
               global_fsm.manual_move_pending = false;
               if (act.stalled) printf(">> [MAIN] Manual move stalled!\n");
               if (act.timeout) printf(">> [MAIN] Manual move timeout!\n");
               if (act_in_deadzone) printf(">> [MAIN] Manual move reached target.\n");
+              if (act.hard_locked) printf(">> [MAIN] Manual move hard locked!\n");
           }
       }
 
