@@ -27,6 +27,9 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->last_pos = 0;
     act->stalled = false;
     act->timeout = false;
+    act->retry_count = 0;
+    act->hard_locked = false;
+    act->retry_timer = 0;
 
     adc_init();
     adc_gpio_init(act->pos_pin);
@@ -86,6 +89,9 @@ void actuator_move_to(Actuator *act, int new_position) {
         act->last_pos = actuator_get_position(act);
         act->stalled = false;
         act->timeout = false;
+        act->retry_count = 0;    // Reset retries on new command
+        act->hard_locked = false; // Clear lock on new command
+        act->retry_timer = 0;    // Reset retry timer
     }
 
     int current_pos = actuator_get_position(act);
