@@ -57,7 +57,7 @@ static void handle_actuator(const char *params) {
   }
 }
 
-static void handle_bounds(const char *params) {
+static void handle_company_range(const char *params) {
   unsigned int min_val, max_val;
   if (sscanf(params, "%u %u", &min_val, &max_val) == 2) {
     surface_fsm_cmd_set_act_bounds(&global_fsm, (uint16_t)min_val,
@@ -84,7 +84,7 @@ static const console_command_t cmd_table[] = {
     {'t', handle_duration, "Set Duration (Secs)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
-    {'b', handle_bounds, "Set Actuator Bounds (Min Max)"},
+    {'b', handle_company_range, "Set Actuator Bounds (Min Max)"},
     {'?', handle_sync, "Sync Settings"},
     {'r', handle_reset, "Reset State Machine"},
     {'k', handle_test, "Enter Test Mode"}};
@@ -94,7 +94,11 @@ static const console_command_t cmd_table[] = {
 int main() {
   // Use unified system init (handles stdio, data_logger, radio, etc)
   if (!system_init(onInterrupt, NULL)) {
-    while (true) sleep_ms(1000);
+    printf("[FATAL] System Init Failed. Radio SX1276 missing?\n");
+    while (true) {
+        printf("Halting...\n");
+        sleep_ms(2000);
+    }
   }
 
   surface_fsm_init(&global_fsm);

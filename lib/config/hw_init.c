@@ -16,41 +16,53 @@
 #include "radio_setup.h"
 
 bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor) {
+    // 1. Initialize Serial
     stdio_init_all();
-    sleep_ms(100); 
-    printf("\n[SYSTEM] Booting...\n");
+    
+    // 2. MANDATORY WAIT for USB (Crucial for seeing first prints)
+    // Even if wait toggle is 0, we give it a moment to avoid missing the boot msg
+    sleep_ms(2000); 
+
+    printf("\n\n[SYSTEM] --- X18 STARTUP DIAGNOSTIC ---\n");
 
 #ifdef TARGET_SURFACE
-    printf("[SYSTEM] Target: SURFACE detected\n");
-    hw_wait_for_usb(SURFACE_ENABLE_USB_WAIT, 5000);
+    printf("[SYSTEM] Mode: SURFACE STATION\n");
+    hw_wait_for_usb(SURFACE_ENABLE_USB_WAIT, 3000);
+    printf("[SYSTEM] Init: Data Logger\n");
     data_logger_init();
 #elif defined(TARGET_FLOAT)
-    printf("[SYSTEM] Target: FLOAT detected\n");
-    hw_wait_for_usb(FLOAT_ENABLE_USB_WAIT, 5000);
+    printf("[SYSTEM] Mode: FLOAT STATION\n");
+    hw_wait_for_usb(FLOAT_ENABLE_USB_WAIT, 3000);
+    printf("[SYSTEM] Init: Storage\n");
     storage_init();
     
+    printf("[SYSTEM] Init: I2C\n");
     hw_init_i2c();
+
     if (depth_sensor) {
+        printf("[SYSTEM] Init: MS5837 Depth Sensor\n");
         if (!hw_init_depth_sensor(depth_sensor)) {
-            printf("[SYSTEM] WARNING: MS5837 NOT FOUND (Check wiring!)\n");
+            printf("[SYSTEM] WARNING: MS5837 NOT FOUND (Continuing without sensor)\n");
         } else {
-            printf("[SYSTEM] MS5837 Initialized.\n");
+            printf("[SYSTEM] MS5837: OK\n");
         }
     }
+    printf("[SYSTEM] Init: Actuator VREF\n");
     actuator_vref_init();
 #else
-    printf("[SYSTEM] WARNING: No TARGET macro defined!\n");
+    printf("[SYSTEM] WARNING: No TARGET macro! Use env:float or env:surface.\n");
 #endif
 
     if (radio_irq_callback) {
+        printf("[SYSTEM] Init: LoRa Radio (SX1276)\n");
         if (!radio_setup_init(radio_irq_callback)) {
-            printf("[SYSTEM] CRITICAL ERROR: RADIO FAILED to initialize\n");
+            printf("[SYSTEM] CRITICAL ERROR: Radio Hardware Failure!\n");
             return false;
         }
-        printf("[SYSTEM] Radio Initialized.\n");
+        printf("[SYSTEM] Radio: OK\n");
     }
 
-    printf("[SYSTEM] Hardware Init Complete.\n");
+    printf("[SYSTEM] --- STARTUP COMPLETE ---\n\n");
     return true;
 }
 
@@ -78,4 +90,5 @@ void hw_wait_for_usb(bool enabled, uint32_t timeout_ms) {
         sleep_ms(100);
         waitTime += 100;
     }
+    sleep_ms(500); // Buffer for terminal
 }

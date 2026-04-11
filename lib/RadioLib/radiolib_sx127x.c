@@ -21,16 +21,16 @@ int16_t RadioLib_SX127x_SetFrequency(RadioLibSX127x_t* chip, float freq) {
 int16_t RadioLib_SX127x_SetBandwidth(RadioLibSX127x_t* chip, float bw) {
     uint8_t bwVal = 0xFF;
     // Map float BW to register value (0-9)
-    if (bw == 7.8) bwVal = 0;
-    else if (bw == 10.4) bwVal = 1;
-    else if (bw == 15.6) bwVal = 2;
-    else if (bw == 20.8) bwVal = 3;
-    else if (bw == 31.25) bwVal = 4;
-    else if (bw == 41.7) bwVal = 5;
-    else if (bw == 62.5) bwVal = 6;
-    else if (bw == 125.0) bwVal = 7;
-    else if (bw == 250.0) bwVal = 8;
-    else if (bw == 500.0) bwVal = 9;
+    if (bw == 7.8f) bwVal = 0;
+    else if (bw == 10.4f) bwVal = 1;
+    else if (bw == 15.6f) bwVal = 2;
+    else if (bw == 20.8f) bwVal = 3;
+    else if (bw == 31.25f) bwVal = 4;
+    else if (bw == 41.7f) bwVal = 5;
+    else if (bw == 62.5f) bwVal = 6;
+    else if (bw == 125.0f) bwVal = 7;
+    else if (bw == 250.0f) bwVal = 8;
+    else if (bw == 500.0f) bwVal = 9;
 
     if (bwVal == 0xFF) return -3; // RADIOLIB_ERR_INVALID_BANDWIDTH
 

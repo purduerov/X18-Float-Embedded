@@ -57,7 +57,6 @@ static void handle_sync(const char *params) {
 
 static void handle_profile(const char *params) {
     printf(">> [CONSOLE] Starting Profile command via serial...\n");
-    // State machine handles transition logic
 }
 
 static const console_command_t cmd_table[] = {
@@ -67,14 +66,12 @@ static const console_command_t cmd_table[] = {
     {'?', handle_sync, "Sync Settings"}};
 
 int main() {
-  // 1. system_init now handles EVERYTHING (stdio, storage, I2C, MS5837, Actuator VREF, AND Radio)
+  // system_init handles everything including stdio_init_all
   if (!system_init(onInterrupt, &depth_sensor)) {
       while (true) sleep_ms(1000);
   }
 
-  printf("=== MATE Float Station Booting (Full Integrated Init) ===\n");
-
-  // 2. Initialize Actuator Instance
+  // --- Initialize High Level Objects ---
   Actuator act;
   actuator_init(&act, PIN_POT, PIN_EXT, PIN_RET);
 
@@ -86,7 +83,6 @@ int main() {
                  settings.act_max);
   depth_pid_set_target(&dpid, 1.0);
 
-  // 3. Application setup
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
   float_fsm_init(&global_fsm, &depth_sensor);
 
@@ -99,10 +95,9 @@ int main() {
     uint32_t now = to_ms_since_boot(get_absolute_time());
     console_update();
 
-    // Hot-reload settings once per loop for both PID and Clamp
     storage_get_settings(&settings);
 
-    // --- 2. Outer Depth PID Loop (10Hz / 100ms) ---
+    // --- 2. Outer Depth PID Loop ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 0.0f;
       if (ms5837_read(&depth_sensor)) {
@@ -123,16 +118,15 @@ int main() {
       last_depth_pid_time = now;
     }
 
-    // --- 3. Inner Actuator Control Loop (50Hz / 20ms) ---
+    // --- 3. Inner Actuator Control Loop ---
     if (now - last_act_loop_time >= ACT_LOOP_MS) {
       int target_pos = global_fsm.actuator_target;
-
-      // Safety Clamp
       if (target_pos < settings.act_min) target_pos = settings.act_min;
       if (target_pos > settings.act_max) target_pos = settings.act_max;
 
       actuator_set_target(&act, target_pos);
       actuator_tick(&act);
+      
       if (global_fsm.manual_move_pending) {
           if (act.stalled || act.timeout || act.in_deadzone || act.hard_locked) {
               global_fsm.manual_move_pending = false;
