@@ -110,7 +110,7 @@ int main() {
   // --- Initialize State Machine ---
   float_fsm_init(&global_fsm, &depth_sensor);
 
-  printf("Float System Ready.\n");
+  printf("Float Ready.\n");
   printf("Serial Commands: 'z' (Zero Depth), 'a <pos>' (Actuator Position), 'p' (Profile), '?' (Sync)\n");
 
   uint32_t last_act_update = to_ms_since_boot(get_absolute_time());
@@ -162,6 +162,8 @@ int main() {
 
     // --- Actuator Control Loop (20ms) ---
     if (now - last_act_update >= LOOP_DELAY_MS) {
+        actuator_tick(&act); 
+        
         int current_pos = get_filtered_pos(&act);
         double error = (double)global_fsm.actuator_target - (double)current_pos;
         double control_signal = 0;
@@ -172,7 +174,11 @@ int main() {
             act_in_deadzone = false;
         }
 
-        if (act_in_deadzone) {
+        if (act.hard_locked || act.stalled) {
+            actuator_set_move_pins(&act, 0);
+            pid_reset(&act_pid);
+            set_vref_voltage(0);
+        } else if (act_in_deadzone) {
             actuator_set_move_pins(&act, 0);
             pid_reset(&act_pid);
             set_vref_voltage(0);
