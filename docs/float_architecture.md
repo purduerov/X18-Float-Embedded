@@ -1,4 +1,4 @@
-# Float Unit (Underwater) Architecture
+﻿# Float Unit (Underwater) Architecture
 
 This document describes the software architecture for the underwater float, including its program flow and state machine logic.
 
@@ -6,31 +6,38 @@ This document describes the software architecture for the underwater float, incl
 
 ## 1. Float Program Flow (Main Loop)
 
-The main loop in `src/float_main.c` executes periodic tasks like PID control and safety checks.
+The float firmware uses a unified boot sequence followed by a multi-rate control loop.
 
 ```mermaid
 flowchart TD
-    Start([Start]) --> Init[Initialize Hardware &<br/>Flash Storage]
-    Init --> ReadSettings[Read PID & Mission<br/>Settings from Flash]
+    Start([Start]) --> Init[Unified system_init]
+    Init --> ReadSettings[Read Flash Config]
     ReadSettings --> Loop[Main Loop]
     
     subgraph LoopSection [Main Execution Loop]
         Loop --> TimerPID{PID Timer:<br/>100ms?}
         TimerPID -- Yes --> ReadSensor[Read Depth Sensor]
-        ReadSensor --> CalcPID[Calculate Target<br/>Actuator Position]
-        CalcPID --> MoveAct[Command Actuator<br/>Movement]
-        MoveAct --> SafetyCheck[Safety: Stall &<br/>Timeout Detection]
-        SafetyCheck --> FSMUpdate[Update FSM &<br/>Log Data]
+        ReadSensor --> CalcPID[Calculate Depth PID]
+        CalcPID --> MoveAct[Command Actuator]
+        MoveAct --> FSMUpdate[Update FSM &<br/>Log Data]
         
-        TimerPID -- No --> FSMUpdate
+        TimerPID -- No --> TimerAct{Act Timer:<br/>20ms?}
+        TimerAct -- Yes --> TickAct[Actuator Tick]
+        TickAct --> FSMUpdate
+        TimerAct -- No --> FSMUpdate
         
-        FSMUpdate --> RadioIRQ{Radio<br/>Interrupt?}
-        RadioIRQ -- Yes --> ProcessPacket[Process Packet /<br/>Event]
+        FSMUpdate --> RadioIRQ{Radio<br/>Event?}
+        RadioIRQ -- Yes --> ProcessPacket[Process Packet]
         ProcessPacket --> Sleep[Sleep 1ms]
         RadioIRQ -- No --> Sleep
         Sleep --> Loop
     end
 ```
+
+### Control Rates
+- **Depth PID (10Hz)**: Calculates the required buoyancy adjustment based on target depth.
+- **Actuator Loop (50Hz)**: Handles non-blocking motor control, including stall detection and soft-start.
+- **State Machine (ASAP)**: Processes incoming radio commands and transitions through mission phases.
 
 ---
 
@@ -59,22 +66,13 @@ stateDiagram-v2
     
     FLOAT_DUMPING_DATA --> FLOAT_IDLE : All Data Sent\n(CMD_DATA_DONE)
     FLOAT_DUMPING_DATA --> FLOAT_DUMPING_DATA : Wait for ACKs /\nRetransmit
-    
-    FLOAT_TEST_CALIBRATE --> FLOAT_TEST_CALIBRATE : Broadcast Live\nTelemetry (1s)
-    
-    %% Global Reset
-    FLOAT_PRE_DIVE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
-    FLOAT_PROFILING --> FLOAT_IDLE : Received\nCMD_RESET_FSM
-    FLOAT_PROFILE_DONE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
-    FLOAT_DUMPING_DATA --> FLOAT_IDLE : Received\nCMD_RESET_FSM
-    FLOAT_TEST_CALIBRATE --> FLOAT_IDLE : Received\nCMD_RESET_FSM
 ```
 
 ---
 
 ## 3. Implementation Details
 
-- **Safety Overrides**: The float implements non-blocking actuator control with a 1-second stall detection and 8-second timeout to protect the hardware.
-- **Persistent Storage**: All mission parameters (PID constants, actuator bounds, etc.) are saved to the internal flash using LittleFS.
-- **Checksum Verification**: Every incoming packet is validated using a CRC-8/XOR checksum defined in `packets.h`.
-- **Forced Resets**: The `CMD_RESET_FSM` command allows the operator to manually override the state machine and return it to `IDLE`.
+- **Unified Boot**: `system_init()` handles the deterministic startup of Serial, Storage (LittleFS), I2C, MS5837 Sensor, and the SX1276 Radio.
+- **Safety Overrides**: Implements 1-second stall detection and 8-second total movement timeout to protect the buoyancy mechanism.
+- **Persistent Storage**: Mission parameters (PID, bounds, depth offset) are saved to internal flash.
+- **Checksum Verification**: Every incoming packet is validated using an XOR checksum.

@@ -1,4 +1,4 @@
-import serial
+﻿import serial
 import serial.tools.list_ports
 import threading
 import time
@@ -18,6 +18,7 @@ class HardwareManager:
             "P": "--", "I": "--", "D": "--", 
             "Co#": "--", "Time": "--", "ADC": "--",
             "ActMin": "--", "ActMax": "--",
+            "Off": "--",
             "LiveDepth": "--"
         }
         
