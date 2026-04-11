@@ -4,6 +4,16 @@
 #include "hardware/i2c.h"
 #include "ms5837.h"
 #include <stdbool.h>
+#include <stdint.h>
+
+/**
+ * @brief Performs unified system initialization based on TARGET_* defines.
+ * 
+ * @param radio_irq_callback Callback for LoRa IRQ. Can be NULL if radio not needed.
+ * @param depth_sensor Optional pointer to depth sensor struct (Float only).
+ * @return true if all critical hardware initialized successfully.
+ */
+bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor);
 
 /**
  * @brief Initializes the I2C port and GPIO pins based on hw_config.h

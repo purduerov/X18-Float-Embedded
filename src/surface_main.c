@@ -15,9 +15,9 @@
 
 // --- Global State ---
 static surface_fsm_t global_fsm;
-static volatile bool operationDoneFlag = false;
+static volatile bool radio_event_flag = false;
 
-void onInterrupt(void) { operationDoneFlag = true; }
+void onInterrupt(void) { radio_event_flag = true; }
 
 // --- Dashboard Command Handlers ---
 
@@ -92,21 +92,11 @@ static const console_command_t cmd_table[] = {
 // --- Main Application ---
 
 int main() {
-  stdio_init_all();
-  stdio_set_translate_crlf(&stdio_usb, false); // Binary safe
-  data_logger_init();
-  surface_fsm_init(&global_fsm);
-
-  hw_wait_for_usb(SURFACE_ENABLE_USB_WAIT, 5000);
-
-  printf("\n\n=== X18 Surface Station Booting (Ultra Modular) ===\n");
-
-  if (!radio_setup_init(onInterrupt)) {
-    printf("Radio init failed! Halting.\n");
-    while (true)
-      sleep_ms(1000);
+  if (!system_init(onInterrupt, NULL)) {
+    while (true) sleep_ms(1000);
   }
 
+  surface_fsm_init(&global_fsm);
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
 
   printf("Surface Station Ready.\n");
@@ -124,7 +114,7 @@ int main() {
     if (now - lastDebugPrint >= 2000) {
       printf("[DEBUG] State: %s | Transmitting: %d | IRQ Flag: %d\n",
              surface_fsm_get_state_name(&global_fsm),
-             surface_fsm_is_transmitting(&global_fsm), operationDoneFlag);
+             surface_fsm_is_transmitting(&global_fsm), radio_event_flag);
       lastDebugPrint = now;
     }
 
@@ -141,8 +131,8 @@ int main() {
     }
 
     // 3. Process Radio Interface (Packets and IRQs)
-    if (operationDoneFlag) {
-      operationDoneFlag = false;
+    if (radio_event_flag) {
+      radio_event_flag = false;
       surface_fsm_process_event(&global_fsm);
     }
 
