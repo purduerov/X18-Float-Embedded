@@ -105,9 +105,23 @@ void actuator_move_to(Actuator *act, int new_position) {
 }
 
 void actuator_tick(Actuator *act) {
-    if (act->moving == 0) return;
+    if (act->moving == 0 && !act->stalled) return; // Allow tick while stalled for retry timer
 
     uint32_t t_now = to_ms_since_boot(get_absolute_time());
+    
+    // Handle Auto-Retry Timer
+    if (act->stalled && !act->hard_locked) {
+        if (t_now - act->retry_timer > ACT_RETRY_BACKOFF_MS) {
+            printf(">> [ACTUATOR] Attempting auto-retry...\n");
+            act->stalled = false;
+            act->last_pos_time = t_now; // Reset stall timer for the retry
+            // The main loop will naturally set pins in the next 20ms cycle
+        }
+        return; 
+    }
+
+    if (act->hard_locked || act->moving == 0) return;
+
     int current_pos = actuator_get_position(act);
 
     // Initial timer setup if move_to wasn't used or reset
@@ -125,9 +139,17 @@ void actuator_tick(Actuator *act) {
 
     // Check for Stall
     if (t_now - act->last_pos_time > ACT_STALL_MS) {
-        printf("!! [ACTUATOR] STALL DETECTED at %d. Stopping.\n", current_pos);
         actuator_set_move_pins(act, 0);
-        act->stalled = true;
+        if (act->retry_count < ACT_MAX_RETRIES) {
+            act->stalled = true;
+            act->retry_count++;
+            act->retry_timer = t_now;
+            printf("!! [ACTUATOR] STALL DETECTED at %d. Retrying in %d ms...\n", 
+                   current_pos, ACT_RETRY_BACKOFF_MS);
+        } else {
+            act->hard_locked = true;
+            printf("!! [ACTUATOR] HARD LOCK: Multiple stalls at %d. Manual reset required.\n", current_pos);
+        }
     } 
     // Check for Timeout
     else if (t_now - act->move_start_time > ACT_MOVE_TIMEOUT_MS) {
