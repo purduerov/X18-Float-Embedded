@@ -46,6 +46,13 @@ static void handle_duration(const char *params) {
   }
 }
 
+static void handle_target_depth(const char *params) {
+  float depth;
+  if (sscanf(params, "%f", &depth) == 1) {
+    surface_fsm_cmd_set_target_depth(&global_fsm, depth);
+  }
+}
+
 static void handle_zero(const char *params) {
   surface_fsm_cmd_zero_depth(&global_fsm);
 }
@@ -82,6 +89,7 @@ static const console_command_t cmd_table[] = {
     {'s', handle_pid, "Set PID (P I D)"},
     {'c', handle_company, "Set Company ID"},
     {'t', handle_duration, "Set Duration (Secs)"},
+    {'d', handle_target_depth, "Set Target Depth (m)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
     {'b', handle_company_range, "Set Actuator Bounds (Min Max)"},
@@ -106,7 +114,7 @@ int main() {
 
   printf("Surface Station Ready.\n");
   printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company), "
-         "'t <Sec>' (Time), 'z' (Zero Depth), '?' (Sync)\n");
+         "'t <Sec>' (Time), 'd <m>' (Depth), 'z' (Zero Depth), '?' (Sync)\n");
 
   uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 

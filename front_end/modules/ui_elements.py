@@ -43,6 +43,10 @@ def render_sidebar(hw):
             new_dur = st.number_input("Duration (Secs)", step=1, value=DEFAULT_DURATION_S)
             if st.form_submit_button("SET DURATION", use_container_width=True): hw.update_duration(int(new_dur))
 
+        with st.form("depth_form"):
+            new_depth = st.number_input("Target Depth (m)", step=0.1, value=1.0)
+            if st.form_submit_button("SET TARGET DEPTH", use_container_width=True): hw.update_target_depth(float(new_depth))
+
         with st.form("pid_form"):
             p_val = st.number_input("P", step=0.1, value=DEFAULT_P)
             i_val = st.number_input("I", step=0.1, value=DEFAULT_I)
@@ -63,15 +67,9 @@ def render_sidebar(hw):
 
 def render_metrics(hw):
     max_depth = 0.0
-    hold25, hold40 = 0, 0
-    
     for p in hw.data_log:
         d = p["Depth (m)"]
         if d > max_depth: max_depth = d
-        if 2.17 <= d <= 2.83: hold25 += 1
-        else: hold25 = 0
-        if 0.07 <= d <= 0.73: hold40 += 1
-        else: hold40 = 0
 
     time_left_str = "--"
     if hw.profile_start_time:
@@ -83,12 +81,10 @@ def render_metrics(hw):
             time_left_str = "DONE"
             hw.profile_start_time = None
 
-    m1, m2, m3, m4, m5 = st.columns(5)
+    m1, m2, m3 = st.columns(3)
     m1.metric("Mission State", hw.mission_status)
     m2.metric("⏱️ Countdown", time_left_str)
     m3.metric("Max Depth", f"{max_depth:.2f} m")
-    m4.metric("2.5m Hold", "✅ VALIDATED" if hold25 >= 7 else "⏳ Searching")
-    m5.metric("40cm Hold", "✅ VALIDATED" if hold40 >= 7 else "⏳ Searching")
 
 def render_main_content(hw):
     col_chart, col_actions = st.columns([4, 1], gap="medium")
@@ -109,6 +105,7 @@ def render_main_content(hw):
         
         st.markdown("### Active Config")
         st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
+        st.write(f"**Target:** {hw.float_settings.get('Tar', '--')} m")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
         st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")

@@ -88,6 +88,11 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             printf(">> Profile Duration Updated: %u seconds. Saving to Flash...\n", settings.profile_duration_s);
                             storage_set_settings(&settings);
                             storage_save();
+                        } else if (rx_pkt.command == CMD_SET_TARGET_DEPTH) {
+                            settings.target_depth = rx_pkt.payload.settings.target_depth;
+                            printf(">> Target Depth Updated: %.2f m. Saving to Flash...\n", settings.target_depth);
+                            storage_set_settings(&settings);
+                            storage_save();
                         } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
                             ms5837_read(fsm->depth_sensor);
                             settings.depth_offset = ms5837_get_depth(fsm->depth_sensor);

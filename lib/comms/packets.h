@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_PAYLOAD_SIZE 24
+#define MAX_PAYLOAD_SIZE 32
 
 typedef enum
 {
@@ -27,7 +27,8 @@ typedef enum
     CMD_SET_ACT_BOUNDS = 0x10,
     CMD_ENTER_TEST = 0x11,
     CMD_REP_TEST_DATA = 0x12,
-    CMD_BOOTLOADER = 0x13
+    CMD_BOOTLOADER = 0x13,
+    CMD_SET_TARGET_DEPTH = 0x14
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -44,6 +45,7 @@ typedef struct __attribute__((packed))
             float kp;
             float ki;
             float kd;
+            float target_depth;
             uint16_t company_number;
             uint16_t profile_duration_s; 
             uint16_t actuator_target;

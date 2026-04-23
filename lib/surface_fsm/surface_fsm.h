@@ -49,6 +49,7 @@ void surface_fsm_cmd_begin_profile(surface_fsm_t *fsm);
 void surface_fsm_cmd_set_pid(surface_fsm_t *fsm, float p, float i, float d);
 void surface_fsm_cmd_set_company(surface_fsm_t *fsm, uint16_t id);
 void surface_fsm_cmd_set_duration(surface_fsm_t *fsm, uint16_t seconds);
+void surface_fsm_cmd_set_target_depth(surface_fsm_t *fsm, float depth);
 void surface_fsm_cmd_zero_depth(surface_fsm_t *fsm);
 void surface_fsm_cmd_set_actuator(surface_fsm_t *fsm, uint16_t position);
 void surface_fsm_cmd_set_act_bounds(surface_fsm_t *fsm, uint16_t min_val, uint16_t max_val);

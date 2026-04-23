@@ -15,7 +15,7 @@ class HardwareManager:
         self.first_timestamp = None
         
         self.float_settings = {
-            "P": "--", "I": "--", "D": "--", 
+            "P": "--", "I": "--", "D": "--", "Tar": "--",
             "Co#": "--", "Time": "--", "ADC": "--",
             "ActMin": "--", "ActMax": "--",
             "Off": "--",
@@ -88,6 +88,10 @@ class HardwareManager:
     def update_duration(self, val):
         self.send_command(f"t {val}")
         self.float_settings["Time"] = str(val)
+
+    def update_target_depth(self, val):
+        self.send_command(f"d {val}")
+        self.float_settings["Tar"] = str(val)
         
     def update_pid(self, p, i, d):
         self.send_command(f"s {p} {i} {d}")

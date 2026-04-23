@@ -51,8 +51,8 @@ static void handle_sync(const char *params) {
     storage_get_settings(&settings);
     // ADC= is used by dashboard for live actuator position. 
     // Added ActMin/ActMax for UI limit verification.
-    printf("[SYNC] P=%.2f I=%.2f D=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d\n",
-           settings.kp, settings.ki, settings.kd, 
+    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d\n",
+           settings.kp, settings.ki, settings.kd, settings.target_depth,
            settings.company_number, settings.profile_duration_s, 
            settings.depth_offset, global_fsm.current_actuator_pos,
            settings.act_min, settings.act_max);
@@ -81,10 +81,10 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
 
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1,
-                 settings.act_min,
-                 settings.act_max);
-  depth_pid_set_target(&dpid, 1.0);
+  // We now use the PID to calculate a velocity (change per tick).
+  // The min/max limits here are the max ADJUSTMENT per tick (e.g. +/- 10 units)
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, -10, 10);
+  depth_pid_set_target(&dpid, settings.target_depth);
 
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
   float_fsm_init(&global_fsm, &depth_sensor);
@@ -110,13 +110,16 @@ int main() {
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
+      depth_pid_set_target(&dpid, settings.target_depth);
+      
+      // Hardware limits for clamping the final position
       dpid.pos_min = settings.act_min;
       dpid.pos_max = settings.act_max;
 
       if (global_fsm.state == FLOAT_PROFILING) {
-        int target_pos = 0;
-        depth_pid_calculate_target_pos(&dpid, current_depth, &target_pos);
-        global_fsm.actuator_target = target_pos;
+        int current_target = (int)global_fsm.actuator_target;
+        depth_pid_calculate_target_pos(&dpid, current_depth, &current_target);
+        global_fsm.actuator_target = (uint16_t)current_target;
       }
       last_depth_pid_time = now;
     }

@@ -71,6 +71,15 @@ void surface_fsm_cmd_set_duration(surface_fsm_t *fsm, uint16_t seconds) {
     }
 }
 
+void surface_fsm_cmd_set_target_depth(surface_fsm_t *fsm, float depth) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Target Depth Update: %.2f m\n", depth);
+        packet_t tx_pkt = {.command = CMD_SET_TARGET_DEPTH, .seq_num = 0};
+        tx_pkt.payload.settings.target_depth = depth;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
 void surface_fsm_cmd_zero_depth(surface_fsm_t *fsm) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
         printf(">> Sending ZERO_DEPTH command via radio...\n");
@@ -148,15 +157,17 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Co#=%u, Time=%u, ADC=%u, ActMin=%u, ActMax=%u\n",
+                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Co#=%u, Time=%u, ADC=%u, ActMin=%u, ActMax=%u\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
+                    rx_pkt.payload.settings.target_depth,
                     rx_pkt.payload.settings.company_number,
                     rx_pkt.payload.settings.profile_duration_s,
                     rx_pkt.payload.settings.current_actuator_pos,
                     rx_pkt.payload.settings.act_min,
                     rx_pkt.payload.settings.act_max);
-                } else if (rx_pkt.command == CMD_REP_TEST_DATA) {
+                }
+ else if (rx_pkt.command == CMD_REP_TEST_DATA) {
                     printf("\n[SYNC] LiveDepth=%.3f ADC=%u\n",
                            rx_pkt.payload.test_data.live_depth,
                            rx_pkt.payload.test_data.live_adc);
