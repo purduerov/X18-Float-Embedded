@@ -11,6 +11,7 @@ typedef struct {
   uint16_t company_number;
   uint32_t time_ms;
   float depth_m;
+  uint16_t actuator_pos;
 } SensorReading_t;
 
 /**
@@ -28,8 +29,9 @@ void data_logger_reset(void);
  * @param co: Company ID
  * @param time: Timestamp in ms
  * @param depth: Depth in meters
+ * @param actuator_pos: Actuator position (ADC value)
  */
-void data_logger_add_sample(uint16_t co, uint32_t time, float depth);
+void data_logger_add_sample(uint16_t co, uint32_t time, float depth, uint16_t actuator_pos);
 
 /**
  * Dump all logged data as CSV formatted text to stdout

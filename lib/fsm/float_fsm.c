@@ -12,6 +12,7 @@
 // --- Internal Data Buffers ---
 static float recorded_depths[MAX_PACKETS];
 static uint32_t recorded_times[MAX_PACKETS];
+static uint16_t recorded_adcs[MAX_PACKETS];
 
 const char *FloatStateNames[] = {
     "IDLE", "PRE_DIVE", "PROFILING", "PROFILE_DONE", "DUMPING_DATA", "TEST_CALIBRATE"};
@@ -116,6 +117,8 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             tx_pkt.payload.settings.kp = settings.kp;
                             tx_pkt.payload.settings.ki = settings.ki;
                             tx_pkt.payload.settings.kd = settings.kd;
+                            tx_pkt.payload.settings.target_depth = settings.target_depth;
+                            tx_pkt.payload.settings.depth_offset = settings.depth_offset;
                             tx_pkt.payload.settings.company_number = settings.company_number;
                             tx_pkt.payload.settings.profile_duration_s = settings.profile_duration_s;
                             tx_pkt.payload.settings.actuator_target = fsm->actuator_target;
@@ -176,7 +179,12 @@ void float_fsm_update(float_fsm_t *fsm) {
         packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
         tx_pkt.payload.telemetry.company_number = settings.company_number;
         tx_pkt.payload.telemetry.time_ms = now;
-        tx_pkt.payload.telemetry.depth_m = 0.0f;
+        
+        // Read actual live depth for the T=0 point
+        ms5837_read(fsm->depth_sensor);
+        tx_pkt.payload.telemetry.depth_m = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
+        
+        tx_pkt.payload.telemetry.actuator_pos = fsm->current_actuator_pos;
         tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
         fsm->currently_transmitting = true;
         radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
@@ -185,12 +193,17 @@ void float_fsm_update(float_fsm_t *fsm) {
             ms5837_read(fsm->depth_sensor);
             recorded_depths[fsm->sample_index] = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
             recorded_times[fsm->sample_index] = now;
-            printf(">> Sample %u/%u: Time %lu ms | Depth %.2f m\n",
-                   fsm->sample_index + 1, MAX_PACKETS, recorded_times[fsm->sample_index], recorded_depths[fsm->sample_index]);
+            recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
+            printf(">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u\n",
+                   fsm->sample_index + 1, MAX_PACKETS, recorded_times[fsm->sample_index], 
+                   recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index]);
             fsm->sample_index++;
             fsm->last_sample_time = now;
         }
-        if (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000)) {
+        
+        // Only finish if we have exceeded duration AND we just took a sample (or would have)
+        // This ensures the 40th second point is captured.
+        if (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000 + 100)) {
             printf(">> Profile complete (%u sec). Surfacing...\n", settings.profile_duration_s);
             fsm->state = FLOAT_PROFILE_DONE;
         }
@@ -210,6 +223,7 @@ void float_fsm_update(float_fsm_t *fsm) {
             tx_pkt.payload.telemetry.company_number = settings.company_number;
             tx_pkt.payload.telemetry.time_ms = recorded_times[fsm->current_seq_num - 1];
             tx_pkt.payload.telemetry.depth_m = recorded_depths[fsm->current_seq_num - 1];
+            tx_pkt.payload.telemetry.actuator_pos = recorded_adcs[fsm->current_seq_num - 1];
             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
             fsm->currently_transmitting = true;
             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));

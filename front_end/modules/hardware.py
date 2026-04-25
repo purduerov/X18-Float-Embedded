@@ -1,4 +1,4 @@
-﻿import serial
+import serial
 import serial.tools.list_ports
 import threading
 import time
@@ -17,6 +17,7 @@ class HardwareManager:
         self.float_settings = {
             "P": "--", "I": "--", "D": "--", "Tar": "--",
             "Co#": "--", "Time": "--", "ADC": "--",
+            "TarAct": "--",
             "ActMin": "--", "ActMax": "--",
             "Off": "--",
             "LiveDepth": "--"
@@ -42,8 +43,8 @@ class HardwareManager:
                 except:
                     pass
             try:
-                # Use shorter timeout for better responsiveness
-                self.ser = serial.Serial(port, baud, timeout=0.05, write_timeout=0.5)
+                # Increased timeout for more reliable readline()
+                self.ser = serial.Serial(port, baud, timeout=0.1, write_timeout=0.5)
                 # Force DTR/RTS to reset Pico serial if needed
                 self.ser.dtr = False
                 self.ser.rts = False
@@ -83,26 +84,18 @@ class HardwareManager:
 
     def update_team_id(self, val):
         self.send_command(f"c {val}")
-        self.float_settings["Co#"] = str(val)
         
     def update_duration(self, val):
         self.send_command(f"t {val}")
-        self.float_settings["Time"] = str(val)
 
     def update_target_depth(self, val):
         self.send_command(f"d {val}")
-        self.float_settings["Tar"] = str(val)
         
     def update_pid(self, p, i, d):
         self.send_command(f"s {p} {i} {d}")
-        self.float_settings["P"] = str(p)
-        self.float_settings["I"] = str(i)
-        self.float_settings["D"] = str(d)
 
     def update_bounds(self, min_val, max_val):
         self.send_command(f"b {min_val} {max_val}")
-        self.float_settings["ActMin"] = str(min_val)
-        self.float_settings["ActMax"] = str(max_val)
 
     def zero_depth(self):
         self.send_command("z")
@@ -119,32 +112,37 @@ class HardwareManager:
         self.send_command("k")
 
     def start_profile(self):
-        """Triggers the start command and starts the timer ONLY."""
+        """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
         self.send_command('p') 
-        try:
-            self.active_duration = int(self.float_settings.get("Time", 40))
-        except ValueError:
-            self.active_duration = 40
-        self.profile_start_time = time.time()
 
     def serial_listener(self):
         while self.running:
             if self.ser and self.ser.is_open:
                 try:
                     if self.ser.in_waiting > 0:
-                        line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                        line_raw = self.ser.readline()
+                        if not line_raw:
+                            continue
+                            
+                        line = line_raw.decode('utf-8', errors='ignore').strip()
                         if line:
                             self.console_log.append(line)
                             if len(self.console_log) > 100: 
                                 self.console_log.pop(0)
                             
-                            if "PREDIVE_READY" in line: 
-                                self.mission_status = "PRE-DIVE READY"
+                            # Mission Status Logic
+                            if "PRE-DIVE Packet Logged" in line: 
+                                self.mission_status = "PROFILING"
+                                try:
+                                    self.active_duration = int(self.float_settings.get("Time", 40))
+                                except ValueError:
+                                    self.active_duration = 40
+                                self.profile_start_time = time.time()
                             elif "START DATA DUMP" in line:
                                 self.mission_status = "DOWNLOADING DATA"
-                                self.data_log.clear() 
+                                self.data_log = [] # Reset for new mission
                                 self.first_timestamp = None 
-                            elif "DATA_DONE" in line: 
+                            elif "Download Complete" in line: 
                                 self.mission_status = "MISSION COMPLETE"
                             elif "[SYNC]" in line:
                                 matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
@@ -154,19 +152,28 @@ class HardwareManager:
                                             self.float_settings[key] = value
                                     self.console_log.append(f"✅ UI Synced Successfully.")
                                     
-                            parts = line.split(',')
-                            if len(parts) == 3 and parts[0].isdigit():
+                            # CSV Parsing Logic
+                            parts = [p.strip() for p in line.split(',')]
+                            if len(parts) >= 3 and parts[0].isdigit():
                                 try:
+                                    # Format: Co#,TimeMs,DepthM,ActuatorADC
                                     abs_time_ms = int(parts[1])
                                     depth_m = float(parts[2])
+                                    
                                     if self.first_timestamp is None:
                                         self.first_timestamp = abs_time_ms
                                     rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
-                                    self.data_log.append({
+                                    
+                                    entry = {
                                         "Time (s)": rel_time_s,
                                         "Depth (m)": depth_m
-                                    })
-                                except ValueError:
+                                    }
+                                    
+                                    if len(parts) >= 4 and parts[3].isdigit():
+                                        entry["Actuator (ADC)"] = int(parts[3])
+                                        
+                                    self.data_log.append(entry)
+                                except (ValueError, IndexError):
                                     pass
                 except (serial.SerialException, OSError, Exception) as e:
                     with self.lock:

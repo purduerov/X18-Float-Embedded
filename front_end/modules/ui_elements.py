@@ -68,7 +68,7 @@ def render_sidebar(hw):
 def render_metrics(hw):
     max_depth = 0.0
     for p in hw.data_log:
-        d = p["Depth (m)"]
+        d = p.get("Depth (m)", 0.0)
         if d > max_depth: max_depth = d
 
     time_left_str = "--"
@@ -81,23 +81,40 @@ def render_metrics(hw):
             time_left_str = "DONE"
             hw.profile_start_time = None
 
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Mission State", hw.mission_status)
     m2.metric("⏱️ Countdown", time_left_str)
     m3.metric("Max Depth", f"{max_depth:.2f} m")
+    m4.metric("Data Points", len(hw.data_log))
 
 def render_main_content(hw):
     col_chart, col_actions = st.columns([4, 1], gap="medium")
     
     with col_chart:
-        if hw.data_log:
+        if hw.data_log and len(hw.data_log) > 0:
             df = pd.DataFrame(hw.data_log)
-            fig = px.line(df, x="Time (s)", y="Depth (m)", height=350)
-            fig.update_yaxes(autorange="reversed")
-            fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig, use_container_width=True, key="depth_chart")
+            
+            # Ensure required columns exist
+            if "Time (s)" in df.columns and "Depth (m)" in df.columns:
+                tab1, tab2 = st.tabs(["📉 Depth Profile", "🦾 Actuator Position"])
+                
+                with tab1:
+                    fig = px.line(df, x="Time (s)", y="Depth (m)", height=350, markers=True)
+                    fig.update_yaxes(autorange="reversed")
+                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+                    st.plotly_chart(fig, use_container_width=True, key="p_depth_chart")
+                
+                with tab2:
+                    if "Actuator (ADC)" in df.columns:
+                        fig2 = px.line(df, x="Time (s)", y="Actuator (ADC)", height=350, markers=True)
+                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+                        st.plotly_chart(fig2, use_container_width=True, key="p_act_chart")
+                    else:
+                        st.info("Actuator data not available for this session.")
+            else:
+                st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
         else:
-            st.info("Waiting for telemetry data...")
+            st.info("Waiting for telemetry data... (No data points received yet)")
 
     with col_actions:
         st.button("🚀 BEGIN PROFILE", use_container_width=True, type="primary", on_click=lambda: hw.start_profile())

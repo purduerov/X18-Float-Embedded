@@ -40,12 +40,14 @@ typedef struct __attribute__((packed))
             uint16_t company_number;
             uint32_t time_ms;
             float depth_m;
+            uint16_t actuator_pos;
         } telemetry;         
         struct __attribute__((packed)) {
             float kp;
             float ki;
             float kd;
             float target_depth;
+            float depth_offset;
             uint16_t company_number;
             uint16_t profile_duration_s; 
             uint16_t actuator_target;
