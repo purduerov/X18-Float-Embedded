@@ -107,7 +107,7 @@ int main() {
 
     // --- 2. Outer Depth PID Loop ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
-      double current_depth = 0.0f;
+      double current_depth = 10000.0f; // Default to error indicator
       if (ms5837_read(&depth_sensor)) {
         current_depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
       }
