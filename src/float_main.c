@@ -93,6 +93,7 @@ int main() {
 
   uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
   uint32_t last_act_loop_time = last_depth_pid_time;
+  float_state_t prev_state = FLOAT_IDLE;
 
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
@@ -104,7 +105,7 @@ int main() {
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 0.0f;
       if (ms5837_read(&depth_sensor)) {
-        current_depth = ms5837_get_depth(&depth_sensor);
+        current_depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
       }
 
       dpid.pid.kp = settings.kp;
@@ -117,10 +118,19 @@ int main() {
       dpid.pos_max = settings.act_max;
 
       if (global_fsm.state == FLOAT_PROFILING) {
+        // Reset PID and sync target on first entry to profiling
+        if (prev_state != FLOAT_PROFILING) {
+            printf(">> PID: Entering PROFILING mode. Resetting Integral and syncing target.\n");
+            depth_pid_reset(&dpid);
+            global_fsm.actuator_target = global_fsm.current_actuator_pos;
+        }
+
         int current_target = (int)global_fsm.actuator_target;
         depth_pid_calculate_target_pos(&dpid, current_depth, &current_target);
         global_fsm.actuator_target = (uint16_t)current_target;
       }
+      
+      prev_state = global_fsm.state;
       last_depth_pid_time = now;
     }
 

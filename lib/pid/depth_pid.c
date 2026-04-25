@@ -14,6 +14,10 @@ void depth_pid_set_target(DepthPID *dpid, double target_depth) {
     dpid->target_depth = target_depth;
 }
 
+void depth_pid_reset(DepthPID *dpid) {
+    pid_reset(&dpid->pid);
+}
+
 void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int *target_actuator_pos) {
     /**
      * INCREMENTAL (VELOCITY) CONTROL:

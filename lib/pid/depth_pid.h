@@ -34,6 +34,12 @@ void depth_pid_init(DepthPID *dpid, double kp, double ki, double kd, double dt, 
 void depth_pid_set_target(DepthPID *dpid, double target_depth);
 
 /**
+ * @brief Resets the underlying PID integral and error terms.
+ * @param dpid Pointer to DepthPID structure.
+ */
+void depth_pid_reset(DepthPID *dpid);
+
+/**
  * @brief Calculates the target actuator position based on current depth.
  * @param dpid Pointer to DepthPID structure.
  * @param current_depth Current depth in meters from sensor.
