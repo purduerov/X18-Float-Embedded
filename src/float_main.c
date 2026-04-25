@@ -93,7 +93,7 @@ int main() {
 
   uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
   uint32_t last_act_loop_time = last_depth_pid_time;
-  float_state_t prev_state = FLOAT_IDLE;
+  FloatState_t prev_state = FLOAT_IDLE;
 
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
