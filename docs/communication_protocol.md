@@ -1,4 +1,4 @@
-﻿# Communication Protocol
+# Communication Protocol
 
 This document defines the wireless and serial communication protocols used by the X18-Float system for telemetry, settings synchronization, and data transfer.
 
@@ -12,12 +12,12 @@ The float and surface station communicate using a fixed-size 32-byte packet stru
 | :--- | :--- | :--- | :--- |
 | 0 | `command` | `uint8_t` | Command or message type (see Command Codes) |
 | 1-2 | `seq_num` | `uint16_t` | Sequence number for tracking and ACKs |
-| 3-26 | `payload` | `union` | Command-specific data (24 bytes max) |
+| 3-30 | `payload` | `union` | Command-specific data (28 bytes max) |
 | 31 | `checksum` | `uint8_t` | CRC-8/XOR checksum of bytes 0-30 |
 
 ### Payload Formats
-- **Telemetry**: `company_number` (u16), `time_ms` (u32), `depth_m` (float).
-- **Settings**: `kp`, `ki`, `kd` (float), `company_number` (u16), `duration_s` (u16), `actuator_target` (u16), `current_pos` (u16), `act_min/max` (u16).
+- **Telemetry**: `company_number` (u16), `time_ms` (u32), `depth_m` (float), `actuator_pos` (u16).
+- **Settings**: `kp`, `ki`, `kd`, `target_depth`, `depth_offset` (float), `company_number` (u16), `duration_s` (u16), `actuator_target` (u16), `current_pos` (u16), `act_min/max` (u16).
 
 ---
 
@@ -38,7 +38,7 @@ The float and surface station expose a serial console for direct operator intera
 
 ### Outbound State Sync (`[SYNC]`)
 Used by the Mission Control Dashboard to update UI elements.
-**Format:** `[SYNC] P=<f> I=<f> D=<f> Co#=<u> Time=<u> Off=<f> ADC=<u> ActMin=<u> ActMax=<u>`
+**Format:** `[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u`
 
 ---
 

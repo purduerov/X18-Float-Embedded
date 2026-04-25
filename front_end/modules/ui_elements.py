@@ -14,56 +14,56 @@ def render_sidebar(hw):
             
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Connect", use_container_width=True, type="primary"): hw.connect(selected_port)
+            if st.button("Connect", width="stretch", type="primary"): hw.connect(selected_port)
         with col2:
-            if st.button("Disconnect", use_container_width=True): hw.disconnect()
+            if st.button("Disconnect", width="stretch"): hw.disconnect()
                 
         st.write(f"**Status:** {'🟢 Connected' if hw.ser and hw.ser.is_open else '🔴 Disconnected'}")
         st.divider()
         
         st.header("⚙️ Float Settings")
         
-        if st.button("📏 ZERO DEPTH", use_container_width=True, type="secondary"):
+        if st.button("📏 ZERO DEPTH", width="stretch", type="secondary"):
             hw.zero_depth()
         st.caption("Sets current pressure as 0.0m depth.")
 
-        if st.button("⚠️ RESET FSM", use_container_width=True, type="primary"):
+        if st.button("⚠️ RESET FSM", width="stretch", type="primary"):
             hw.reset_fsm()
         st.caption("Forces the Surface and Float back to IDLE.")
 
-        if st.button("🧪 TEST / CALIBRATE MODE", use_container_width=True, type="secondary"):
+        if st.button("🧪 TEST / CALIBRATE MODE", width="stretch", type="secondary"):
             hw.test_mode()
         st.caption("Continuously stream live depth and ADC.")
 
         with st.form("team_id_form"):
             new_id = st.number_input("Team ID", step=1, value=DEFAULT_TEAM_ID)
-            if st.form_submit_button("SET TEAM ID", use_container_width=True): hw.update_team_id(int(new_id))
+            if st.form_submit_button("SET TEAM ID", width="stretch"): hw.update_team_id(int(new_id))
                 
         with st.form("duration_form"):
             new_dur = st.number_input("Duration (Secs)", step=1, value=DEFAULT_DURATION_S)
-            if st.form_submit_button("SET DURATION", use_container_width=True): hw.update_duration(int(new_dur))
+            if st.form_submit_button("SET DURATION", width="stretch"): hw.update_duration(int(new_dur))
 
         with st.form("depth_form"):
             new_depth = st.number_input("Target Depth (m)", step=0.1, value=1.0)
-            if st.form_submit_button("SET TARGET DEPTH", use_container_width=True): hw.update_target_depth(float(new_depth))
+            if st.form_submit_button("SET TARGET DEPTH", width="stretch"): hw.update_target_depth(float(new_depth))
 
         with st.form("pid_form"):
             p_val = st.number_input("P", step=0.1, value=DEFAULT_P)
             i_val = st.number_input("I", step=0.1, value=DEFAULT_I)
             d_val = st.number_input("D", step=0.1, value=DEFAULT_D)
-            if st.form_submit_button("UPDATE GAINS", use_container_width=True): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
+            if st.form_submit_button("UPDATE GAINS", width="stretch"): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
 
         st.divider()
         st.header("🦾 Actuator Control")
         with st.form("actuator_form"):
             act_pos = st.number_input("Target Position (0-4095)", min_value=0, max_value=4095, value=DEFAULT_ACTUATOR_POS, step=100)
-            if st.form_submit_button("MOVE ACTUATOR", use_container_width=True): hw.move_actuator(int(act_pos))
+            if st.form_submit_button("MOVE ACTUATOR", width="stretch"): hw.move_actuator(int(act_pos))
 
         with st.form("bounds_form"):
             st.write("**Set Limits**")
             b_min = st.number_input("Min ADC", min_value=0, max_value=4095, value=0)
             b_max = st.number_input("Max ADC", min_value=0, max_value=4095, value=4095)
-            if st.form_submit_button("UPDATE BOUNDS", use_container_width=True): hw.update_bounds(int(b_min), int(b_max))
+            if st.form_submit_button("UPDATE BOUNDS", width="stretch"): hw.update_bounds(int(b_min), int(b_max))
 
 def render_metrics(hw):
     max_depth = 0.0
@@ -102,13 +102,13 @@ def render_main_content(hw):
                     fig = px.line(df, x="Time (s)", y="Depth (m)", height=350, markers=True)
                     fig.update_yaxes(autorange="reversed")
                     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                    st.plotly_chart(fig, use_container_width=True, key="p_depth_chart")
+                    st.plotly_chart(fig, width="stretch", key="p_depth_chart")
                 
                 with tab2:
                     if "Actuator (ADC)" in df.columns:
                         fig2 = px.line(df, x="Time (s)", y="Actuator (ADC)", height=350, markers=True)
                         fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                        st.plotly_chart(fig2, use_container_width=True, key="p_act_chart")
+                        st.plotly_chart(fig2, width="stretch", key="p_act_chart")
                     else:
                         st.info("Actuator data not available for this session.")
             else:
@@ -117,8 +117,8 @@ def render_main_content(hw):
             st.info("Waiting for telemetry data... (No data points received yet)")
 
     with col_actions:
-        st.button("🚀 BEGIN PROFILE", use_container_width=True, type="primary", on_click=lambda: hw.start_profile())
-        st.button("🔄 SYNC FROM FLOAT", use_container_width=True, on_click=lambda: hw.send_command('?'))
+        st.button("🚀 BEGIN PROFILE", width="stretch", type="primary", on_click=lambda: hw.start_profile())
+        st.button("🔄 SYNC FROM FLOAT", width="stretch", on_click=lambda: hw.send_command('?'))
         
         st.markdown("### Active Config")
         st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
@@ -130,7 +130,7 @@ def render_main_content(hw):
         
         if hw.data_log:
             df_csv = pd.DataFrame(hw.data_log).to_csv(index=False).encode('utf-8')
-            st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True)
+            st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", width="stretch")
 
 def render_console(hw):
     st.markdown("**Live Serial Console**")

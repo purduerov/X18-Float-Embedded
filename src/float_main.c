@@ -17,6 +17,7 @@
 #include "storage.h"
 #include "pid.h" 
 #include "console.h"
+#include "neopixel.h"
 
 static float_fsm_t global_fsm;
 static volatile bool radio_event_flag = false;
@@ -73,6 +74,9 @@ int main() {
   if (!system_init(onInterrupt, &depth_sensor)) {
       while (true) sleep_ms(1000);
   }
+
+  // --- Initialize Status LED ---
+  neopixel_init(PIN_NEOPIXEL);
 
   // --- Initialize High Level Objects ---
   Actuator act;

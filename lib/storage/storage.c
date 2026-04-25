@@ -57,7 +57,7 @@ static void storage_load(void) {
         current_settings.target_depth = 1.0f;
         current_settings.company_number = 18;
         current_settings.profile_duration_s = 40;
-        current_settings.depth_offset = 0.0f;
+        current_settings.depth_offset = 1000.0f; // Uncalibrated Indicator
         current_settings.act_min = 0;
         current_settings.act_max = 4095;
         current_settings.magic_number = SETTINGS_MAGIC;

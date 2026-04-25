@@ -1,4 +1,4 @@
-﻿# Float Unit (Underwater) Architecture
+# Float Unit (Underwater) Architecture
 
 This document describes the software architecture for the underwater float, including its program flow and state machine logic.
 
@@ -70,7 +70,23 @@ stateDiagram-v2
 
 ---
 
-## 3. Implementation Details
+## 3. NeoPixel Status LED
+
+The float uses an on-board NeoPixel (GPIO 16) to provide immediate visual feedback of its internal state. This is driven by the RP2040's hardware PIO (Programmable I/O) to ensure timing does not interfere with time-critical PID control.
+
+| State | Color | Description |
+| :--- | :--- | :--- |
+| **IDLE** | 🟢 **Green** | Ready and waiting for commands from the Surface Station. |
+| **PRE_DIVE** | 🟡 **Yellow** | Transmitting starting telemetry packet. |
+| **PROFILING** | 🔵 **Blue** | **Autonomous PID active.** Actively managing depth. |
+| **PROFILE_DONE** | 💠 **Cyan** | Mission finished; surfaced and broadcasting beacon. |
+| **DUMPING_DATA** | 🟣 **Magenta** | Transferring high-resolution data log to Surface. |
+| **TEST_MODE** | ⚪ **White** | Live streaming depth/ADC for real-time calibration. |
+| **ERROR** | 🔴 **Red** | System error or unexpected FSM state transition. |
+
+---
+
+## 4. Implementation Details
 
 - **Unified Boot**: `system_init()` handles the deterministic startup of Serial, Storage (LittleFS), I2C, MS5837 Sensor, and the SX1276 Radio.
 - **Safety Overrides**: Implements 1-second stall detection and 8-second total movement timeout to protect the buoyancy mechanism.

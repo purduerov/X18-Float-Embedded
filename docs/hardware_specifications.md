@@ -23,10 +23,12 @@ The system is optimized for the Adafruit Feather RP2040 form factor, but applies
 | **Actuator EXT**| 12 | 12 | H-Bridge: Extension |
 | **Actuator RET**| 13 | 13 | H-Bridge: Retraction |
 | **VREF PWM**   | 27 | A1 | Actuator Speed Control (PWM) |
+| **Status LED**  | 16 | NEO | On-board NeoPixel (WS2812B) |
 
 ---
 
 ## 2. Peripheral Configuration
+...
 
 ### I2C Bus (`i2c1`)
 *   **Speed:** 400 kHz (Fast Mode)

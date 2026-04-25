@@ -4,6 +4,7 @@
 #include "pico/bootrom.h"
 #include <stdio.h>
 #include <string.h>
+#include "neopixel.h"
 
 // --- Configuration ---
 #define SAMPLE_INTERVAL_MS 1000
@@ -17,12 +18,25 @@ static uint16_t recorded_adcs[MAX_PACKETS];
 const char *FloatStateNames[] = {
     "IDLE", "PRE_DIVE", "PROFILING", "PROFILE_DONE", "DUMPING_DATA", "TEST_CALIBRATE"};
 
+static void update_status_led(FloatState_t state) {
+    switch (state) {
+        case FLOAT_IDLE:           neopixel_set_color(COLOR_GREEN);   break;
+        case FLOAT_PRE_DIVE:       neopixel_set_color(COLOR_YELLOW);  break;
+        case FLOAT_PROFILING:      neopixel_set_color(COLOR_BLUE);    break;
+        case FLOAT_PROFILE_DONE:   neopixel_set_color(COLOR_CYAN);    break;
+        case FLOAT_DUMPING_DATA:   neopixel_set_color(COLOR_MAGENTA); break;
+        case FLOAT_TEST_CALIBRATE: neopixel_set_color(COLOR_WHITE);   break;
+        default:                   neopixel_set_color(COLOR_RED);     break;
+    }
+}
+
 void float_fsm_init(float_fsm_t *fsm, MS5837_t *sensor) {
     memset(fsm, 0, sizeof(float_fsm_t));
     fsm->state = FLOAT_IDLE;
     fsm->depth_sensor = sensor;
     fsm->actuator_target = DEFAULT_ACTUATOR_POS;
     fsm->last_debug_print = to_ms_since_boot(get_absolute_time());
+    update_status_led(fsm->state);
     radio_start_receive();
 }
 
@@ -37,6 +51,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
         if (fsm->state == FLOAT_PRE_DIVE) {
             printf(">> Pre-dive packet sent. Starting dive profiles (Radio SILENT)...\n");
             fsm->state = FLOAT_PROFILING;
+            update_status_led(fsm->state);
             fsm->profile_start_time = to_ms_since_boot(get_absolute_time());
             fsm->last_sample_time = fsm->profile_start_time;
             fsm->sample_index = 0;
@@ -62,14 +77,17 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                     if (rx_pkt.command == CMD_RESET_FSM) {
                         printf(">> Radio CMD: Resetting FSM to IDLE...\n");
                         fsm->state = FLOAT_IDLE;
+                        update_status_led(fsm->state);
                         fsm->currently_transmitting = false;
                     } else if (fsm->state == FLOAT_IDLE || fsm->state == FLOAT_TEST_CALIBRATE) {
                         if (rx_pkt.command == CMD_BEGIN_PROFILE && fsm->state == FLOAT_IDLE) {
                             printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive Transmission...\n");
                             fsm->state = FLOAT_PRE_DIVE;
+                            update_status_led(fsm->state);
                         } else if (rx_pkt.command == CMD_ENTER_TEST && fsm->state == FLOAT_IDLE) {
                             printf(">> Received ENTER_TEST. Starting live telemetry dump...\n");
                             fsm->state = FLOAT_TEST_CALIBRATE;
+                            update_status_led(fsm->state);
                             fsm->last_tx_time = 0; // Trigger immediate transmit
                         } else if (rx_pkt.command == CMD_SET_PID) {
                             settings.kp = rx_pkt.payload.settings.kp;
@@ -133,6 +151,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                         if (rx_pkt.command == CMD_SEND_DATA) {
                             printf(">> Received SEND_DATA command. Starting data dump for scoring...\n");
                             fsm->state = FLOAT_DUMPING_DATA;
+                            update_status_led(fsm->state);
                             fsm->current_seq_num = 1;
                             fsm->last_tx_time = 0;
                         }
@@ -148,6 +167,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                                 fsm->currently_transmitting = true;
                                 radio_start_transmit((uint8_t *)&done_pkt, sizeof(packet_t));
                                 fsm->state = FLOAT_IDLE;
+                                update_status_led(fsm->state);
                             } else {
                                 fsm->last_tx_time = 0;
                             }
@@ -189,6 +209,7 @@ void float_fsm_update(float_fsm_t *fsm) {
         fsm->currently_transmitting = true;
         radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
     } else if (fsm->state == FLOAT_PROFILING) {
+        // Sampling Loop
         if (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS && fsm->sample_index < MAX_PACKETS) {
             ms5837_read(fsm->depth_sensor);
             recorded_depths[fsm->sample_index] = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
@@ -200,12 +221,13 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->sample_index++;
             fsm->last_sample_time = now;
         }
-        
-        // Only finish if we have exceeded duration AND we just took a sample (or would have)
-        // This ensures the 40th second point is captured.
+
+        // Mission Completion Check
         if (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000 + 100)) {
             printf(">> Profile complete (%u sec). Surfacing...\n", settings.profile_duration_s);
             fsm->state = FLOAT_PROFILE_DONE;
+            fsm->actuator_target = settings.act_max; // Maximum Buoyancy to Surface
+            update_status_led(fsm->state);
         }
     } else if (fsm->state == FLOAT_PROFILE_DONE && !fsm->currently_transmitting) {
         if (now - fsm->last_tx_time >= 3000) {
