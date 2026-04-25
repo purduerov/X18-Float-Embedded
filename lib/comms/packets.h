@@ -35,7 +35,7 @@ typedef struct __attribute__((packed))
 {
     uint8_t command;
     uint16_t seq_num;
-    union {
+    union __attribute__((packed)) {
         struct __attribute__((packed)) {
             uint16_t company_number;
             uint32_t time_ms;

@@ -1,4 +1,4 @@
-﻿#ifndef HW_CONFIG_H
+#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -34,10 +34,10 @@
 
 // --- Radio Configuration ---
 #define RADIO_FREQ 915.0f    // MHz
-#define RADIO_BW 125.0f      // kHz (Reliable init, SF12 will still give great range)
-#define RADIO_SF 12          // Spreading Factor (Slowest, most robust)
+#define RADIO_BW 125.0f      // kHz
+#define RADIO_SF 7           // Spreading Factor (Normal/Fast)
 #define RADIO_POWER 17       // dBm (Max for SX1276 driver)
-#define RADIO_CR 8           // Coding Rate (4/8 for max error correction)
+#define RADIO_CR 5           // Coding Rate (4/5)
 #define RADIO_SYNC_WORD 0x12 // LoRa Sync Word
 #define SPI_BAUDRATE 8000000 // 8 MHz
 

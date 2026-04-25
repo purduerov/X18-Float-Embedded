@@ -20,6 +20,7 @@
 #define RADIOLIB_SX127X_REG_PKT_RSSI_VALUE 0x1A
 #define RADIOLIB_SX127X_REG_MODEM_CONFIG_1 0x1D
 #define RADIOLIB_SX127X_REG_MODEM_CONFIG_2 0x1E
+#define RADIOLIB_SX127X_REG_MODEM_CONFIG_3 0x26
 #define RADIOLIB_SX127X_REG_PREAMBLE_MSB 0x20
 #define RADIOLIB_SX127X_REG_PREAMBLE_LSB 0x21
 #define RADIOLIB_SX127X_REG_PAYLOAD_LENGTH 0x22
@@ -57,6 +58,8 @@ int16_t RadioLib_SX127x_Receive(RadioLibSX127x_t *chip, uint8_t *data, size_t le
 int16_t RadioLib_SX127x_SetFrequency(RadioLibSX127x_t *chip, float freq);
 int16_t RadioLib_SX127x_SetBandwidth(RadioLibSX127x_t *chip, float bw);
 int16_t RadioLib_SX127x_SetSpreadingFactor(RadioLibSX127x_t *chip, uint8_t sf);
+int16_t RadioLib_SX127x_SetCodingRate(RadioLibSX127x_t *chip, uint8_t cr);
+int16_t RadioLib_SX127x_SetCRC(RadioLibSX127x_t *chip, bool enable);
 // Starts the RX process without blocking
 int16_t RadioLib_SX127x_StartReceive(RadioLibSX127x_t *chip);
 

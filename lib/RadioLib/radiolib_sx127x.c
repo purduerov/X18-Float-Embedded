@@ -45,7 +45,37 @@ int16_t RadioLib_SX127x_SetSpreadingFactor(RadioLibSX127x_t* chip, uint8_t sf) {
 
     // Set spreading factor in ModemConfig2 (bits 7-4)
     int16_t state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_2, sf << 4, 7, 4, 5, 0xFF, false);
+    if (state != RADIOLIB_ERR_NONE) return state;
+
+    // Handle LowDataRateOptimize (required for symbol duration > 16.38ms)
+    // Symbol duration = 2^SF / BW. At BW=125kHz:
+    // SF11 = 2048 / 125000 = 16.384ms
+    // SF12 = 4096 / 125000 = 32.768ms
+    if (sf >= 11) {
+        state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_3, 0x08, 3, 3, 5, 0xFF, false);
+    } else {
+        state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_3, 0x00, 3, 3, 5, 0xFF, false);
+    }
+
     if (state == RADIOLIB_ERR_NONE) chip->spreadingFactor = sf;
+    return state;
+}
+
+int16_t RadioLib_SX127x_SetCodingRate(RadioLibSX127x_t* chip, uint8_t cr) {
+    if (cr < 5 || cr > 8) return -3; // RADIOLIB_ERR_INVALID_CODING_RATE
+
+    // Coding rate is mapped to bits 3-1 of ModemConfig1 as (cr - 4)
+    uint8_t crVal = cr - 4;
+    int16_t state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_1, crVal << 1, 3, 1, 5, 0xFF, false);
+    if (state == RADIOLIB_ERR_NONE) chip->codingRate = cr;
+    return state;
+}
+
+int16_t RadioLib_SX127x_SetCRC(RadioLibSX127x_t* chip, bool enable) {
+    // CRC is bit 2 of ModemConfig2
+    uint8_t val = enable ? 0x04 : 0x00;
+    int16_t state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_2, val, 2, 2, 5, 0xFF, false);
+    if (state == RADIOLIB_ERR_NONE) chip->crcEnabled = enable;
     return state;
 }
 
@@ -89,6 +119,10 @@ int16_t RadioLib_SX127x_Begin(RadioLibSX127x_t* chip, uint8_t syncWord, uint16_t
     RadioLib_Module_SPIwriteRegister(chip->mod, 0x39, syncWord); // SX127X_REG_SYNC_WORD
     RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_PREAMBLE_MSB, (uint8_t)((preambleLength >> 8) & 0xFF));
     RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_PREAMBLE_LSB, (uint8_t)(preambleLength & 0xFF));
+
+    // 7. Initialize default hardware state matching software structure
+    RadioLib_SX127x_SetCodingRate(chip, chip->codingRate);
+    RadioLib_SX127x_SetCRC(chip, chip->crcEnabled);
 
     return RADIOLIB_ERR_NONE;
 }
