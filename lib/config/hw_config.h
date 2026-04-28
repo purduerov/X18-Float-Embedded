@@ -28,6 +28,9 @@
 #define PIN_EN 8
 #define PIN_IRQ 9
 
+// --- Status LED ---
+#define PIN_NEOPIXEL 16
+
 // ==========================================
 // 2. SYSTEM PARAMETERS
 // ==========================================
