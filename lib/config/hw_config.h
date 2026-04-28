@@ -74,6 +74,7 @@
 // --- Control Loop Timings ---
 #define DEPTH_PID_LOOP_MS 100 // 10Hz outer loop
 #define SURFACE_DEBUG_INTERVAL_MS 2000
+#define ARRIVAL_BAND_M 0.33f
 
 // --- PID Defaults (If not synced) ---
 #define DEFAULT_PID_P 3.2f

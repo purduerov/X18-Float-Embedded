@@ -51,6 +51,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
         if (fsm->state == FLOAT_PRE_DIVE) {
             printf(">> Pre-dive packet sent. Starting dive profiles (Radio SILENT)...\n");
             fsm->state = FLOAT_PROFILING;
+            fsm->target_depth_reached = false; // Reset depth arrival flag
             update_status_led(fsm->state);
             fsm->profile_start_time = to_ms_since_boot(get_absolute_time());
             fsm->last_sample_time = fsm->profile_start_time;
@@ -215,22 +216,34 @@ void float_fsm_update(float_fsm_t *fsm) {
         fsm->currently_transmitting = true;
         radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
     } else if (fsm->state == FLOAT_PROFILING) {
+        // Depth Arrival Arrival Band Logic (+/- ARRIVAL_BAND_M)
+        if (!fsm->target_depth_reached) {
+            float depth_error = fsm->current_depth - settings.target_depth;
+            if (depth_error < 0) depth_error = -depth_error; // absolute value
+
+            if (depth_error <= ARRIVAL_BAND_M) {
+                printf(">> TARGET DEPTH REACHED (+/- %.2fm). Starting countdown timer (%u sec)...\n", ARRIVAL_BAND_M, settings.profile_duration_s);
+                fsm->target_depth_reached = true;
+                fsm->profile_start_time = now; // Actual countdown starts now
+            }
+        }
+
         // Sampling Loop
         if (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS && fsm->sample_index < MAX_PACKETS) {
-            ms5837_read(fsm->depth_sensor);
-            recorded_depths[fsm->sample_index] = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
+            recorded_depths[fsm->sample_index] = fsm->current_depth;
             recorded_times[fsm->sample_index] = now;
             recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
-            printf(">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u\n",
+            printf(">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u%s\n",
                    fsm->sample_index + 1, MAX_PACKETS, recorded_times[fsm->sample_index], 
-                   recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index]);
+                   recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index],
+                   fsm->target_depth_reached ? " [HOLDING]" : " [DIVING]");
             fsm->sample_index++;
             fsm->last_sample_time = now;
         }
 
-        // Mission Completion Check
-        if (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000 + 100)) {
-            printf(">> Profile complete (%u sec). Surfacing...\n", settings.profile_duration_s);
+        // Mission Completion Check (Only if depth was reached)
+        if (fsm->target_depth_reached && (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000))) {
+            printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
             fsm->state = FLOAT_PROFILE_DONE;
             fsm->actuator_target = settings.act_max; // Maximum Buoyancy to Surface
             update_status_led(fsm->state);

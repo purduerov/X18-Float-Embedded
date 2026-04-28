@@ -106,11 +106,13 @@ int main() {
 
     storage_get_settings(&settings);
 
-    // --- 2. Outer Depth PID Loop ---
+    // --- 2. Outer Depth PID Loop (10Hz) ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 10000.0f; // Default to error indicator
       if (ms5837_read(&depth_sensor)) {
-        current_depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
+        float depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
+        current_depth = (double)depth;
+        global_fsm.current_depth = depth; // Sync for FSM use
       }
 
       dpid.pid.kp = settings.kp;
