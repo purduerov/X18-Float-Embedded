@@ -129,6 +129,11 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                                    settings.act_min, settings.act_max);
                             storage_set_settings(&settings);
                             storage_save();
+                        } else if (rx_pkt.command == CMD_SET_NEUTRAL_ADC) {
+                            settings.neutral_buoyancy_adc = rx_pkt.payload.settings.neutral_buoyancy_adc;
+                            printf(">> Neutral ADC Updated: %u. Saving to Flash...\n", settings.neutral_buoyancy_adc);
+                            storage_set_settings(&settings);
+                            storage_save();
                         } else if (rx_pkt.command == CMD_REQ_SETTINGS) {
                             printf(">> Received REQ_SETTINGS. Transmitting Flash config back to surface...\n");
                             packet_t tx_pkt = {.command = CMD_REP_SETTINGS, .seq_num = 0};
@@ -143,6 +148,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             tx_pkt.payload.settings.current_actuator_pos = fsm->current_actuator_pos;
                             tx_pkt.payload.settings.act_min = settings.act_min;
                             tx_pkt.payload.settings.act_max = settings.act_max;
+                            tx_pkt.payload.settings.neutral_buoyancy_adc = settings.neutral_buoyancy_adc;
                             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
                             fsm->currently_transmitting = true;
                             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));

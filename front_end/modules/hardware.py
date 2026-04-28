@@ -19,6 +19,7 @@ class HardwareManager:
             "Co#": "--", "Time": "--", "ADC": "--",
             "TarAct": "--",
             "ActMin": "--", "ActMax": "--",
+            "Neutral": "--",
             "Off": "--",
             "LiveDepth": "--"
         }
@@ -96,6 +97,9 @@ class HardwareManager:
 
     def update_bounds(self, min_val, max_val):
         self.send_command(f"b {min_val} {max_val}")
+
+    def update_neutral_adc(self, val):
+        self.send_command(f"n {val}")
 
     def zero_depth(self):
         self.send_command("z")

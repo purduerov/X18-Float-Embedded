@@ -60,15 +60,17 @@ static void storage_load(void) {
         current_settings.depth_offset = 1000.0f; // Uncalibrated Indicator
         current_settings.act_min = 0;
         current_settings.act_max = 4095;
+        current_settings.neutral_buoyancy_adc = 2048; // Default to mid-point
         current_settings.magic_number = SETTINGS_MAGIC;
         storage_save(); 
     } else {
         printf("[STORAGE] Successfully loaded settings from Flash.\n");
-        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Target: %.2fm | Team: %u | Time: %us | Bounds: [%u, %u]\n", 
+        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Target: %.2fm | Team: %u | Time: %us | Bounds: [%u, %u] | Neutral: %u\n", 
                current_settings.kp, current_settings.ki, current_settings.kd, 
                current_settings.target_depth,
                current_settings.company_number, current_settings.profile_duration_s,
-               current_settings.act_min, current_settings.act_max);
+               current_settings.act_min, current_settings.act_max,
+               current_settings.neutral_buoyancy_adc);
     }
 }
 

@@ -107,6 +107,15 @@ void surface_fsm_cmd_set_act_bounds(surface_fsm_t *fsm, uint16_t min_val, uint16
     }
 }
 
+void surface_fsm_cmd_set_neutral_adc(surface_fsm_t *fsm, uint16_t neutral_adc) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Neutral ADC Update: %u\n", neutral_adc);
+        packet_t tx_pkt = {.command = CMD_SET_NEUTRAL_ADC, .seq_num = 0};
+        tx_pkt.payload.settings.neutral_buoyancy_adc = neutral_adc;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
 void surface_fsm_cmd_sync(surface_fsm_t *fsm) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
         printf(">> Requesting current float settings...\n");
@@ -157,7 +166,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u\n",
+                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u, Neutral=%u\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
                     rx_pkt.payload.settings.target_depth,
@@ -167,7 +176,8 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     rx_pkt.payload.settings.current_actuator_pos,
                     rx_pkt.payload.settings.actuator_target,
                     rx_pkt.payload.settings.act_min,
-                    rx_pkt.payload.settings.act_max);
+                    rx_pkt.payload.settings.act_max,
+                    rx_pkt.payload.settings.neutral_buoyancy_adc);
                 }
  else if (rx_pkt.command == CMD_REP_TEST_DATA) {
                     printf("\n[SYNC] LiveDepth=%.3f ADC=%u\n",

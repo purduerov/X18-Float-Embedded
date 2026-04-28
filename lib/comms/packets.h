@@ -28,7 +28,8 @@ typedef enum
     CMD_ENTER_TEST = 0x11,
     CMD_REP_TEST_DATA = 0x12,
     CMD_BOOTLOADER = 0x13,
-    CMD_SET_TARGET_DEPTH = 0x14
+    CMD_SET_TARGET_DEPTH = 0x14,
+    CMD_SET_NEUTRAL_ADC = 0x15
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -54,6 +55,7 @@ typedef struct __attribute__((packed))
             uint16_t current_actuator_pos;
             uint16_t act_min;
             uint16_t act_max;
+            uint16_t neutral_buoyancy_adc;
         } settings; 
         struct __attribute__((packed)) {
             float live_depth;

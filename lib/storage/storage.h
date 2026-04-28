@@ -16,6 +16,7 @@ typedef struct {
     float depth_offset;
     uint16_t act_min;
     uint16_t act_max;
+    uint16_t neutral_buoyancy_adc;
     uint32_t magic_number; 
 } float_settings_t;
 

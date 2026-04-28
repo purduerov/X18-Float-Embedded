@@ -72,6 +72,13 @@ static void handle_company_range(const char *params) {
   }
 }
 
+static void handle_neutral_adc(const char *params) {
+  unsigned int val;
+  if (sscanf(params, "%u", &val) == 1) {
+    surface_fsm_cmd_set_neutral_adc(&global_fsm, (uint16_t)val);
+  }
+}
+
 static void handle_sync(const char *params) {
   surface_fsm_cmd_sync(&global_fsm);
 }
@@ -93,6 +100,7 @@ static const console_command_t cmd_table[] = {
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
     {'b', handle_company_range, "Set Actuator Bounds (Min Max)"},
+    {'n', handle_neutral_adc, "Set Neutral ADC Position"},
     {'?', handle_sync, "Sync Settings"},
     {'r', handle_reset, "Reset State Machine"},
     {'k', handle_test, "Enter Test Mode"}};

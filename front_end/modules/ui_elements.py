@@ -65,6 +65,11 @@ def render_sidebar(hw):
             b_max = st.number_input("Max ADC", min_value=0, max_value=4095, value=4095)
             if st.form_submit_button("UPDATE BOUNDS", width="stretch"): hw.update_bounds(int(b_min), int(b_max))
 
+        with st.form("neutral_form"):
+            st.write("**Buoyancy Baseline**")
+            n_adc = st.number_input("Neutral ADC", min_value=0, max_value=4095, value=2048, step=50)
+            if st.form_submit_button("SET NEUTRAL ADC", width="stretch"): hw.update_neutral_adc(int(n_adc))
+
 def render_metrics(hw):
     max_depth = 0.0
     for p in hw.data_log:
@@ -125,6 +130,7 @@ def render_main_content(hw):
         st.write(f"**Target:** {hw.float_settings.get('Tar', '--')} m")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
+        st.write(f"**Neutral ADC:** {hw.float_settings.get('Neutral', '--')}")
         st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")
         st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
