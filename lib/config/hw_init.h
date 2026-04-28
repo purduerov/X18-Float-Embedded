@@ -21,6 +21,11 @@ bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor);
 void hw_init_i2c(void);
 
 /**
+ * @brief Shuts down the I2C port and resets GPIO pins.
+ */
+void hw_deinit_i2c(void);
+
+/**
  * @brief Performs the standard initialization sequence for the MS5837 depth sensor
  * 
  * @param sensor Pointer to the MS5837 sensor structure to initialize

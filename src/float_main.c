@@ -99,6 +99,7 @@ int main() {
   uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
   uint32_t last_act_loop_time = last_depth_pid_time;
   FloatState_t prev_state = FLOAT_IDLE;
+  uint32_t consecutive_sensor_failures = 0;
 
   while (true) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
@@ -109,10 +110,40 @@ int main() {
     // --- 2. Outer Depth PID Loop (10Hz) ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 10000.0f; // Default to error indicator
+      
+      // --- SENSOR READ & RECOVERY ---
       if (ms5837_read(&depth_sensor)) {
+        consecutive_sensor_failures = 0;
         float depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
         current_depth = (double)depth;
         global_fsm.current_depth = depth; // Sync for FSM use
+      } else {
+        consecutive_sensor_failures++;
+        
+        // TIER 1 RECOVERY: Simple Sensor Reset (5 strikes / 0.5s)
+        if (consecutive_sensor_failures == 5) {
+          printf("!! [SENSOR] Reading Failed. Attempting Sensor Reset...\n");
+          ms5837_begin(&depth_sensor, I2C_PORT, MS5837_UNRECOGNISED);
+        }
+        
+        // TIER 2 RECOVERY: Full I2C Bus Reset (10+ strikes / >1s, throttled to 2s)
+        static uint32_t last_bus_reset_time = 0;
+        if (consecutive_sensor_failures >= 10 && (now - last_bus_reset_time > 2000)) {
+          printf("!! [SENSOR] Persistent Failure. Performing FULL I2C RESET...\n");
+          hw_deinit_i2c();
+          sleep_ms(10);
+          hw_init_i2c();
+          ms5837_begin(&depth_sensor, I2C_PORT, MS5837_UNRECOGNISED);
+          last_bus_reset_time = now;
+        }
+
+        // FAIL-SAFE: Mission Abort (50 strikes / 5s)
+        if (consecutive_sensor_failures >= 50 && global_fsm.state == FLOAT_PROFILING) {
+          printf(">> [CRITICAL] DEPTH SENSOR LOST. ABORTING MISSION!\n");
+          global_fsm.state = FLOAT_PROFILE_DONE;
+          global_fsm.actuator_target = settings.act_max; // Surface immediately
+          consecutive_sensor_failures = 0; // Don't spam abort
+        }
       }
 
       dpid.pid.kp = settings.kp;

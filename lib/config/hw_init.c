@@ -74,6 +74,15 @@ void hw_init_i2c(void) {
     gpio_pull_up(PIN_SCL);
 }
 
+void hw_deinit_i2c(void) {
+    i2c_deinit(I2C_PORT);
+    // Reset pins to high-impedance to clear any bus hangs
+    gpio_set_function(PIN_SDA, GPIO_FUNC_SIO);
+    gpio_set_function(PIN_SCL, GPIO_FUNC_SIO);
+    gpio_set_dir(PIN_SDA, GPIO_IN);
+    gpio_set_dir(PIN_SCL, GPIO_IN);
+}
+
 bool hw_init_depth_sensor(MS5837_t *sensor) {
     ms5837_init_struct(sensor);
     if (!ms5837_begin(sensor, I2C_PORT, MS5837_02BA)) {

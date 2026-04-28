@@ -86,7 +86,7 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
 
     // Reset the sensor
     uint8_t reset_cmd = MS5837_RESET_CMD;
-    int result = i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &reset_cmd, 1, false, 1000 * 50 /* 50 ms */);
+    int result = i2c_write_timeout_us(sensor->i2c_inst, MS5837_ADDR, &reset_cmd, 1, false, 5000 /* 5ms */);
     if (result == PICO_ERROR_GENERIC || result == PICO_ERROR_TIMEOUT) {
         printf("ERROR: Failed to send reset command to MS5837 (code %d)\n", result);
         sensor->i2c_inst = NULL; // Mark as unusable
@@ -256,7 +256,7 @@ float ms5837_get_pressure(MS5837_t *sensor, float conversion)
 
 float ms5837_get_temperature(MS5837_t *sensor)
 {
-    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 temperature
+    if (!sensor->i2c_inst) return -1000.0f; // Sensor not initialized
     
     // TEMP is calculated in centidegrees (100 * deg C)
     return (float)sensor->TEMP / 100.0f;
@@ -264,7 +264,7 @@ float ms5837_get_temperature(MS5837_t *sensor)
 
 float ms5837_get_depth(MS5837_t *sensor)
 {
-    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 depth
+    if (!sensor->i2c_inst) return -1000.0f; // Sensor not initialized
 
     // Uses the standard atmospheric pressure of 101300 Pa as a baseline
     return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
@@ -272,7 +272,7 @@ float ms5837_get_depth(MS5837_t *sensor)
 
 float ms5837_get_altitude(MS5837_t *sensor)
 {
-    if (!sensor->i2c_inst) return 0.0f; // Sensor not initialized, return 0 altitude
+    if (!sensor->i2c_inst) return -1000.0f; // Sensor not initialized
     
     // Standard altitude formula using 1013.25 mbar as sea level pressure
     return (1.0f - powf((ms5837_get_pressure(sensor, 1.0f) / 1013.25f), 0.190284f)) * 145366.45f * 0.3048f;

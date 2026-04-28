@@ -207,9 +207,8 @@ void float_fsm_update(float_fsm_t *fsm) {
         tx_pkt.payload.telemetry.company_number = settings.company_number;
         tx_pkt.payload.telemetry.time_ms = now;
         
-        // Read actual live depth for the T=0 point
-        ms5837_read(fsm->depth_sensor);
-        tx_pkt.payload.telemetry.depth_m = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
+        // Use cached depth from main loop
+        tx_pkt.payload.telemetry.depth_m = fsm->current_depth;
         
         tx_pkt.payload.telemetry.actuator_pos = fsm->current_actuator_pos;
         tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
@@ -272,11 +271,8 @@ void float_fsm_update(float_fsm_t *fsm) {
         }
     } else if (fsm->state == FLOAT_TEST_CALIBRATE && !fsm->currently_transmitting) {
         if (now - fsm->last_tx_time >= 1000) {
-            ms5837_read(fsm->depth_sensor);
-            float live_depth = ms5837_get_depth(fsm->depth_sensor) - settings.depth_offset;
-            
             packet_t tx_pkt = {.command = CMD_REP_TEST_DATA, .seq_num = 0};
-            tx_pkt.payload.test_data.live_depth = live_depth;
+            tx_pkt.payload.test_data.live_depth = fsm->current_depth;
             tx_pkt.payload.test_data.live_adc = fsm->current_actuator_pos;
             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
             
