@@ -52,11 +52,11 @@ static void handle_sync(const char *params) {
     storage_get_settings(&settings);
     // ADC= is used by dashboard for live actuator position. 
     // Added ActMin/ActMax for UI limit verification.
-    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d\n",
+    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d\n",
            settings.kp, settings.ki, settings.kd, settings.target_depth,
            settings.company_number, settings.profile_duration_s, 
            settings.depth_offset, global_fsm.current_actuator_pos,
-           settings.act_min, settings.act_max);
+           settings.act_min, settings.act_max, settings.neutral_buoyancy_adc);
 }
 
 static void handle_profile(const char *params) {
@@ -85,9 +85,10 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
 
-  // We now use the PID to calculate a velocity (change per tick).
-  // The min/max limits here are the max ADJUSTMENT per tick (e.g. +/- 10 units)
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, -10, 10);
+  // We now use the PID to calculate absolute positions.
+  // The min/max limits here represent the allowable PID OFFSET from neutral.
+  // We use +/- 2048 to allow full range coverage around any neutral point.
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, -2048, 2048);
   depth_pid_set_target(&dpid, settings.target_depth);
 
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
@@ -130,7 +131,7 @@ int main() {
         }
 
         int current_target = (int)global_fsm.actuator_target;
-        depth_pid_calculate_target_pos(&dpid, current_depth, &current_target);
+        depth_pid_calculate_target_pos(&dpid, current_depth, settings.neutral_buoyancy_adc, &current_target);
         global_fsm.actuator_target = (uint16_t)current_target;
       }
       

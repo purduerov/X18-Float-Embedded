@@ -18,31 +18,36 @@ void depth_pid_reset(DepthPID *dpid) {
     pid_reset(&dpid->pid);
 }
 
-void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int *target_actuator_pos) {
+void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int neutral_adc, int *target_actuator_pos) {
     /**
-     * INCREMENTAL (VELOCITY) CONTROL:
-     * Instead of calculating the absolute position, we calculate a small 
-     * ADJUSTMENT to the current position. 
+     * ABSOLUTE POSITIONAL CONTROL:
+     * Instead of calculating a relative adjustment, we calculate an absolute
+     * position centered on the "Neutral Buoyancy" ADC baseline.
+     * 
+     * Formula:
+     * Target_Position = Neutral_ADC + PID_Output
      * 
      * Direction:
-     * 4095 = UP (Maximum Buoyancy)
-     * 0    = DOWN (Minimum Buoyancy)
+     * 4095 = UP (Maximum Buoyancy / Expansion)
+     * 0    = DOWN (Minimum Buoyancy / Retraction)
      * 
+     * Error Logic (current_depth - target_depth):
      * If current_depth > target_depth (TOO DEEP):
-     *   - Error is positive (current - target)
-     *   - PID output should be positive to increase buoyancy (move UP toward 4095)
+     *   - Error is positive.
+     *   - PID output should be positive to increase buoyancy (move UP toward 4095).
      */
     double error = current_depth - dpid->target_depth;
-    double adjustment = 0;
+    double pid_output = 0;
     
-    // We use the underlying PID to calculate the step size.
-    // The PID output limits (min/max) now represent the max change per tick.
-    pid_update(&dpid->pid, error, &adjustment);
+    // Calculate the absolute offset from neutral using the PID.
+    // The PID limits in the underlying controller should be +/- 2048 or similar
+    // to allow the output to cover the full actuator range around the neutral point.
+    pid_update(&dpid->pid, error, &pid_output);
     
-    // Apply the adjustment to the existing position
-    int new_pos = *target_actuator_pos + (int)adjustment;
+    // Apply the output to the baseline
+    int new_pos = neutral_adc + (int)pid_output;
     
-    // Clamp to hardware limits
+    // Clamp to hardware limits (0-4095 or as defined by settings)
     if (new_pos > dpid->pos_max) new_pos = dpid->pos_max;
     if (new_pos < dpid->pos_min) new_pos = dpid->pos_min;
     

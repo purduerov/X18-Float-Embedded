@@ -43,8 +43,9 @@ void depth_pid_reset(DepthPID *dpid);
  * @brief Calculates the target actuator position based on current depth.
  * @param dpid Pointer to DepthPID structure.
  * @param current_depth Current depth in meters from sensor.
+ * @param neutral_adc The ADC baseline for neutral buoyancy.
  * @param target_actuator_pos Output: The calculated target position for the actuator (0-4095).
  */
-void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int *target_actuator_pos);
+void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int neutral_adc, int *target_actuator_pos);
 
 #endif // DEPTH_PID_H
