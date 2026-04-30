@@ -11,7 +11,7 @@
 #define I2C_PORT i2c1
 #define PIN_SDA 2
 #define PIN_SCL 3
-#define I2C_BAUDRATE (10 * 1000) //  10 kHz for better noise immunity
+#define I2C_BAUDRATE (10 * 1000) // 10 kHz for extreme noise immunity
 
 // --- Actuator Pins ---
 #define PIN_POT 26

@@ -21,7 +21,6 @@ bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor) {
     stdio_init_all();
     
     // 2. MANDATORY WAIT for USB (Crucial for seeing first prints)
-    // Even if wait toggle is 0, we give it a moment to avoid missing the boot msg
     sleep_ms(2000); 
 
     printf("\n\n[SYSTEM] --- X18 STARTUP DIAGNOSTIC ---\n");
@@ -68,6 +67,30 @@ bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor) {
 }
 
 void hw_init_i2c(void) {
+    // 1. Nuclear Bus Clear (Bit-bang SCL if SDA is stuck LOW)
+    gpio_init(PIN_SDA);
+    gpio_init(PIN_SCL);
+    gpio_set_dir(PIN_SDA, GPIO_IN);
+    gpio_set_dir(PIN_SCL, GPIO_OUT);
+    gpio_pull_up(PIN_SDA); // RP2040 internal (~50k)
+    gpio_pull_up(PIN_SCL);
+    sleep_ms(1);
+
+    if (gpio_get(PIN_SDA) == 0) {
+        printf("[I2C] WARNING: SDA is stuck LOW. Attempting clock-toggle recovery...\n");
+        for (int i = 0; i < 16; i++) {
+            gpio_put(PIN_SCL, 0);
+            sleep_us(10);
+            gpio_put(PIN_SCL, 1);
+            sleep_us(10);
+            if (gpio_get(PIN_SDA) == 1) {
+                printf("[I2C] Recovery Success: Slave released SDA.\n");
+                break;
+            }
+        }
+    }
+
+    // 2. Initialize hardware peripheral
     i2c_init(I2C_PORT, I2C_BAUDRATE);
     gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
     gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
@@ -77,15 +100,16 @@ void hw_init_i2c(void) {
 
 void hw_deinit_i2c(void) {
     i2c_deinit(I2C_PORT);
-    // Reset pins to high-impedance to clear any bus hangs
-    gpio_set_function(PIN_SDA, GPIO_FUNC_SIO);
-    gpio_set_function(PIN_SCL, GPIO_FUNC_SIO);
+    // Reset pins to high-impedance to help clear physical hangs
+    gpio_init(PIN_SDA);
+    gpio_init(PIN_SCL);
     gpio_set_dir(PIN_SDA, GPIO_IN);
     gpio_set_dir(PIN_SCL, GPIO_IN);
 }
 
 bool hw_init_depth_sensor(MS5837_t *sensor) {
     ms5837_init_struct(sensor);
+    sleep_ms(100); // Wait for sensor power stabilization
     if (!ms5837_begin(sensor, I2C_PORT, MS5837_02BA)) {
         return false;
     }
@@ -105,5 +129,5 @@ void hw_wait_for_usb(bool enabled, uint32_t timeout_ms) {
     (void)waitTime;
     (void)timeout_ms;
 #endif
-    sleep_ms(500); // Buffer for terminal
+    sleep_ms(500); 
 }
