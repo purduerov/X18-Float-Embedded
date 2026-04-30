@@ -240,9 +240,19 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->last_sample_time = now;
         }
 
-        // Mission Completion Check (Only if depth was reached)
-        if (fsm->target_depth_reached && (now - fsm->profile_start_time >= (settings.profile_duration_s * 1000))) {
-            printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
+        // Mission Completion Check
+        uint32_t elapsed = now - fsm->profile_start_time;
+        bool buffer_full = (fsm->sample_index >= MAX_PACKETS);
+        bool hold_complete = (fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s * 1000)));
+        
+        // Safety timeout: If we haven't reached depth after duration + 3 minutes, or buffer is full, surface.
+        bool safety_timeout = (!fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s + 180) * 1000));
+
+        if (hold_complete || safety_timeout || buffer_full) {
+            if (safety_timeout) printf("!! [SAFETY] Mission Timeout (No depth arrival after %u sec). Surfacing...\n", settings.profile_duration_s + 180);
+            else if (buffer_full) printf(">> [INFO] Data Buffer Full (%u samples). Surfacing...\n", MAX_PACKETS);
+            else printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
+            
             fsm->state = FLOAT_PROFILE_DONE;
             fsm->actuator_target = settings.act_max; // Maximum Buoyancy to Surface
             update_status_led(fsm->state);
