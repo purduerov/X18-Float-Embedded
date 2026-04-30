@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "hw_config.h"
 
 // Fallback just in case CMake does not define the board flash size automatically
 #ifndef PICO_FLASH_SIZE_BYTES
@@ -42,29 +43,28 @@ void storage_save(void) {
     flash_range_program(FLASH_TARGET_OFFSET, buffer, FLASH_PAGE_SIZE);
     restore_interrupts(ints);
     
-    // Changed magic number to force a factory reset of the flash memory
-    #define SETTINGS_MAGIC 0xBEEFCAF2 
+    printf("[STORAGE] Flash Saved\n");
+}
 
-    static void storage_load(void) {
-        const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
-        memcpy(&current_settings, flash_target_contents, sizeof(float_settings_t));
+static void storage_load(void) {
+    const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
+    memcpy(&current_settings, flash_target_contents, sizeof(float_settings_t));
 
-        if (current_settings.magic_number != SETTINGS_MAGIC) {
-            printf("[STORAGE] No saved settings found. Initializing defaults.\n");
-            current_settings.kp = 1500.0f;
-            current_settings.ki = 10.0f;
-            current_settings.kd = 2000.0f;
-            current_settings.target_depth = 1.0f;
-            current_settings.company_number = 18;
-            current_settings.profile_duration_s = 40;
-            current_settings.depth_offset = 1000.0f; // Uncalibrated Indicator
-            current_settings.act_min = 0;
-            current_settings.act_max = 4095;
-            current_settings.neutral_buoyancy_adc = 2048; // Default to mid-point
-            current_settings.magic_number = SETTINGS_MAGIC;
-            storage_save(); 
-        } else {
-
+    if (current_settings.magic_number != SETTINGS_MAGIC) {
+        printf("[STORAGE] No saved settings found. Initializing defaults.\n");
+        current_settings.kp = DEFAULT_PID_P;
+        current_settings.ki = DEFAULT_PID_I;
+        current_settings.kd = DEFAULT_PID_D;
+        current_settings.target_depth = 1.0f;
+        current_settings.company_number = 18;
+        current_settings.profile_duration_s = 40;
+        current_settings.depth_offset = 1000.0f; // Uncalibrated Indicator
+        current_settings.act_min = 0;
+        current_settings.act_max = 4095;
+        current_settings.neutral_buoyancy_adc = DEFAULT_NEUTRAL_ADC;
+        current_settings.magic_number = SETTINGS_MAGIC;
+        storage_save(); 
+    } else {
         printf("[STORAGE] Successfully loaded settings from Flash.\n");
         printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Target: %.2fm | Team: %u | Time: %us | Bounds: [%u, %u] | Neutral: %u\n", 
                current_settings.kp, current_settings.ki, current_settings.kd, 

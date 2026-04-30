@@ -53,6 +53,7 @@
 
 // --- Actuator Parameters ---
 #define DEFAULT_ACTUATOR_POS 4095 // Default to fully extended
+#define DEFAULT_NEUTRAL_ADC 2048  // Default mid-point
 #define ACT_POS_TOL 20            // ADC units (~2% of 4095)
 #define ACT_ADC_MAX 4095          // 12-bit ADC max
 #define ACT_MOVE_TIMEOUT_MS 8000  // Max time to reach target
