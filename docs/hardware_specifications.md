@@ -28,10 +28,9 @@ The system is optimized for the Adafruit Feather RP2040 form factor, but applies
 ---
 
 ## 2. Peripheral Configuration
-...
 
 ### I2C Bus (`i2c1`)
-*   **Speed:** 400 kHz (Fast Mode)
+*   **Speed:** 10 kHz (Configured for maximum noise immunity underwater).
 *   **Pull-ups:** Internal 50kΩ enabled + External 4.7kΩ recommended.
 *   **Devices:**
     *   **MS5837-02BA:** Address `0x76` (Pressure/Depth). Requires high-resolution (OSR 8192) for sub-centimeter accuracy.
@@ -76,8 +75,10 @@ graph LR
 
 ### Feedback Mapping
 *   **ADC Range:** 0 to 4095.
-*   **Position Tolerance:** ±41 counts (~1% error) to prevent motor jitter (hunting).
-*   **Safety Timeout:** 8 seconds per movement to prevent battery drain on jam.
+*   **Position Tolerance:** ±30 counts (~0.7% error) to prevent motor jitter (hunting).
+*   **Arrival Band:** ±0.33m for depth arrival detection.
+*   **Mission Safety Timeout:** 60s buffer after `profile_duration_s` before forced surfacing.
+*   **Movement Timeout:** 8 seconds per movement to prevent battery drain on jam.
 
 ---
 

@@ -57,9 +57,10 @@ stateDiagram-v2
     state FLOAT_PROFILING {
         [*] --> Sampling
         Sampling --> Sampling : 1s Interval
+        Sampling --> [*] : Hold complete OR\nSafety Timeout OR\nBuffer Full
     }
     
-    FLOAT_PROFILING --> FLOAT_PROFILE_DONE : Duration Reached
+    FLOAT_PROFILING --> FLOAT_PROFILE_DONE : Mission Finished
     
     FLOAT_PROFILE_DONE --> FLOAT_DUMPING_DATA : Received\nCMD_SEND_DATA
     FLOAT_PROFILE_DONE --> FLOAT_PROFILE_DONE : Broadcast\nDONE_PROFILE (3s)
