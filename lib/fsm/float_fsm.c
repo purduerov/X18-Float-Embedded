@@ -54,7 +54,8 @@ void float_fsm_process_event(float_fsm_t *fsm) {
             fsm->target_depth_reached = false; // Reset depth arrival flag
             update_status_led(fsm->state);
             fsm->profile_start_time = to_ms_since_boot(get_absolute_time());
-            fsm->last_sample_time = fsm->profile_start_time;
+            if (fsm->profile_start_time == 0) fsm->profile_start_time = 1; // Prevent 0
+            fsm->last_sample_time = 0; // Trigger immediate first sample
             fsm->sample_index = 0;
         }
         radio_start_receive();
@@ -224,11 +225,12 @@ void float_fsm_update(float_fsm_t *fsm) {
                 printf(">> TARGET DEPTH REACHED (+/- %.2fm). Starting countdown timer (%u sec)...\n", ARRIVAL_BAND_M, settings.profile_duration_s);
                 fsm->target_depth_reached = true;
                 fsm->profile_start_time = now; // Actual countdown starts now
+                if (fsm->profile_start_time == 0) fsm->profile_start_time = 1; // Prevent 0
             }
         }
 
-        // Sampling Loop
-        if (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS && fsm->sample_index < MAX_PACKETS) {
+        // Sampling Loop (Take first sample immediately, then every interval)
+        if ((fsm->sample_index == 0 || (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS)) && fsm->sample_index < MAX_PACKETS) {
             recorded_depths[fsm->sample_index] = fsm->current_depth;
             recorded_times[fsm->sample_index] = now;
             recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
@@ -241,21 +243,21 @@ void float_fsm_update(float_fsm_t *fsm) {
         }
 
         // Mission Completion Check
-        uint32_t elapsed = now - fsm->profile_start_time;
-        bool buffer_full = (fsm->sample_index >= MAX_PACKETS);
-        bool hold_complete = (fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s * 1000)));
-        
-        // Safety timeout: If we haven't reached depth after duration + safety buffer, or buffer is full, surface.
-        bool safety_timeout = (!fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S) * 1000));
+        if (fsm->profile_start_time > 0) {
+            uint32_t elapsed = now - fsm->profile_start_time;
+            bool buffer_full = (fsm->sample_index >= MAX_PACKETS);
+            bool hold_complete = (fsm->target_depth_reached && (elapsed >= (uint32_t)settings.profile_duration_s * 1000));
+            bool safety_timeout = (!fsm->target_depth_reached && (elapsed >= (uint32_t)(settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S) * 1000));
 
-        if (hold_complete || safety_timeout || buffer_full) {
-            if (safety_timeout) printf("!! [SAFETY] Mission Timeout (No depth arrival after %u sec). Surfacing...\n", settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S);
-            else if (buffer_full) printf(">> [INFO] Data Buffer Full (%u samples). Surfacing...\n", MAX_PACKETS);
-            else printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
-            
-            fsm->state = FLOAT_PROFILE_DONE;
-            fsm->actuator_target = settings.act_max; // Maximum Buoyancy to Surface
-            update_status_led(fsm->state);
+            if (hold_complete || safety_timeout || buffer_full) {
+                if (safety_timeout) printf("!! [SAFETY] Mission Timeout (%u sec). Surfacing...\n", settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S);
+                else if (buffer_full) printf(">> [INFO] Data Buffer Full (%u samples). Surfacing...\n", MAX_PACKETS);
+                else printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
+                
+                fsm->state = FLOAT_PROFILE_DONE;
+                fsm->actuator_target = settings.act_max; // Maximum Buoyancy to Surface
+                update_status_led(fsm->state);
+            }
         }
     } else if (fsm->state == FLOAT_PROFILE_DONE && !fsm->currently_transmitting) {
         if (now - fsm->last_tx_time >= 3000) {
