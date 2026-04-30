@@ -21,7 +21,8 @@ class HardwareManager:
             "ActMin": "--", "ActMax": "--",
             "Neutral": "--",
             "Off": "--",
-            "LiveDepth": "--"
+            "LiveDepth": "--",
+            "Tol": "--"
         }
         
         # Countdown Timer variables
@@ -100,6 +101,9 @@ class HardwareManager:
 
     def update_neutral_adc(self, val):
         self.send_command(f"n {val}")
+
+    def update_tolerance(self, val):
+        self.send_command(f"v {val}")
 
     def zero_depth(self):
         self.send_command("z")

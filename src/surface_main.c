@@ -53,6 +53,13 @@ static void handle_target_depth(const char *params) {
   }
 }
 
+static void handle_tolerance(const char *params) {
+  float tolerance;
+  if (sscanf(params, "%f", &tolerance) == 1) {
+    surface_fsm_cmd_set_tolerance(&global_fsm, tolerance);
+  }
+}
+
 static void handle_zero(const char *params) {
   surface_fsm_cmd_zero_depth(&global_fsm);
 }
@@ -97,6 +104,7 @@ static const console_command_t cmd_table[] = {
     {'c', handle_company, "Set Company ID"},
     {'t', handle_duration, "Set Duration (Secs)"},
     {'d', handle_target_depth, "Set Target Depth (m)"},
+    {'v', handle_tolerance, "Set Arrival Tolerance (m)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
     {'b', handle_company_range, "Set Actuator Bounds (Min Max)"},

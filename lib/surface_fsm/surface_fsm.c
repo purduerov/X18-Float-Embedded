@@ -80,6 +80,15 @@ void surface_fsm_cmd_set_target_depth(surface_fsm_t *fsm, float depth) {
     }
 }
 
+void surface_fsm_cmd_set_tolerance(surface_fsm_t *fsm, float tolerance) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Arrival Tolerance Update: %.2f m\n", tolerance);
+        packet_t tx_pkt = {.command = CMD_SET_TOLERANCE, .seq_num = 0};
+        tx_pkt.payload.settings.arrival_band_m = tolerance;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
 void surface_fsm_cmd_zero_depth(surface_fsm_t *fsm) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
         printf(">> Sending ZERO_DEPTH command via radio...\n");

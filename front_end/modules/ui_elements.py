@@ -55,6 +55,10 @@ def render_sidebar(hw):
             new_depth = st.number_input("Target Depth (m)", step=0.1, value=1.0)
             if st.form_submit_button("SET TARGET DEPTH", width="stretch"): hw.update_target_depth(float(new_depth))
 
+        with st.form("tolerance_form"):
+            new_tol = st.number_input("Arrival Tolerance (m)", min_value=0.01, max_value=2.0, step=0.01, value=0.1)
+            if st.form_submit_button("SET TOLERANCE", width="stretch"): hw.update_tolerance(float(new_tol))
+
         with st.form("pid_form"):
             p_val = st.number_input("P", step=0.1, value=DEFAULT_P)
             i_val = st.number_input("I", step=0.1, value=DEFAULT_I)

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Changed magic number to force a factory reset of the flash memory
-#define SETTINGS_MAGIC 0xBEEFCAF1 
+#define SETTINGS_MAGIC 0xBEEFCAF3 
 
 typedef struct {
     float kp;
@@ -17,6 +17,7 @@ typedef struct {
     uint16_t act_min;
     uint16_t act_max;
     uint16_t neutral_buoyancy_adc;
+    float arrival_band_m;
     uint32_t magic_number; 
 } float_settings_t;
 

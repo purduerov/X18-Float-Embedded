@@ -114,6 +114,11 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             printf(">> Target Depth Updated: %.2f m. Saving to Flash...\n", settings.target_depth);
                             storage_set_settings(&settings);
                             storage_save();
+                        } else if (rx_pkt.command == CMD_SET_TOLERANCE) {
+                            settings.arrival_band_m = rx_pkt.payload.settings.arrival_band_m;
+                            printf(">> Arrival Tolerance Updated: %.2f m. Saving to Flash...\n", settings.arrival_band_m);
+                            storage_set_settings(&settings);
+                            storage_save();
                         } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
                             ms5837_read(fsm->depth_sensor);
                             settings.depth_offset = ms5837_get_depth(fsm->depth_sensor);
@@ -151,6 +156,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                             tx_pkt.payload.settings.act_min = settings.act_min;
                             tx_pkt.payload.settings.act_max = settings.act_max;
                             tx_pkt.payload.settings.neutral_buoyancy_adc = settings.neutral_buoyancy_adc;
+                            tx_pkt.payload.settings.arrival_band_m = settings.arrival_band_m;
                             tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
                             fsm->currently_transmitting = true;
                             radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
@@ -216,13 +222,13 @@ void float_fsm_update(float_fsm_t *fsm) {
         fsm->currently_transmitting = true;
         radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
     } else if (fsm->state == FLOAT_PROFILING) {
-        // Depth Arrival Arrival Band Logic (+/- ARRIVAL_BAND_M)
+        // Depth Arrival Arrival Band Logic (+/- arrival_band_m)
         if (!fsm->target_depth_reached) {
             float depth_error = fsm->current_depth - settings.target_depth;
             if (depth_error < 0) depth_error = -depth_error; // absolute value
 
-            if (depth_error <= ARRIVAL_BAND_M) {
-                printf(">> TARGET DEPTH REACHED (+/- %.2fm). Starting countdown timer (%u sec)...\n", ARRIVAL_BAND_M, settings.profile_duration_s);
+            if (depth_error <= settings.arrival_band_m) {
+                printf(">> TARGET DEPTH REACHED (+/- %.2fm). Starting countdown timer (%u sec)...\n", settings.arrival_band_m, settings.profile_duration_s);
                 fsm->target_depth_reached = true;
                 fsm->profile_start_time = now; // Actual countdown starts now
                 if (fsm->profile_start_time == 0) fsm->profile_start_time = 1; // Prevent 0
