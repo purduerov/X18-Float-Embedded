@@ -175,7 +175,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u, Neutral=%u\n",
+                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u, Neutral=%u, Tol=%.2f\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
                     rx_pkt.payload.settings.target_depth,
@@ -186,7 +186,8 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     rx_pkt.payload.settings.actuator_target,
                     rx_pkt.payload.settings.act_min,
                     rx_pkt.payload.settings.act_max,
-                    rx_pkt.payload.settings.neutral_buoyancy_adc);
+                    rx_pkt.payload.settings.neutral_buoyancy_adc,
+                    rx_pkt.payload.settings.arrival_band_m);
                 }
  else if (rx_pkt.command == CMD_REP_TEST_DATA) {
                     printf("\n[SYNC] LiveDepth=%.3f ADC=%u\n",

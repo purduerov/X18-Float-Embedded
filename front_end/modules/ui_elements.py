@@ -151,6 +151,7 @@ def render_main_content(hw):
         st.markdown("### Active Config")
         st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
         st.write(f"**Target:** {hw.float_settings.get('Tar', '--')} m")
+        st.write(f"**Arrival Tol:** {hw.float_settings.get('Tol', '--')} m")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
         st.write(f"**Neutral ADC:** {hw.float_settings.get('Neutral', '--')}")
