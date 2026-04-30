@@ -1,4 +1,4 @@
-#ifndef HW_CONFIG_H
+﻿#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -86,9 +86,9 @@
 #define PROFILING_SAFETY_TIMEOUT_S 60
 
 // --- PID Defaults (If not synced) ---
-#define DEFAULT_PID_P 1500.0f
-#define DEFAULT_PID_I 10.0f
-#define DEFAULT_PID_D 2000.0f
+#define DEFAULT_PID_P 1200.0f
+#define DEFAULT_PID_I 150.0f
+#define DEFAULT_PID_D 600.0f
 
 // ==========================================
 // 3. SYSTEM SETTINGS

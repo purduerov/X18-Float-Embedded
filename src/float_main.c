@@ -43,11 +43,12 @@ static void handle_sync(const char *params) {
     storage_get_settings(&settings);
     // ADC= is used by dashboard for live actuator position. 
     // Added ActMin/ActMax for UI limit verification.
-    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d\n",
+    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d LiveDepth=%.3f\n",
            settings.kp, settings.ki, settings.kd, settings.target_depth,
            settings.company_number, settings.profile_duration_s, 
            settings.depth_offset, global_fsm.current_actuator_pos,
-           settings.act_min, settings.act_max, settings.neutral_buoyancy_adc);
+           settings.act_min, settings.act_max, settings.neutral_buoyancy_adc,
+           global_fsm.current_depth);
 }
 
 static void handle_actuator(const char *params) {

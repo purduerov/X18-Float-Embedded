@@ -94,10 +94,12 @@ def render_sidebar(hw):
             if st.form_submit_button("SET NEUTRAL ADC", width="stretch"): hw.update_neutral_adc(int(n_adc))
 
 def render_metrics(hw):
-    max_depth = 0.0
-    for p in hw.data_log:
-        d = p.get("Depth (m)", 0.0)
-        if d > max_depth: max_depth = d
+    with hw.lock:
+        data_points = len(hw.data_log)
+        max_depth = 0.0
+        if data_points > 0:
+            # More efficient way to get max depth
+            max_depth = max(p.get("Depth (m)", 0.0) for p in hw.data_log)
 
     time_left_str = "--"
     if hw.profile_start_time:
@@ -113,30 +115,41 @@ def render_metrics(hw):
     m1.metric("Mission State", hw.mission_status)
     m2.metric("⏱️ Countdown", time_left_str)
     m3.metric("Max Depth", f"{max_depth:.2f} m")
-    m4.metric("Data Points", len(hw.data_log))
+    m4.metric("Data Points", data_points)
 
 def render_main_content(hw):
     col_chart, col_actions = st.columns([4, 1], gap="medium")
     
     with col_chart:
-        if hw.data_log and len(hw.data_log) > 0:
-            df = pd.DataFrame(hw.data_log)
+        with hw.lock:
+            local_data = list(hw.data_log)
+        
+        if local_data:
+            df = pd.DataFrame(local_data)
             
+            # Downsample if too many points to keep UI snappy
+            if len(df) > 300:
+                df = df.iloc[::max(1, len(df)//300)]
+
             # Ensure required columns exist
             if "Time (s)" in df.columns and "Depth (m)" in df.columns:
                 tab1, tab2 = st.tabs(["📉 Depth Profile", "🦾 Actuator Position"])
                 
                 with tab1:
+                    # Use a more efficient marker style
                     fig = px.line(df, x="Time (s)", y="Depth (m)", height=350, markers=True)
                     fig.update_yaxes(autorange="reversed")
                     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                    st.plotly_chart(fig, width="stretch", key="p_depth_chart")
+                    # Disable animation and heavy features for performance
+                    fig.update_traces(line_shape='linear', hovertemplate=None)
+                    st.plotly_chart(fig, width="stretch", key="p_depth_chart", use_container_width=True)
                 
                 with tab2:
                     if "Actuator (ADC)" in df.columns:
                         fig2 = px.line(df, x="Time (s)", y="Actuator (ADC)", height=350, markers=True)
                         fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                        st.plotly_chart(fig2, width="stretch", key="p_act_chart")
+                        fig2.update_traces(line_shape='linear', hovertemplate=None)
+                        st.plotly_chart(fig2, width="stretch", key="p_act_chart", use_container_width=True)
                     else:
                         st.info("Actuator data not available for this session.")
             else:
@@ -158,12 +171,13 @@ def render_main_content(hw):
         st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")
         st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
-        if hw.data_log:
-            df_csv = pd.DataFrame(hw.data_log).to_csv(index=False).encode('utf-8')
+        if local_data:
+            df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8')
             st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", width="stretch")
 
 def render_console(hw):
     st.markdown("**Live Serial Console**")
-    escaped_logs = [html.escape(line) for line in hw.console_log]
+    with hw.lock:
+        escaped_logs = [html.escape(line) for line in hw.console_log]
     log_html = "<br>".join(escaped_logs)
     components.html(CONSOLE_STYLE.format(log_html=log_html), height=220)
