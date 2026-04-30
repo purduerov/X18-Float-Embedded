@@ -1,4 +1,4 @@
-﻿#ifndef HW_CONFIG_H
+#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -53,7 +53,7 @@
 
 // --- Actuator Parameters ---
 #define DEFAULT_ACTUATOR_POS 4095 // Default to fully extended
-#define ACT_POS_TOL 30            // ADC units (~2% of 4095)
+#define ACT_POS_TOL 20            // ADC units (~2% of 4095)
 #define ACT_ADC_MAX 4095          // 12-bit ADC max
 #define ACT_MOVE_TIMEOUT_MS 8000  // Max time to reach target
 #define ACT_STALL_MS 1000         // Max time without ADC change before stall
@@ -85,9 +85,9 @@
 #define PROFILING_SAFETY_TIMEOUT_S 60
 
 // --- PID Defaults (If not synced) ---
-#define DEFAULT_PID_P 3.2f
-#define DEFAULT_PID_I 4.5f
-#define DEFAULT_PID_D 38.4f
+#define DEFAULT_PID_P 1500.0f
+#define DEFAULT_PID_I 10.0f
+#define DEFAULT_PID_D 2000.0f
 
 // ==========================================
 // 3. SYSTEM SETTINGS
