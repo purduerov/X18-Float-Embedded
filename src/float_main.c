@@ -38,15 +38,6 @@ static void handle_zero(const char *params) {
     storage_save();
 }
 
-static void handle_actuator(const char *params) {
-    int parsed_pos;
-    if (sscanf(params, "%d", &parsed_pos) == 1) {
-        global_fsm.actuator_target = parsed_pos;
-        global_fsm.manual_move_pending = true;
-        printf(">> [CONSOLE] New Actuator Target: %d\n", global_fsm.actuator_target);
-    }
-}
-
 static void handle_sync(const char *params) {
     float_settings_t settings;
     storage_get_settings(&settings);
@@ -57,6 +48,16 @@ static void handle_sync(const char *params) {
            settings.company_number, settings.profile_duration_s, 
            settings.depth_offset, global_fsm.current_actuator_pos,
            settings.act_min, settings.act_max, settings.neutral_buoyancy_adc);
+}
+
+static void handle_actuator(const char *params) {
+    int parsed_pos;
+    if (sscanf(params, "%d", &parsed_pos) == 1) {
+        global_fsm.actuator_target = parsed_pos;
+        global_fsm.manual_move_pending = true;
+        printf(">> [CONSOLE] New Actuator Target: %d\n", global_fsm.actuator_target);
+        handle_sync(NULL);
+    }
 }
 
 static void handle_profile(const char *params) {
