@@ -1,4 +1,4 @@
-﻿#ifndef HW_CONFIG_H
+#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -82,6 +82,7 @@
 #define DEPTH_PID_LOOP_MS 100 // 10Hz outer loop
 #define SURFACE_DEBUG_INTERVAL_MS 2000
 #define ARRIVAL_BAND_M 0.33f
+#define PROFILING_SAFETY_TIMEOUT_S 180
 
 // --- PID Defaults (If not synced) ---
 #define DEFAULT_PID_P 3.2f

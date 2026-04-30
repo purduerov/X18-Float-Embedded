@@ -245,11 +245,11 @@ void float_fsm_update(float_fsm_t *fsm) {
         bool buffer_full = (fsm->sample_index >= MAX_PACKETS);
         bool hold_complete = (fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s * 1000)));
         
-        // Safety timeout: If we haven't reached depth after duration + 3 minutes, or buffer is full, surface.
-        bool safety_timeout = (!fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s + 180) * 1000));
+        // Safety timeout: If we haven't reached depth after duration + safety buffer, or buffer is full, surface.
+        bool safety_timeout = (!fsm->target_depth_reached && (elapsed >= (settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S) * 1000));
 
         if (hold_complete || safety_timeout || buffer_full) {
-            if (safety_timeout) printf("!! [SAFETY] Mission Timeout (No depth arrival after %u sec). Surfacing...\n", settings.profile_duration_s + 180);
+            if (safety_timeout) printf("!! [SAFETY] Mission Timeout (No depth arrival after %u sec). Surfacing...\n", settings.profile_duration_s + PROFILING_SAFETY_TIMEOUT_S);
             else if (buffer_full) printf(">> [INFO] Data Buffer Full (%u samples). Surfacing...\n", MAX_PACKETS);
             else printf(">> Hold complete (%u sec). Surfacing...\n", settings.profile_duration_s);
             
