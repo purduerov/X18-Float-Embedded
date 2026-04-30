@@ -10,7 +10,15 @@ def render_sidebar(hw):
     with st.sidebar:
         st.header("🔌 Connection")
         available_ports = hw.get_available_ports()
-        selected_port = st.selectbox("COM Port", available_ports) if available_ports else st.text_input("Manual Port", "COM9")
+        if available_ports:
+            selected_port_obj = st.selectbox(
+                "COM Port", 
+                available_ports, 
+                format_func=lambda x: f"{x.device} - {x.description}"
+            )
+            selected_port = selected_port_obj.device
+        else:
+            selected_port = st.text_input("Manual Port", "COM9")
             
         col1, col2 = st.columns(2)
         with col1:

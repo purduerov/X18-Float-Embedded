@@ -1,6 +1,7 @@
 #include "hw_init.h"
 #include "hw_config.h"
 #include "pico/stdlib.h"
+#include "pico/stdio_usb.h"
 #include <stdio.h>
 
 // Conditional Includes
@@ -95,9 +96,14 @@ void hw_wait_for_usb(bool enabled, uint32_t timeout_ms) {
     if (!enabled) return;
     
     uint32_t waitTime = 0;
+#if PICO_STDIO_USB
     while (!stdio_usb_connected() && waitTime < timeout_ms) {
         sleep_ms(100);
         waitTime += 100;
     }
+#else
+    (void)waitTime;
+    (void)timeout_ms;
+#endif
     sleep_ms(500); // Buffer for terminal
 }

@@ -1,4 +1,4 @@
-#ifndef HW_CONFIG_H
+﻿#ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
 #include "hardware/i2c.h"
@@ -23,10 +23,17 @@
 #define PIN_SPI_MOSI 19
 #define PIN_SPI_MISO 20
 #define PIN_SPI_SCK 18
+
+#ifdef TARGET_SURFACE
+#define PIN_CS 17
+#define PIN_RST 16
+#define PIN_IRQ 2
+#else
 #define PIN_CS 24
 #define PIN_RST 25
-#define PIN_EN 8
 #define PIN_IRQ 9
+#endif
+#define PIN_EN 8
 
 // --- Status LED ---
 #define PIN_NEOPIXEL 16

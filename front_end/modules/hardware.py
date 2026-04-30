@@ -33,8 +33,8 @@ class HardwareManager:
         self.thread.start()
 
     def get_available_ports(self):
-        ports = serial.tools.list_ports.comports()
-        return [port.device for port in ports]
+        """Returns a list of ListPortInfo objects containing device, description, etc."""
+        return serial.tools.list_ports.comports()
 
     def connect(self, port, baud=115200):
         with self.lock:
