@@ -63,9 +63,20 @@ def render_sidebar(hw):
 
         st.divider()
         st.header("🦾 Actuator Control")
+
+        # Quick Presets
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🔽 DIVE (0)", use_container_width=True):
+                hw.move_actuator(0)
+        with c2:
+            if st.button("🔼 SURFACE (4095)", use_container_width=True):
+                hw.move_actuator(4095)
+
         with st.form("actuator_form"):
             act_pos = st.number_input("Target Position (0-4095)", min_value=0, max_value=4095, value=DEFAULT_ACTUATOR_POS, step=100)
-            if st.form_submit_button("MOVE ACTUATOR", width="stretch"): hw.move_actuator(int(act_pos))
+            if st.form_submit_button("MOVE TO CUSTOM", use_container_width=True): 
+                hw.move_actuator(int(act_pos))
 
         with st.form("bounds_form"):
             st.write("**Set Limits**")
