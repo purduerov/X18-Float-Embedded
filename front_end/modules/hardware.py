@@ -3,6 +3,8 @@ import serial.tools.list_ports
 import threading
 import time
 import re
+import os
+from datetime import datetime
 
 class HardwareManager:
     """Manages the serial connection and state behind the scenes."""
@@ -86,27 +88,51 @@ class HardwareManager:
 
     def update_team_id(self, val):
         self.send_command(f"c {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
         
     def update_duration(self, val):
         self.send_command(f"t {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def update_target_depth(self, val):
         self.send_command(f"d {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
         
     def update_pid(self, p, i, d):
         self.send_command(f"s {p} {i} {d}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def update_bounds(self, min_val, max_val):
         self.send_command(f"b {min_val} {max_val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def update_neutral_adc(self, val):
         self.send_command(f"n {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def update_tolerance(self, val):
         self.send_command(f"v {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def zero_depth(self):
         self.send_command("z")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
 
     def reset_fsm(self):
         self.send_command("r")
@@ -122,6 +148,46 @@ class HardwareManager:
     def start_profile(self):
         """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
         self.send_command('p') 
+
+    def save_profile_data(self):
+        """Automatically saves mission telemetry and config to a CSV file."""
+        if not self.data_log:
+            return
+
+        try:
+            # Create profiles directory if it doesn't exist
+            profile_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "profiles")
+            if not os.path.exists(profile_dir):
+                os.makedirs(profile_dir)
+
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join(profile_dir, f"profile_{timestamp}.csv")
+
+            with open(filename, "w") as f:
+                # Write Configuration Headers
+                f.write("# MISSION PROFILE DATA\n")
+                f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"# Target Depth: {self.float_settings.get('Tar', '--')} m\n")
+                f.write(f"# Arrival Tolerance: {self.float_settings.get('Tol', '--')} m\n")
+                f.write(f"# Duration: {self.float_settings.get('Time', '--')} s\n")
+                f.write(f"# PID: P={self.float_settings.get('P', '--')}, I={self.float_settings.get('I', '--')}, D={self.float_settings.get('D', '--')}\n")
+                f.write(f"# Neutral ADC: {self.float_settings.get('Neutral', '--')}\n")
+                f.write(f"# Bounds: {self.float_settings.get('ActMin', '--')} to {self.float_settings.get('ActMax', '--')}\n")
+                f.write(f"# Depth Offset: {self.float_settings.get('Off', '--')} m\n")
+                f.write("# ------------------------------------------\n")
+                
+                # Write CSV Header
+                f.write("Time (s),Depth (m),Actuator (ADC)\n")
+                
+                # Write Data
+                for entry in self.data_log:
+                    line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)}\n"
+                    f.write(line)
+
+            self.console_log.append(f"📂 AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
+        except Exception as e:
+            self.console_log.append(f"🔴 AUTO-SAVE ERROR: {e}")
 
     def serial_listener(self):
         while self.running:
@@ -156,6 +222,7 @@ class HardwareManager:
                                     self.first_timestamp = None 
                                 elif "Download Complete" in line: 
                                     self.mission_status = "MISSION COMPLETE"
+                                    self.save_profile_data()
                                 elif "[SYNC]" in line:
                                     matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
                                     if matches:

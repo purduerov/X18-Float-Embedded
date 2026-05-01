@@ -168,6 +168,7 @@ def render_main_content(hw):
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
         st.write(f"**Neutral ADC:** {hw.float_settings.get('Neutral', '--')}")
+        st.write(f"**Depth Offset:** {hw.float_settings.get('Off', '--')} m")
         st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")
         st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
         
