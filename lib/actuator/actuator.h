@@ -3,6 +3,7 @@
 
 #include "pico/stdlib.h"
 #include "hw_config.h"
+#include "sw_config.h"
 #include "pid.h"
 
 // Constants using raw 12-bit ADC values (0-4095)

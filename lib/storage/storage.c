@@ -5,6 +5,7 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "hw_config.h"
+#include "sw_config.h"
 
 // Fallback just in case CMake does not define the board flash size automatically
 #ifndef PICO_FLASH_SIZE_BYTES

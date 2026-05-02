@@ -1,5 +1,6 @@
 #include "hw_init.h"
 #include "hw_config.h"
+#include "sw_config.h"
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 #include <stdio.h>

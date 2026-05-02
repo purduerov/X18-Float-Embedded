@@ -6,6 +6,7 @@
 // --- Modular Library Includes ---
 #include "data_logger.h"
 #include "hw_config.h"
+#include "sw_config.h"
 #include "hw_init.h"
 #include "packets.h"
 #include "radio_setup.h"
