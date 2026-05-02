@@ -3,11 +3,10 @@
 
 void depth_pid_init(DepthPID *dpid, double kp, double ki, double kd, double dt, int pos_min, int pos_max) {
     // Initialize underlying PID controller.
-    // ASYMMETRIC LIMITS:
-    // Max (+4095): Full positive authority to surface or stop plunges.
-    // Min (-800): Capped negative authority. Allows the float to reach a heavy state
-    // to sink reliably, but prevents the massive lead-weight plunge.
-    pid_init(&dpid->pid, kp, ki, kd, dt, -800.0, 4095.0);
+    // SYMMETRIC LIMITS:
+    // Allow the PID to span the entire ±4095 range so it can reach any actuator position
+    // regardless of what the "Neutral ADC" guess is set to.
+    pid_init(&dpid->pid, kp, ki, kd, dt, -4095.0, 4095.0);
     
     // Enable Integral Gating to prevent windup during the descent.
     dpid->pid.integral_gate = (double)INTEGRAL_GATE_M;
@@ -27,21 +26,18 @@ void depth_pid_reset(DepthPID *dpid) {
 
 void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int neutral_adc, int *target_actuator_pos) {
     /**
-     * ABSOLUTE POSITIONAL CONTROL:
+     * ADAPTIVE POSITIONAL CONTROL:
      * 
-     * Formula: Target_Position = Neutral_ADC + PID_Output
-     * 
-     * Direction:
-     * 4095 = UP (Maximum Buoyancy / Expansion)
-     * 0    = DOWN (Minimum Buoyancy / Retraction)
+     * The PID output is the ABSOLUTE target position (0-4095).
+     * The 'neutral_adc' baseline is handled internally by the PID's integral term,
+     * which is seeded at the start of the mission.
      */
     double error = current_depth - dpid->target_depth;
     double pid_output = 0;
     
     pid_update(&dpid->pid, error, &pid_output);
     
-    // Apply the output to the baseline
-    int new_pos = neutral_adc + (int)pid_output;
+    int new_pos = (int)pid_output;
     
     // Clamp to hardware limits (0-4095 or as defined by settings)
     if (new_pos > dpid->pos_max) new_pos = dpid->pos_max;

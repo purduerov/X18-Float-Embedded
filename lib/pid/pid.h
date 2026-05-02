@@ -17,5 +17,6 @@ typedef struct {
 void pid_init(PIDController *pid, double kp, double ki, double kd, double dt, double output_min, double output_max);
 void pid_update(PIDController *pid, double error, double *output);
 void pid_reset(PIDController *pid);
+void pid_set_integral(PIDController *pid, double integral_value);
 
 #endif

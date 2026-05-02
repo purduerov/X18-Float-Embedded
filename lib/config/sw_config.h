@@ -42,6 +42,9 @@
 #define DEFAULT_PID_I 10.0f
 #define DEFAULT_PID_D 200.0f
 
+#define TRANSIT_THRESHOLD_M 0.5f
+#define TRANSIT_P_MULTIPLIER 2.0f
+
 // ==========================================
 // 2. MISSION & SENSOR FAIL-SAFES
 // ==========================================

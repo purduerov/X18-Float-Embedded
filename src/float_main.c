@@ -160,17 +160,35 @@ int main() {
 
         depth_pid_set_target(&dpid, target_m);
         
-        // Reset PID and sync target on first entry to profiling
+        // Seed PID baseline on first entry to profiling
         if (prev_state != FLOAT_PROFILING) {
-            printf(">> PID: Entering PROFILING mode. Resetting Integral and syncing to Neutral ADC: %d\n", settings.neutral_buoyancy_adc);
+            printf(">> PID: Entering PROFILING mode. Seeding Integral with Neutral ADC: %d\n", settings.neutral_buoyancy_adc);
             depth_pid_reset(&dpid);
-            // Starting from neutral prevents the 'Initial Heavy' overshoot seen in logs.
+            pid_set_integral(&dpid.pid, (double)settings.neutral_buoyancy_adc);
             global_fsm.actuator_target = settings.neutral_buoyancy_adc;
         }
 
-        int current_target = (int)global_fsm.actuator_target;
-        depth_pid_calculate_target_pos(&dpid, current_depth, settings.neutral_buoyancy_adc, &current_target);
-        global_fsm.actuator_target = (uint16_t)current_target;
+        // --- TWO-STAGE PID LOGIC ---
+        double depth_error = fabs(current_depth - target_m);
+        dpid.pid.kp = settings.kp;
+        if (depth_error > TRANSIT_THRESHOLD_M) {
+            dpid.pid.kp *= TRANSIT_P_MULTIPLIER; // Boost P during descent/ascent
+        }
+        dpid.pid.ki = settings.ki;
+        dpid.pid.kd = settings.kd;
+
+        // --- DEAD-BAND OPTIMIZATION ---
+        // If we are within the arrival band, we STOP the PID to save battery and prevent yo-yoing.
+        // We only do this if we aren't in the EXITING (surfacing) stage.
+        if (global_fsm.mission_stage != STAGE_EXITING && depth_error <= settings.arrival_band_m) {
+            // Within band: Lock actuator at current position
+            // (Note: we don't call depth_pid_calculate_target_pos here)
+        } else {
+            // Outside band: Run PID control
+            int current_target = (int)global_fsm.actuator_target;
+            depth_pid_calculate_target_pos(&dpid, current_depth, settings.neutral_buoyancy_adc, &current_target);
+            global_fsm.actuator_target = (uint16_t)current_target;
+        }
       }
       
       prev_state = global_fsm.state;

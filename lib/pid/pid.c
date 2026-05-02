@@ -67,3 +67,14 @@ void pid_reset(PIDController *pid) {
     pid->prev_error = 0.0;
     pid->prev_D = 0.0;
 }
+
+void pid_set_integral(PIDController *pid, double integral_value) {
+    // We allow setting the integral directly. 
+    // This is useful for "seeding" the PID with a baseline guess (like Neutral ADC)
+    // and for anti-windup checks.
+    if (pid->ki != 0) {
+        pid->integral = integral_value / pid->ki;
+    } else {
+        pid->integral = 0;
+    }
+}
