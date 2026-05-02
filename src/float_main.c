@@ -162,9 +162,10 @@ int main() {
         
         // Reset PID and sync target on first entry to profiling
         if (prev_state != FLOAT_PROFILING) {
-            printf(">> PID: Entering PROFILING mode. Resetting Integral and syncing target.\n");
+            printf(">> PID: Entering PROFILING mode. Resetting Integral and syncing to Neutral ADC: %d\n", settings.neutral_buoyancy_adc);
             depth_pid_reset(&dpid);
-            global_fsm.actuator_target = global_fsm.current_actuator_pos;
+            // Starting from neutral prevents the 'Initial Heavy' overshoot seen in logs.
+            global_fsm.actuator_target = settings.neutral_buoyancy_adc;
         }
 
         int current_target = (int)global_fsm.actuator_target;

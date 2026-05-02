@@ -71,6 +71,11 @@ void float_fsm_process_event(float_fsm_t *fsm) {
       fsm->mission_stage = STAGE_DEEP;
       fsm->current_profile = 1;
       fsm->target_depth_reached = false;
+      
+      float_settings_t settings;
+      storage_get_settings(&settings);
+      fsm->actuator_target = settings.neutral_buoyancy_adc; // Sync target for logging
+      
       update_status_led(fsm->state);
       fsm->profile_start_time = to_ms_since_boot(get_absolute_time());
       if (fsm->profile_start_time == 0)
