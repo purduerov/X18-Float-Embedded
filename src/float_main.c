@@ -89,9 +89,8 @@ int main() {
   storage_get_settings(&settings);
 
   // We now use the PID to calculate absolute positions.
-  // The min/max limits here represent the allowable PID OFFSET from neutral.
-  // We use +/- 2048 to allow full range coverage around any neutral point.
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, -2048, 2048);
+  // We initialize the depth PID with the physical limits of the actuator.
+  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, settings.act_min, settings.act_max);
   depth_pid_set_target(&dpid, settings.deep_target_m);
 
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
@@ -154,7 +153,11 @@ int main() {
       dpid.pid.kd = settings.kd;
 
       if (global_fsm.state == FLOAT_PROFILING) {
-        float target_m = (global_fsm.mission_stage == STAGE_DEEP) ? settings.deep_target_m : settings.shallow_target_m;
+        float target_m = 0.0f;
+        if (global_fsm.mission_stage == STAGE_DEEP) target_m = settings.deep_target_m;
+        else if (global_fsm.mission_stage == STAGE_SHALLOW) target_m = settings.shallow_target_m;
+        else if (global_fsm.mission_stage == STAGE_EXITING) target_m = -0.5f;
+
         depth_pid_set_target(&dpid, target_m);
         
         // Reset PID and sync target on first entry to profiling

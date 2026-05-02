@@ -2,8 +2,9 @@
 
 void depth_pid_init(DepthPID *dpid, double kp, double ki, double kd, double dt, int pos_min, int pos_max) {
     // Initialize underlying PID controller.
-    // We map the output range directly to the actuator's ADC range.
-    pid_init(&dpid->pid, kp, ki, kd, dt, (double)pos_min, (double)pos_max);
+    // The PID output is an offset from neutral, so its limits should cover the full possible range.
+    // For a 0-4095 actuator, the maximum possible offset is +/- 4095.
+    pid_init(&dpid->pid, kp, ki, kd, dt, -4095.0, 4095.0);
     
     dpid->target_depth = 0.0;
     dpid->pos_min = pos_min;
