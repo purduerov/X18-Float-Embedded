@@ -1,19 +1,16 @@
 #include "float_fsm.h"
 #include "hw_config.h"
+#include "sw_config.h"
 #include "neopixel.h"
 #include "pico/bootrom.h"
 #include "reflash_target.h"
 #include <stdio.h>
 #include <string.h>
 
-// --- Configuration ---
-#define SAMPLE_INTERVAL_MS 1000
-#define MAX_PACKETS 1000
-
 // --- Internal Data Buffers ---
-static float recorded_depths[MAX_PACKETS];
-static uint32_t recorded_times[MAX_PACKETS];
-static uint16_t recorded_adcs[MAX_PACKETS];
+static float recorded_depths[MAX_RECORDED_SAMPLES];
+static uint32_t recorded_times[MAX_RECORDED_SAMPLES];
+static uint16_t recorded_adcs[MAX_RECORDED_SAMPLES];
 
 const char *FloatStateNames[] = {"IDLE",         "PRE_DIVE",
                                  "PROFILING",    "PROFILE_DONE",
@@ -346,13 +343,13 @@ void float_fsm_update(float_fsm_t *fsm) {
     // Sampling Loop
     if ((fsm->sample_index == 0 ||
          (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS)) &&
-        fsm->sample_index < MAX_PACKETS) {
+        fsm->sample_index < MAX_RECORDED_SAMPLES) {
       recorded_depths[fsm->sample_index] = fsm->current_depth;
       recorded_times[fsm->sample_index] = now;
       recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
       printf(
           ">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u [%s%s]\n",
-          fsm->sample_index + 1, MAX_PACKETS, recorded_times[fsm->sample_index],
+          fsm->sample_index + 1, MAX_RECORDED_SAMPLES, recorded_times[fsm->sample_index],
           recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index],
           stage_name, fsm->target_depth_reached ? " HOLDING" : " DIVING");
       fsm->sample_index++;
@@ -362,7 +359,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     // Mission Progression Logic
     if (fsm->profile_start_time > 0) {
       uint32_t elapsed = now - fsm->profile_start_time;
-      bool buffer_full = (fsm->sample_index >= MAX_PACKETS);
+      bool buffer_full = (fsm->sample_index >= MAX_RECORDED_SAMPLES);
       bool stage_complete =
           (fsm->target_depth_reached &&
            (elapsed >= (uint32_t)settings.profile_duration_s * 1000));
@@ -420,7 +417,7 @@ void float_fsm_update(float_fsm_t *fsm) {
             }
     }
   } else if (fsm->state == FLOAT_PROFILE_DONE && !fsm->currently_transmitting) {
-    if (now - fsm->last_tx_time >= 3000) {
+    if (now - fsm->last_tx_time >= RADIO_DONE_BROADCAST_MS) {
       printf(">> Broadcasting DONE_PROFILE (Waiting for Recovery / SEND_DATA "
              "CMD)...\n");
       packet_t tx_pkt = {.command = CMD_DONE_PROFILE, .seq_num = 0};
@@ -430,7 +427,7 @@ void float_fsm_update(float_fsm_t *fsm) {
       fsm->last_tx_time = now;
     }
   } else if (fsm->state == FLOAT_DUMPING_DATA && !fsm->currently_transmitting) {
-    if (now - fsm->last_tx_time >= 2000) {
+    if (now - fsm->last_tx_time >= RADIO_DATA_RETRANSMIT_MS) {
       printf(">> Sending/Retransmitting Data Packet %d...\n",
              fsm->current_seq_num);
       packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION,
@@ -449,7 +446,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     }
   } else if (fsm->state == FLOAT_TEST_CALIBRATE &&
              !fsm->currently_transmitting) {
-    if (now - fsm->last_tx_time >= 1000) {
+    if (now - fsm->last_tx_time >= RADIO_TEST_TX_MS) {
       packet_t tx_pkt = {.command = CMD_REP_TEST_DATA, .seq_num = 0};
       tx_pkt.payload.test_data.live_depth = fsm->current_depth;
       tx_pkt.payload.test_data.live_adc = fsm->current_actuator_pos;
