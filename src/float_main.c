@@ -10,6 +10,7 @@
 #include "depth_pid.h"
 #include "float_fsm.h"
 #include "hw_config.h"
+#include "sw_config.h"
 #include "hw_init.h"
 #include "packets.h"
 #include "radio_setup.h"
@@ -122,15 +123,15 @@ int main() {
       } else {
         consecutive_sensor_failures++;
         
-        // TIER 1 RECOVERY: Simple Sensor Reset (5 strikes / 0.5s)
-        if (consecutive_sensor_failures == 5) {
+        // TIER 1 RECOVERY: Simple Sensor Reset
+        if (consecutive_sensor_failures == SENSOR_RESET_STRIKES) {
           printf("!! [SENSOR] Reading Failed. Attempting Sensor Reset...\n");
           ms5837_begin(&depth_sensor, I2C_PORT, MS5837_UNRECOGNISED);
         }
         
-        // TIER 2 RECOVERY: Full I2C Bus Reset (10+ strikes / >1s, throttled to 2s)
+        // TIER 2 RECOVERY: Full I2C Bus Reset
         static uint32_t last_bus_reset_time = 0;
-        if (consecutive_sensor_failures >= 10 && (now - last_bus_reset_time > 2000)) {
+        if (consecutive_sensor_failures >= I2C_BUS_RESET_STRIKES && (now - last_bus_reset_time > I2C_BUS_RESET_THROTTLE_MS)) {
           printf("!! [SENSOR] Persistent Failure. Performing FULL I2C RESET...\n");
           hw_deinit_i2c();
           sleep_ms(10);
@@ -139,8 +140,8 @@ int main() {
           last_bus_reset_time = now;
         }
 
-        // FAIL-SAFE: Mission Abort (50 strikes / 5s)
-        if (consecutive_sensor_failures >= 50 && global_fsm.state == FLOAT_PROFILING) {
+        // FAIL-SAFE: Mission Abort
+        if (consecutive_sensor_failures >= SENSOR_ABORT_STRIKES && global_fsm.state == FLOAT_PROFILING) {
           printf(">> [CRITICAL] DEPTH SENSOR LOST. ABORTING MISSION!\n");
           global_fsm.state = FLOAT_PROFILE_DONE;
           global_fsm.actuator_target = settings.act_max; // Surface immediately
