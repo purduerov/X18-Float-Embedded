@@ -6,6 +6,7 @@
 #include "reflash_target.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 // --- Internal Data Buffers ---
 static float recorded_depths[MAX_RECORDED_SAMPLES];
@@ -82,6 +83,10 @@ void float_fsm_process_event(float_fsm_t *fsm) {
         fsm->profile_start_time = 1; // Prevent 0
       fsm->last_sample_time = 0;     // Trigger immediate first sample
       fsm->sample_index = 0;
+
+      // Initialize Stall Detection
+      fsm->last_stall_check_time = fsm->profile_start_time;
+      fsm->stall_reference_depth = fsm->current_depth;
     }
     radio_start_receive();
   } else {
@@ -363,6 +368,21 @@ void float_fsm_update(float_fsm_t *fsm) {
           stage_name, fsm->target_depth_reached ? " HOLDING" : " DIVING");
       fsm->sample_index++;
       fsm->last_sample_time = now;
+    }
+
+    // --- Stall Detection (Early Abort) ---
+    // If we are supposed to be moving (diving/rising) but depth hasn't changed...
+    if (!fsm->target_depth_reached && (now - fsm->last_stall_check_time >= STALL_CHECK_DURATION_MS)) {
+        float depth_change = fabsf(fsm->current_depth - fsm->stall_reference_depth);
+        if (depth_change < STALL_DEPTH_THRESHOLD_M) {
+            printf("!! [STALL] No depth change detected (%.3fm). Aborting mission...\n", depth_change);
+            fsm->mission_stage = STAGE_EXITING;
+            fsm->target_depth_reached = false;
+            fsm->actuator_target = settings.act_max;
+            update_status_led(fsm->state);
+        }
+        fsm->last_stall_check_time = now;
+        fsm->stall_reference_depth = fsm->current_depth;
     }
 
     // Mission Progression Logic

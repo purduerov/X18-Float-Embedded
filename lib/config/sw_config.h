@@ -31,11 +31,16 @@
 #define DEPTH_PID_LOOP_MS 100
 #define SURFACE_DEBUG_INTERVAL_MS 2000
 #define ARRIVAL_BAND_M 0.33f
-#define PROFILING_SAFETY_TIMEOUT_S 60
+#define PROFILING_SAFETY_TIMEOUT_S 15
+#define INTEGRAL_GATE_M 0.5f
 
-#define DEFAULT_PID_P 1200.0f
-#define DEFAULT_PID_I 150.0f
-#define DEFAULT_PID_D 600.0f
+// --- STALL DETECTION (Early Abort) ---
+#define STALL_CHECK_DURATION_MS 15000
+#define STALL_DEPTH_THRESHOLD_M 0.01f
+
+#define DEFAULT_PID_P 250.0f
+#define DEFAULT_PID_I 10.0f
+#define DEFAULT_PID_D 200.0f
 
 // ==========================================
 // 2. MISSION & SENSOR FAIL-SAFES

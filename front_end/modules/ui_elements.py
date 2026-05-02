@@ -145,17 +145,19 @@ def render_main_content(hw):
                 
                 with tab1:
                     # Use Scattergl (Web GL) for high-performance plotting of large datasets
-                    fig = px.scatter(df, x="Time (s)", y="Depth (m)", render_mode='webgl', height=350)
+                    hover_cols = [c for c in ["Depth (m)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
+                    fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=350)
                     fig.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
                     fig.update_yaxes(autorange="reversed")
-                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode=False)
+                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
                     st.plotly_chart(fig, width="stretch", key="p_depth_chart", use_container_width=True)
                 
                 with tab2:
                     if "Actuator (ADC)" in df.columns:
-                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", render_mode='webgl', height=350)
+                        hover_cols = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
+                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols, render_mode='webgl', height=350)
                         fig2.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
-                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode=False)
+                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
                         st.plotly_chart(fig2, width="stretch", key="p_act_chart", use_container_width=True)
                     else:
                         st.info("Actuator data not available for this session.")

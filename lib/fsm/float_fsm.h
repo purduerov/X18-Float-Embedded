@@ -41,6 +41,11 @@ typedef struct {
     bool manual_move_pending;
     bool target_depth_reached;
     float current_depth;
+    
+    // --- Stall Detection (Early Abort) ---
+    uint32_t last_stall_check_time;
+    float stall_reference_depth;
+
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

@@ -1,4 +1,5 @@
 #include "pid.h"
+#include <stdbool.h>
 
 void pid_init(PIDController *pid, double kp, double ki, double kd, double dt, double output_min, double output_max) {
     pid->kp = kp;
@@ -9,13 +10,27 @@ void pid_init(PIDController *pid, double kp, double ki, double kd, double dt, do
     pid->prev_error = 0.0;
     pid->output_min = output_min;
     pid->output_max = output_max;
+    pid->integral_gate = 0.0; // Disabled by default
+    pid->prev_D = 0.0;
 }
 
 void pid_update(PIDController *pid, double error, double *output) {
     double P = pid->kp * error;
 
-    // Calculate potential integral update
-    pid->integral += error * pid->dt;
+    // One-Way Conditional Integration (Gating)
+    // We only gate the integral when we are TOO SHALLOW (descending).
+    // This prevents windup during the long drop, but allows the PID to 
+    // build maximum buoyancy if we ever go too deep (overshoot).
+    bool accumulate = true;
+    if (pid->integral_gate > 0.0) {
+        if (error < -pid->integral_gate) { // Too shallow by more than threshold
+            accumulate = false;
+        }
+    }
+
+    if (accumulate) {
+        pid->integral += error * pid->dt;
+    }
 
     // Apply integral windup bound (Anti-windup)
     // We limit the integral term's CONTRIBUTION to the total output limits.
@@ -29,7 +44,14 @@ void pid_update(PIDController *pid, double error, double *output) {
     }
 
     double I = pid->ki * pid->integral;
-    double D = pid->kd * ((error - pid->prev_error) / pid->dt);
+    
+    // Derivative calculation with EMA Filtering
+    // Alpha (0.3) weights the newest measurement; (0.7) weights the historical state.
+    // This damps rapid fluctuations from sensor noise/bubbles.
+    double raw_D = pid->kd * ((error - pid->prev_error) / pid->dt);
+    double D = (0.3 * raw_D) + (0.7 * pid->prev_D);
+    pid->prev_D = D;
+
     double raw_output = P + I + D;
 
     // Clamp total output to limits
@@ -43,4 +65,5 @@ void pid_update(PIDController *pid, double error, double *output) {
 void pid_reset(PIDController *pid) {
     pid->integral = 0.0;
     pid->prev_error = 0.0;
+    pid->prev_D = 0.0;
 }
