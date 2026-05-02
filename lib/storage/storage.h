@@ -4,13 +4,15 @@
 #include <stdint.h>
 
 // Changed magic number to force a factory reset of the flash memory
-#define SETTINGS_MAGIC 0xBEEFCAF3 
+#define SETTINGS_MAGIC 0x20261337
 
 typedef struct {
     float kp;
     float ki;
     float kd;
-    float target_depth;
+    float deep_target_m;
+    float shallow_target_m;
+    uint16_t num_profiles;
     uint16_t company_number;
     uint16_t profile_duration_s; 
     float depth_offset;

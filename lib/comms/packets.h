@@ -28,9 +28,11 @@ typedef enum
     CMD_ENTER_TEST = 0x11,
     CMD_REP_TEST_DATA = 0x12,
     CMD_BOOTLOADER = 0x13,
-    CMD_SET_TARGET_DEPTH = 0x14,
+    CMD_SET_DEEP_TARGET = 0x14,
     CMD_SET_NEUTRAL_ADC = 0x15,
-    CMD_SET_TOLERANCE = 0x16
+    CMD_SET_TOLERANCE = 0x16,
+    CMD_SET_SHALLOW_TARGET = 0x17,
+    CMD_SET_NUM_PROFILES = 0x18
 } PacketCommand_t;
 
 typedef struct __attribute__((packed))
@@ -48,10 +50,12 @@ typedef struct __attribute__((packed))
             float kp;
             float ki;
             float kd;
-            float target_depth;
+            float deep_target_m;
+            float shallow_target_m;
             float depth_offset;
             uint16_t company_number;
             uint16_t profile_duration_s; 
+            uint16_t num_profiles;
             uint16_t actuator_target;
             uint16_t current_actuator_pos;
             uint16_t act_min;

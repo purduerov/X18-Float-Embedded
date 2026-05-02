@@ -71,11 +71,29 @@ void surface_fsm_cmd_set_duration(surface_fsm_t *fsm, uint16_t seconds) {
     }
 }
 
-void surface_fsm_cmd_set_target_depth(surface_fsm_t *fsm, float depth) {
+void surface_fsm_cmd_set_deep_target(surface_fsm_t *fsm, float depth) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
-        printf(">> Sending Target Depth Update: %.2f m\n", depth);
-        packet_t tx_pkt = {.command = CMD_SET_TARGET_DEPTH, .seq_num = 0};
-        tx_pkt.payload.settings.target_depth = depth;
+        printf(">> Sending Deep Target Update: %.2f m\n", depth);
+        packet_t tx_pkt = {.command = CMD_SET_DEEP_TARGET, .seq_num = 0};
+        tx_pkt.payload.settings.deep_target_m = depth;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
+void surface_fsm_cmd_set_shallow_target(surface_fsm_t *fsm, float depth) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Shallow Target Update: %.2f m\n", depth);
+        packet_t tx_pkt = {.command = CMD_SET_SHALLOW_TARGET, .seq_num = 0};
+        tx_pkt.payload.settings.shallow_target_m = depth;
+        send_packet(fsm, &tx_pkt);
+    }
+}
+
+void surface_fsm_cmd_set_num_profiles(surface_fsm_t *fsm, uint16_t num) {
+    if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
+        printf(">> Sending Num Profiles Update: %u\n", num);
+        packet_t tx_pkt = {.command = CMD_SET_NUM_PROFILES, .seq_num = 0};
+        tx_pkt.payload.settings.num_profiles = num;
         send_packet(fsm, &tx_pkt);
     }
 }
@@ -175,13 +193,15 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f, I=%.2f, D=%.2f, Tar=%.2f, Off=%.3f, Co#=%u, Time=%u, ADC=%u, TarAct=%u, ActMin=%u, ActMax=%u, Neutral=%u, Tol=%.2f, LiveDepth=%.3f\n",
+                    printf("\n[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%u TarAct=%u ActMin=%u ActMax=%u Neutral=%u Tol=%.2f LiveDepth=%.3f\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
-                    rx_pkt.payload.settings.target_depth,
-                    rx_pkt.payload.settings.depth_offset,
+                    rx_pkt.payload.settings.deep_target_m,
+                    rx_pkt.payload.settings.shallow_target_m,
+                    rx_pkt.payload.settings.num_profiles,
                     rx_pkt.payload.settings.company_number,
                     rx_pkt.payload.settings.profile_duration_s,
+                    rx_pkt.payload.settings.depth_offset,
                     rx_pkt.payload.settings.current_actuator_pos,
                     rx_pkt.payload.settings.actuator_target,
                     rx_pkt.payload.settings.act_min,

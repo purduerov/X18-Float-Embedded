@@ -17,7 +17,7 @@ class HardwareManager:
         self.first_timestamp = None
         
         self.float_settings = {
-            "P": "--", "I": "--", "D": "--", "Tar": "--",
+            "P": "--", "I": "--", "D": "--", "Deep": "--", "Shallow": "--", "N": "--",
             "Co#": "--", "Time": "--", "ADC": "--",
             "TarAct": "--",
             "ActMin": "--", "ActMax": "--",
@@ -98,8 +98,20 @@ class HardwareManager:
         self.console_log.append("🔄 Auto-Syncing...")
         self.send_command("?")
 
-    def update_target_depth(self, val):
+    def update_deep_target(self, val):
         self.send_command(f"d {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
+
+    def update_shallow_target(self, val):
+        self.send_command(f"u {val}")
+        time.sleep(0.5)
+        self.console_log.append("🔄 Auto-Syncing...")
+        self.send_command("?")
+
+    def update_num_profiles(self, val):
+        self.send_command(f"m {val}")
         time.sleep(0.5)
         self.console_log.append("🔄 Auto-Syncing...")
         self.send_command("?")
@@ -168,9 +180,11 @@ class HardwareManager:
                 # Write Configuration Headers
                 f.write("# MISSION PROFILE DATA\n")
                 f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"# Target Depth: {self.float_settings.get('Tar', '--')} m\n")
+                f.write(f"# Deep Target: {self.float_settings.get('Deep', '--')} m\n")
+                f.write(f"# Shallow Target: {self.float_settings.get('Shallow', '--')} m\n")
+                f.write(f"# Profile Count: {self.float_settings.get('N', '--')}\n")
                 f.write(f"# Arrival Tolerance: {self.float_settings.get('Tol', '--')} m\n")
-                f.write(f"# Duration: {self.float_settings.get('Time', '--')} s\n")
+                f.write(f"# Hold Duration: {self.float_settings.get('Time', '--')} s\n")
                 f.write(f"# PID: P={self.float_settings.get('P', '--')}, I={self.float_settings.get('I', '--')}, D={self.float_settings.get('D', '--')}\n")
                 f.write(f"# Neutral ADC: {self.float_settings.get('Neutral', '--')}\n")
                 f.write(f"# Bounds: {self.float_settings.get('ActMin', '--')} to {self.float_settings.get('ActMax', '--')}\n")
@@ -193,71 +207,77 @@ class HardwareManager:
         while self.running:
             if self.ser and self.ser.is_open:
                 try:
-                    # Read all available data
+                    # Read single line if available (non-blocking due to serial timeout)
                     if self.ser.in_waiting > 0:
-                        lines = self.ser.readlines() # Reads all lines up to timeout
-                        for line_raw in lines:
-                            if not line_raw:
-                                continue
-                                
-                            line = line_raw.decode('utf-8', errors='ignore').strip()
-                            if line:
+                        line_raw = self.ser.readline()
+                        if not line_raw:
+                            continue
+                            
+                        line = line_raw.decode('utf-8', errors='ignore').strip()
+                        if line:
+                            with self.lock:
+                                self.console_log.append(line)
+                                if len(self.console_log) > 100: 
+                                    self.console_log.pop(0)
+                            
+                            # Mission Status Logic
+                            if "PRE-DIVE Packet Logged" in line: 
+                                self.mission_status = "PROFILING (Diving to Deep)"
+                                try:
+                                    self.active_duration = int(self.float_settings.get("Time", 30))
+                                except ValueError:
+                                    self.active_duration = 30
+                                self.profile_start_time = None 
+                            elif "MISSION: Arrived at" in line:
+                                stage = "Deep" if "DEEP" in line else "Shallow"
+                                self.mission_status = f"PROFILING (Holding {stage})"
+                                self.profile_start_time = time.time()
+                            elif "Moving to" in line:
+                                stage = "Shallow" if "SHALLOW" in line else "Deep"
+                                self.mission_status = f"PROFILING (Moving to {stage})"
+                                self.profile_start_time = None
+                            elif "START DATA DUMP" in line:
+                                self.mission_status = "DOWNLOADING DATA"
                                 with self.lock:
-                                    self.console_log.append(line)
-                                    if len(self.console_log) > 100: 
-                                        self.console_log.pop(0)
-                                
-                                # Mission Status Logic
-                                if "PRE-DIVE Packet Logged" in line: 
-                                    self.mission_status = "PROFILING"
-                                    try:
-                                        self.active_duration = int(self.float_settings.get("Time", 40))
-                                    except ValueError:
-                                        self.active_duration = 40
-                                    self.profile_start_time = time.time()
-                                elif "START DATA DUMP" in line:
-                                    self.mission_status = "DOWNLOADING DATA"
+                                    self.data_log = [] 
+                                self.first_timestamp = None 
+                            elif "Download Complete" in line: 
+                                self.mission_status = "MISSION COMPLETE"
+                                self.save_profile_data()
+                            elif "[SYNC]" in line:
+                                matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
+                                if matches:
+                                    for key, value in matches:
+                                        if key in self.float_settings:
+                                            self.float_settings[key] = value
                                     with self.lock:
-                                        self.data_log = [] # Reset for new mission
-                                    self.first_timestamp = None 
-                                elif "Download Complete" in line: 
-                                    self.mission_status = "MISSION COMPLETE"
-                                    self.save_profile_data()
-                                elif "[SYNC]" in line:
-                                    matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
-                                    if matches:
-                                        for key, value in matches:
-                                            if key in self.float_settings:
-                                                self.float_settings[key] = value
-                                        with self.lock:
-                                            self.console_log.append(f"✅ UI Synced Successfully.")
+                                        self.console_log.append(f"✅ UI Synced Successfully.")
+                                    
+                            # CSV Parsing Logic
+                            parts = [p.strip() for p in line.split(',')]
+                            if len(parts) >= 3 and parts[0].isdigit():
+                                try:
+                                    abs_time_ms = int(parts[1])
+                                    depth_m = float(parts[2])
+                                    
+                                    if self.first_timestamp is None:
+                                        self.first_timestamp = abs_time_ms
+                                    rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
+                                    
+                                    entry = {
+                                        "Time (s)": rel_time_s,
+                                        "Depth (m)": depth_m
+                                    }
+                                    
+                                    if len(parts) >= 4 and parts[3].isdigit():
+                                        entry["Actuator (ADC)"] = int(parts[3])
                                         
-                                # CSV Parsing Logic
-                                parts = [p.strip() for p in line.split(',')]
-                                if len(parts) >= 3 and parts[0].isdigit():
-                                    try:
-                                        # Format: Co#,TimeMs,DepthM,ActuatorADC
-                                        abs_time_ms = int(parts[1])
-                                        depth_m = float(parts[2])
-                                        
-                                        if self.first_timestamp is None:
-                                            self.first_timestamp = abs_time_ms
-                                        rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
-                                        
-                                        entry = {
-                                            "Time (s)": rel_time_s,
-                                            "Depth (m)": depth_m
-                                        }
-                                        
-                                        if len(parts) >= 4 and parts[3].isdigit():
-                                            entry["Actuator (ADC)"] = int(parts[3])
-                                            
-                                        with self.lock:
-                                            self.data_log.append(entry)
-                                    except (ValueError, IndexError):
-                                        pass
+                                    with self.lock:
+                                        self.data_log.append(entry)
+                                except (ValueError, IndexError):
+                                    pass
                     else:
-                        time.sleep(0.01) # Small sleep if no data to avoid CPU hammering
+                        time.sleep(0.01) 
                 except (serial.SerialException, OSError, Exception) as e:
                     with self.lock:
                         if self.ser:

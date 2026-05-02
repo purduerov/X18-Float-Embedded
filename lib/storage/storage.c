@@ -55,9 +55,11 @@ static void storage_load(void) {
         current_settings.kp = DEFAULT_PID_P;
         current_settings.ki = DEFAULT_PID_I;
         current_settings.kd = DEFAULT_PID_D;
-        current_settings.target_depth = 1.0f;
+        current_settings.deep_target_m = 2.5f;
+        current_settings.shallow_target_m = 0.4f;
+        current_settings.num_profiles = 2;
         current_settings.company_number = 18;
-        current_settings.profile_duration_s = 40;
+        current_settings.profile_duration_s = 30; // MATE req: 30s
         current_settings.depth_offset = 1000.0f; // Uncalibrated Indicator
         current_settings.act_min = 0;
         current_settings.act_max = 4095;
@@ -67,13 +69,12 @@ static void storage_load(void) {
         storage_save(); 
     } else {
         printf("[STORAGE] Successfully loaded settings from Flash.\n");
-        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Target: %.2fm | Team: %u | Time: %us | Bounds: [%u, %u] | Neutral: %u | Tol: %.2fm\n", 
+        printf("[STORAGE] PID: P=%.2f, I=%.2f, D=%.2f | Deep: %.2fm | Shallow: %.2fm | N: %u | Team: %u | Time: %us | Neutral: %u\n", 
                current_settings.kp, current_settings.ki, current_settings.kd, 
-               current_settings.target_depth,
+               current_settings.deep_target_m, current_settings.shallow_target_m,
+               current_settings.num_profiles,
                current_settings.company_number, current_settings.profile_duration_s,
-               current_settings.act_min, current_settings.act_max,
-               current_settings.neutral_buoyancy_adc,
-               current_settings.arrival_band_m);
+               current_settings.neutral_buoyancy_adc);
     }
 }
 

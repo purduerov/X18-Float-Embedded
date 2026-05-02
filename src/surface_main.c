@@ -46,10 +46,24 @@ static void handle_duration(const char *params) {
   }
 }
 
-static void handle_target_depth(const char *params) {
+static void handle_deep_target(const char *params) {
   float depth;
   if (sscanf(params, "%f", &depth) == 1) {
-    surface_fsm_cmd_set_target_depth(&global_fsm, depth);
+    surface_fsm_cmd_set_deep_target(&global_fsm, depth);
+  }
+}
+
+static void handle_shallow_target(const char *params) {
+  float depth;
+  if (sscanf(params, "%f", &depth) == 1) {
+    surface_fsm_cmd_set_shallow_target(&global_fsm, depth);
+  }
+}
+
+static void handle_num_profiles(const char *params) {
+  unsigned int num;
+  if (sscanf(params, "%u", &num) == 1) {
+    surface_fsm_cmd_set_num_profiles(&global_fsm, (uint16_t)num);
   }
 }
 
@@ -103,7 +117,9 @@ static const console_command_t cmd_table[] = {
     {'s', handle_pid, "Set PID (P I D)"},
     {'c', handle_company, "Set Company ID"},
     {'t', handle_duration, "Set Duration (Secs)"},
-    {'d', handle_target_depth, "Set Target Depth (m)"},
+    {'d', handle_deep_target, "Set Deep Target Depth (m)"},
+    {'u', handle_shallow_target, "Set Shallow Target Depth (m)"},
+    {'m', handle_num_profiles, "Set Number of Profiles"},
     {'v', handle_tolerance, "Set Arrival Tolerance (m)"},
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position (0-4095)"},
@@ -130,7 +146,7 @@ int main() {
 
   printf("Surface Station Ready.\n");
   printf("Commands: 'p' (Profile), 's <P> <I> <D>' (PID), 'c <ID>' (Company), "
-         "'t <Sec>' (Time), 'd <m>' (Depth), 'z' (Zero Depth), '?' (Sync)\n");
+         "'t <Sec>' (Time), 'd <m>' (Deep), 'u <m>' (Shallow), 'm <#>' (Count), 'z' (Zero Depth), '?' (Sync)\n");
 
   uint32_t lastDebugPrint = to_ms_since_boot(get_absolute_time());
 

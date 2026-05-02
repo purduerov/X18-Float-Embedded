@@ -42,13 +42,13 @@ static void handle_sync(const char *params) {
     float_settings_t settings;
     storage_get_settings(&settings);
     // ADC= is used by dashboard for live actuator position. 
-    // Added ActMin/ActMax for UI limit verification.
-    printf("[SYNC] P=%.2f I=%.2f D=%.2f Tar=%.2f Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d LiveDepth=%.3f\n",
-           settings.kp, settings.ki, settings.kd, settings.target_depth,
+    printf("[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d LiveDepth=%.3f Tol=%.2f\n",
+           settings.kp, settings.ki, settings.kd, 
+           settings.deep_target_m, settings.shallow_target_m, settings.num_profiles,
            settings.company_number, settings.profile_duration_s, 
            settings.depth_offset, global_fsm.current_actuator_pos,
            settings.act_min, settings.act_max, settings.neutral_buoyancy_adc,
-           global_fsm.current_depth);
+           global_fsm.current_depth, settings.arrival_band_m);
 }
 
 static void handle_actuator(const char *params) {
@@ -91,7 +91,7 @@ int main() {
   // The min/max limits here represent the allowable PID OFFSET from neutral.
   // We use +/- 2048 to allow full range coverage around any neutral point.
   depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, -2048, 2048);
-  depth_pid_set_target(&dpid, settings.target_depth);
+  depth_pid_set_target(&dpid, settings.deep_target_m);
 
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
   float_fsm_init(&global_fsm, &depth_sensor);
@@ -151,13 +151,11 @@ int main() {
       dpid.pid.kp = settings.kp;
       dpid.pid.ki = settings.ki;
       dpid.pid.kd = settings.kd;
-      depth_pid_set_target(&dpid, settings.target_depth);
-      
-      // Hardware limits for clamping the final position
-      dpid.pos_min = settings.act_min;
-      dpid.pos_max = settings.act_max;
 
       if (global_fsm.state == FLOAT_PROFILING) {
+        float target_m = (global_fsm.mission_stage == STAGE_DEEP) ? settings.deep_target_m : settings.shallow_target_m;
+        depth_pid_set_target(&dpid, target_m);
+        
         // Reset PID and sync target on first entry to profiling
         if (prev_state != FLOAT_PROFILING) {
             printf(">> PID: Entering PROFILING mode. Resetting Integral and syncing target.\n");

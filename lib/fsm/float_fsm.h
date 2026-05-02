@@ -18,9 +18,17 @@ typedef enum
     FLOAT_TEST_CALIBRATE
 } FloatState_t;
 
+typedef enum {
+    STAGE_DEEP,
+    STAGE_SHALLOW,
+    STAGE_EXITING
+} MissionStage_t;
+
 // --- FSM Structure to hold all runtime context ---
 typedef struct {
     FloatState_t state;
+    MissionStage_t mission_stage;
+    uint16_t current_profile;
     bool currently_transmitting;
     uint32_t profile_start_time;
     uint32_t last_tx_time;

@@ -51,9 +51,17 @@ def render_sidebar(hw):
             new_dur = st.number_input("Duration (Secs)", step=1, value=DEFAULT_DURATION_S)
             if st.form_submit_button("SET DURATION", width="stretch"): hw.update_duration(int(new_dur))
 
-        with st.form("depth_form"):
-            new_depth = st.number_input("Target Depth (m)", step=0.1, value=1.0)
-            if st.form_submit_button("SET TARGET DEPTH", width="stretch"): hw.update_target_depth(float(new_depth))
+        with st.form("deep_depth_form"):
+            new_deep = st.number_input("Deep Target (m)", step=0.1, value=DEFAULT_DEEP_TARGET)
+            if st.form_submit_button("SET DEEP TARGET", width="stretch"): hw.update_deep_target(float(new_deep))
+
+        with st.form("shallow_depth_form"):
+            new_shallow = st.number_input("Shallow Target (m)", step=0.1, value=DEFAULT_SHALLOW_TARGET, help="Set to 0 to skip shallow stage")
+            if st.form_submit_button("SET SHALLOW TARGET", width="stretch"): hw.update_shallow_target(float(new_shallow))
+
+        with st.form("num_profiles_form"):
+            new_count = st.number_input("Number of Profiles", step=1, value=DEFAULT_NUM_PROFILES, min_value=1)
+            if st.form_submit_button("SET PROFILE COUNT", width="stretch"): hw.update_num_profiles(int(new_count))
 
         with st.form("tolerance_form"):
             new_tol = st.number_input("Arrival Tolerance (m)", min_value=0.01, max_value=2.0, step=0.01, value=0.1)
@@ -71,15 +79,15 @@ def render_sidebar(hw):
         # Quick Presets
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🔽 DIVE (0)", use_container_width=True):
+            if st.button("🔽 DIVE (0)", width="stretch"):
                 hw.move_actuator(0)
         with c2:
-            if st.button("🔼 SURFACE (4095)", use_container_width=True):
+            if st.button("🔼 SURFACE (4095)", width="stretch"):
                 hw.move_actuator(4095)
 
         with st.form("actuator_form"):
             act_pos = st.number_input("Target Position (0-4095)", min_value=0, max_value=4095, value=DEFAULT_ACTUATOR_POS, step=100)
-            if st.form_submit_button("MOVE TO CUSTOM", use_container_width=True): 
+            if st.form_submit_button("MOVE TO CUSTOM", width="stretch"): 
                 hw.move_actuator(int(act_pos))
 
         with st.form("bounds_form"):
@@ -136,19 +144,18 @@ def render_main_content(hw):
                 tab1, tab2 = st.tabs(["📉 Depth Profile", "🦾 Actuator Position"])
                 
                 with tab1:
-                    # Use a more efficient marker style
-                    fig = px.line(df, x="Time (s)", y="Depth (m)", height=350, markers=True)
+                    # Use Scattergl (Web GL) for high-performance plotting of large datasets
+                    fig = px.scatter(df, x="Time (s)", y="Depth (m)", render_mode='webgl', height=350)
+                    fig.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
                     fig.update_yaxes(autorange="reversed")
-                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                    # Disable animation and heavy features for performance
-                    fig.update_traces(line_shape='linear', hovertemplate=None)
+                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode=False)
                     st.plotly_chart(fig, width="stretch", key="p_depth_chart", use_container_width=True)
                 
                 with tab2:
                     if "Actuator (ADC)" in df.columns:
-                        fig2 = px.line(df, x="Time (s)", y="Actuator (ADC)", height=350, markers=True)
-                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-                        fig2.update_traces(line_shape='linear', hovertemplate=None)
+                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", render_mode='webgl', height=350)
+                        fig2.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
+                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode=False)
                         st.plotly_chart(fig2, width="stretch", key="p_act_chart", use_container_width=True)
                     else:
                         st.info("Actuator data not available for this session.")
@@ -162,8 +169,10 @@ def render_main_content(hw):
         st.button("🔄 SYNC FROM FLOAT", width="stretch", on_click=lambda: hw.send_command('?'))
         
         st.markdown("### Active Config")
-        st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Time:** {hw.float_settings.get('Time', '--')}s")
-        st.write(f"**Target:** {hw.float_settings.get('Tar', '--')} m")
+        st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Profiles:** {hw.float_settings.get('N', '--')}")
+        st.write(f"**Deep Target:** {hw.float_settings.get('Deep', '--')} m")
+        st.write(f"**Shallow Target:** {hw.float_settings.get('Shallow', '--')} m")
+        st.write(f"**Hold Duration:** {hw.float_settings.get('Time', '--')} s")
         st.write(f"**Arrival Tol:** {hw.float_settings.get('Tol', '--')} m")
         st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
         st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
