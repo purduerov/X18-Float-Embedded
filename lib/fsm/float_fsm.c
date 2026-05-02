@@ -11,6 +11,7 @@
 static float recorded_depths[MAX_RECORDED_SAMPLES];
 static uint32_t recorded_times[MAX_RECORDED_SAMPLES];
 static uint16_t recorded_adcs[MAX_RECORDED_SAMPLES];
+static uint16_t recorded_target_adcs[MAX_RECORDED_SAMPLES];
 
 const char *FloatStateNames[] = {"IDLE",         "PRE_DIVE",
                                  "PROFILING",    "PROFILE_DONE",
@@ -281,6 +282,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     tx_pkt.payload.telemetry.depth_m = fsm->current_depth;
 
     tx_pkt.payload.telemetry.actuator_pos = fsm->current_actuator_pos;
+    tx_pkt.payload.telemetry.target_actuator_pos = fsm->actuator_target;
     tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
     fsm->currently_transmitting = true;
     radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
@@ -347,10 +349,12 @@ void float_fsm_update(float_fsm_t *fsm) {
       recorded_depths[fsm->sample_index] = fsm->current_depth;
       recorded_times[fsm->sample_index] = now;
       recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
+      recorded_target_adcs[fsm->sample_index] = fsm->actuator_target;
       printf(
-          ">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u [%s%s]\n",
+          ">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u | TargetADC %u [%s%s]\n",
           fsm->sample_index + 1, MAX_RECORDED_SAMPLES, recorded_times[fsm->sample_index],
-          recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index],
+          recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index], 
+          recorded_target_adcs[fsm->sample_index],
           stage_name, fsm->target_depth_reached ? " HOLDING" : " DIVING");
       fsm->sample_index++;
       fsm->last_sample_time = now;
@@ -439,6 +443,8 @@ void float_fsm_update(float_fsm_t *fsm) {
           recorded_depths[fsm->current_seq_num - 1];
       tx_pkt.payload.telemetry.actuator_pos =
           recorded_adcs[fsm->current_seq_num - 1];
+      tx_pkt.payload.telemetry.target_actuator_pos =
+          recorded_target_adcs[fsm->current_seq_num - 1];
       tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
       fsm->currently_transmitting = true;
       radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
