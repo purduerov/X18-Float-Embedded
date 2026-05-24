@@ -101,6 +101,46 @@ def render_sidebar(hw):
             n_adc = st.number_input("Neutral ADC", min_value=0, max_value=4095, value=2048, step=50)
             if st.form_submit_button("SET NEUTRAL ADC", width="stretch"): hw.update_neutral_adc(int(n_adc))
 
+        st.divider()
+        st.header("🆙 OTA Reflash")
+        
+        col_load, col_upload = st.columns(2)
+        with col_load:
+            if st.button("📂 Load Built Float Firmware", width="stretch", disabled=hw.reflash_in_progress):
+                data, err = hw.load_local_firmware()
+                if err:
+                    st.session_state["fw_data"] = None
+                    st.session_state["fw_error"] = err
+                    st.session_state["fw_info"] = None
+                else:
+                    st.session_state["fw_data"] = data
+                    st.session_state["fw_error"] = None
+                    crc = hw.calculate_crc32(data)
+                    st.session_state["fw_info"] = f"Float Build: {len(data):,} bytes | CRC: 0x{crc:08X}"
+        with col_upload:
+            uploaded_file = st.file_uploader("Or Upload Custom .bin", type=["bin"], label_visibility="collapsed")
+            if uploaded_file is not None:
+                st.session_state["fw_data"] = uploaded_file.getvalue()
+                st.session_state["fw_error"] = None
+                crc = hw.calculate_crc32(st.session_state["fw_data"])
+                st.session_state["fw_info"] = f"Uploaded File: {len(st.session_state['fw_data']):,} bytes | CRC: 0x{crc:08X}"
+
+        if "fw_error" in st.session_state and st.session_state["fw_error"]:
+            st.error(st.session_state["fw_error"])
+            
+        if "fw_data" in st.session_state and st.session_state["fw_data"] is not None:
+            st.success(st.session_state["fw_info"])
+            confirm_flash = st.checkbox("Confirm firmware flash to Float", value=False)
+            if st.button("🚀 FLASH FIRMWARE", width="stretch", type="primary", disabled=(not confirm_flash or hw.reflash_in_progress)):
+                hw.reflash_firmware(st.session_state["fw_data"])
+                st.session_state["fw_data"] = None
+                st.session_state["fw_info"] = None
+                st.rerun()
+
+        if hw.reflash_in_progress:
+            st.progress(hw.reflash_progress / 100.0, text=f"Flashing... {hw.reflash_progress}%")
+            st.warning("Do not close dashboard or disconnect during flash!")
+
 def render_metrics(hw):
     with hw.lock:
         data_points = len(hw.data_log)
@@ -171,7 +211,7 @@ def render_main_content(hw):
         st.button("🔄 SYNC FROM FLOAT", width="stretch", on_click=lambda: hw.send_command('?'))
         
         st.markdown("### Active Config")
-        st.write(f"**ID:** {hw.float_settings.get('Co#', '--')} | **Profiles:** {hw.float_settings.get('N', '--')}")
+        st.write(f"**FW Version:** v{hw.float_settings.get('FW', '--')} | **ID:** {hw.float_settings.get('Co#', '--')} | **Profiles:** {hw.float_settings.get('N', '--')}")
         st.write(f"**Deep Target:** {hw.float_settings.get('Deep', '--')} m")
         st.write(f"**Shallow Target:** {hw.float_settings.get('Shallow', '--')} m")
         st.write(f"**Hold Duration:** {hw.float_settings.get('Time', '--')} s")

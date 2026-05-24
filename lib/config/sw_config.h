@@ -66,4 +66,9 @@
 #define FLOAT_ENABLE_USB_WAIT 0
 #define SURFACE_ENABLE_USB_WAIT 1
 
+// ==========================================
+// 4. FIRMWARE VERSION
+// ==========================================
+#define FIRMWARE_VERSION 101
+
 #endif // SW_CONFIG_H

@@ -227,6 +227,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                   settings.neutral_buoyancy_adc;
               tx_pkt.payload.settings.arrival_band_m = settings.arrival_band_m;
               tx_pkt.payload.settings.live_depth = fsm->current_depth;
+              tx_pkt.payload.settings.fw_version = FIRMWARE_VERSION;
               tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
               fsm->currently_transmitting = true;
               radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));

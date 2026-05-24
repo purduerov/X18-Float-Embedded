@@ -64,6 +64,7 @@ typedef struct __attribute__((packed))
             uint16_t neutral_buoyancy_adc;
             float arrival_band_m;
             float live_depth;
+            uint32_t fw_version;
         } settings; 
         struct __attribute__((packed)) {
             float live_depth;

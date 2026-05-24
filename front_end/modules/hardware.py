@@ -4,6 +4,7 @@ import threading
 import time
 import re
 import os
+import struct
 from datetime import datetime
 
 class HardwareManager:
@@ -15,6 +16,8 @@ class HardwareManager:
         self.lock = threading.Lock()
         self.mission_status = "IDLE"
         self.first_timestamp = None
+        self.reflash_in_progress = False
+        self.reflash_progress = 0
         
         self.float_settings = {
             "P": "--", "I": "--", "D": "--", "Deep": "--", "Shallow": "--", "N": "--",
@@ -24,7 +27,8 @@ class HardwareManager:
             "Neutral": "--",
             "Off": "--",
             "LiveDepth": "--",
-            "Tol": "--"
+            "Tol": "--",
+            "FW": "--"
         }
         
         # Countdown Timer variables
@@ -157,6 +161,124 @@ class HardwareManager:
     def test_mode(self):
         self.send_command("k")
 
+    def calculate_crc32(self, data):
+        """Calculates CRC32 exactly as the Pico's crc32_software function does."""
+        crc = 0xFFFFFFFF
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 1:
+                    crc = (crc >> 1) ^ 0xEDB88320
+                else:
+                    crc >>= 1
+        # Final XOR 0xFFFFFFFF is standard for CRC32 (zlib)
+        return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF
+
+    def reflash_firmware(self, firmware_data):
+        """Starts a background thread to handle the OTA reflash process."""
+        if not self.ser or not self.ser.is_open:
+            self.console_log.append("🔴 Cannot reflash: Not connected.")
+            return
+
+        def run_reflash():
+            with self.lock:
+                self.reflash_in_progress = True
+                self.reflash_progress = 0
+                
+            # 1. Prepare Data
+            CHUNK_SIZE = 220
+            padding_needed = (CHUNK_SIZE - (len(firmware_data) % CHUNK_SIZE)) % CHUNK_SIZE
+            padded_data = bytearray(firmware_data)
+            padded_data.extend(b'\xFF' * padding_needed)
+            
+            file_size = len(padded_data)
+            file_crc = self.calculate_crc32(padded_data)
+            
+            with self.lock:
+                self.console_log.append(f"🛠️ STARTING OTA REFLASH: {file_size} bytes, CRC 0x{file_crc:08X}")
+            
+            try:
+                # 2. Handshake
+                # Header: 'S', 4-byte size, 4-byte CRC
+                header = b'S' + struct.pack('<I', file_size) + struct.pack('<I', file_crc)
+                self.ser.write(header)
+                self.ser.flush()
+                
+                # 3. Wait for Sync
+                sync_start = time.time()
+                synced = False
+                while time.time() - sync_start < 15:
+                    with self.lock:
+                        recent_logs = list(self.console_log[-5:])
+                    if any("ACK received for seq" in line for line in recent_logs):
+                        synced = True
+                        break
+                    if any("Failed to start" in line for line in recent_logs):
+                        break
+                    time.sleep(0.1)
+                
+                if not synced:
+                    with self.lock:
+                        self.console_log.append("🔴 REFLASH ERROR: Timeout waiting for sync.")
+                        self.reflash_in_progress = False
+                    return
+
+                # 4. Stream Data
+                sent_bytes = 0
+                while sent_bytes < file_size:
+                    chunk = padded_data[sent_bytes:sent_bytes+CHUNK_SIZE]
+                    self.ser.write(chunk)
+                    self.ser.flush()
+                    
+                    # Wait for ACK/Progress
+                    chunk_ack = False
+                    chunk_start = time.time()
+                    while time.time() - chunk_start < 10:
+                        with self.lock:
+                            recent_logs = list(self.console_log[-5:])
+                        if any("Progress" in line for line in recent_logs):
+                            chunk_ack = True
+                            break
+                        if any("Link lost" in line for line in recent_logs):
+                            break
+                        time.sleep(0.01)
+                    
+                    if not chunk_ack:
+                        with self.lock:
+                            self.console_log.append(f"🔴 REFLASH ERROR: Link lost at {sent_bytes} bytes.")
+                            self.reflash_in_progress = False
+                        return
+                        
+                    sent_bytes += CHUNK_SIZE
+                    with self.lock:
+                        self.reflash_progress = int((sent_bytes / file_size) * 100)
+                
+                with self.lock:
+                    self.console_log.append("✅ REFLASH SUCCESS: Data transfer complete.")
+            except Exception as e:
+                with self.lock:
+                    self.console_log.append(f"🔴 REFLASH CRITICAL ERROR: {e}")
+            finally:
+                with self.lock:
+                    self.reflash_in_progress = False
+
+        threading.Thread(target=run_reflash, daemon=True).start()
+
+    def load_local_firmware(self):
+        """Attempts to load the float firmware binary from the platformio build directory."""
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        firmware_path = os.path.join(root_dir, ".pio", "build", "float", "firmware.bin")
+        
+        if not os.path.exists(firmware_path):
+            return None, f"Firmware binary not found at: {firmware_path}. Please build the 'float' environment in PlatformIO first."
+            
+        try:
+            with open(firmware_path, "rb") as f:
+                data = f.read()
+            return data, None
+        except Exception as e:
+            return None, f"Failed to read firmware file: {e}"
+
     def start_profile(self):
         """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
         self.send_command('p') 
@@ -252,7 +374,18 @@ class HardwareManager:
                                             self.float_settings[key] = value
                                     with self.lock:
                                         self.console_log.append(f"✅ UI Synced Successfully.")
-                                    
+                            
+                            # OTA Progress Detection (for smoother UI)
+                            if "Progress:" in line:
+                                try:
+                                    # Format: "Progress: 123/456"
+                                    parts = line.split("Progress: ")[1].split("/")
+                                    cur = int(parts[0])
+                                    total = int(parts[1])
+                                    self.reflash_progress = int((cur/total) * 100)
+                                except:
+                                    pass
+
                             # CSV Parsing Logic
                             parts = [p.strip() for p in line.split(',')]
                             if len(parts) >= 3 and parts[0].isdigit():
