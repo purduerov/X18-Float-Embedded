@@ -231,6 +231,7 @@ class HardwareManager:
                 if not synced:
                     with self.lock:
                         self.console_log.append(f"🔴 REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
+
                         self.reflash_in_progress = False
                     return
 

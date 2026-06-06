@@ -79,6 +79,9 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
         send_ack(lora, 0xFFFFFFFF);
         page_buffer_idx = 0;
         current_flash_addr = SLOT_1_OFFSET;
+
+        // Switch to high-speed reflash bandwidth
+        RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_FAST);
         
         // 3. Erase only what is needed for this binary (rounded up to 4KB sectors)
         uint32_t erase_len = (total_size + (FLASH_SECTOR_SIZE - 1)) & ~(FLASH_SECTOR_SIZE - 1);
@@ -157,6 +160,7 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
                     } else {
                         printf("[OTA] CRC MISMATCH! Expected 0x%08lX, got 0x%08lX\n", expected_master_crc, actual_crc);
                         in_progress = false;
+                        RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL);
                     }
                 }
             } else {
@@ -183,7 +187,7 @@ void reflash_target_tick(RadioLibSX127x_t *lora) {
         next_seq = 0;
         page_buffer_idx = 0;
         current_flash_addr = SLOT_1_OFFSET;
-        // Already at 125kHz — no BW reset needed
+        RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL);
     }
 }
 
