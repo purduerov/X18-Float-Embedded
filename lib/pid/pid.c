@@ -10,6 +10,8 @@ void pid_init(PIDController *pid, double kp, double ki, double kd, double dt, do
     pid->prev_error = 0.0;
     pid->output_min = output_min;
     pid->output_max = output_max;
+    pid->integral_min = output_min;
+    pid->integral_max = output_max;
     pid->integral_gate = 0.0; // Disabled by default
     pid->prev_D = 0.0;
 }
@@ -33,11 +35,10 @@ void pid_update(PIDController *pid, double error, double *output) {
     }
 
     // Apply integral windup bound (Anti-windup)
-    // We limit the integral term's CONTRIBUTION to the total output limits.
-    // This prevents the I-term from saturating the actuator on its own.
+    // We limit the integral term's CONTRIBUTION to the specified limits.
     if (pid->ki != 0) {
-        double i_term_max = pid->output_max;
-        double i_term_min = pid->output_min;
+        double i_term_max = pid->integral_max;
+        double i_term_min = pid->integral_min;
 
         if (pid->ki * pid->integral > i_term_max) pid->integral = i_term_max / pid->ki;
         if (pid->ki * pid->integral < i_term_min) pid->integral = i_term_min / pid->ki;

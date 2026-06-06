@@ -46,6 +46,10 @@ typedef struct {
     uint32_t last_stall_check_time;
     float stall_reference_depth;
 
+    // --- Adaptive Neutral Learning ---
+    uint32_t hover_accumulated_adc;
+    uint32_t hover_sample_count;
+
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

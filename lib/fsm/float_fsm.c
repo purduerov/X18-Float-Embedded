@@ -87,6 +87,10 @@ void float_fsm_process_event(float_fsm_t *fsm) {
       // Initialize Stall Detection
       fsm->last_stall_check_time = fsm->profile_start_time;
       fsm->stall_reference_depth = fsm->current_depth;
+
+      // Initialize Adaptive Neutral Learning
+      fsm->hover_accumulated_adc = 0;
+      fsm->hover_sample_count = 0;
     }
     radio_start_receive();
   } else {
@@ -276,9 +280,11 @@ void float_fsm_update(float_fsm_t *fsm) {
 
   // Debug Printing
   if (now - fsm->last_debug_print >= 2000) {
-    printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u | Depth: %.3f m\n",
-           FloatStateNames[fsm->state], fsm->currently_transmitting,
-           fsm->current_actuator_pos, fsm->current_depth);
+    if (!reflash_target_is_in_progress()) {
+      printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u | Depth: %.3f m\n",
+             FloatStateNames[fsm->state], fsm->currently_transmitting,
+             fsm->current_actuator_pos, fsm->current_depth);
+    }
     fsm->last_debug_print = now;
   }
 
@@ -337,6 +343,8 @@ void float_fsm_update(float_fsm_t *fsm) {
           printf(">> MISSION: Arrived at %s (%.2fm). Starting %u sec hold...\n",
                  stage_name, target_m, settings.profile_duration_s);
           fsm->target_depth_reached = true;
+          fsm->hover_accumulated_adc = 0;
+          fsm->hover_sample_count = 0;
           fsm->profile_start_time = now;
           if (fsm->profile_start_time == 0)
             fsm->profile_start_time = 1;
@@ -349,6 +357,8 @@ void float_fsm_update(float_fsm_t *fsm) {
         printf("!! MISSION: Drifted out of band! Resetting %s timer.\n",
                stage_name);
         fsm->target_depth_reached = false;
+        fsm->hover_accumulated_adc = 0;
+        fsm->hover_sample_count = 0;
         fsm->profile_start_time = now;
       }
     }
@@ -357,6 +367,16 @@ void float_fsm_update(float_fsm_t *fsm) {
     if ((fsm->sample_index == 0 ||
          (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS)) &&
         fsm->sample_index < MAX_RECORDED_SAMPLES) {
+      // Adaptive Neutral Learning: Accumulate actuator position while holding
+      if (fsm->target_depth_reached) {
+        float err_val = fsm->current_depth - target_m;
+        if (err_val < 0) err_val = -err_val;
+        if (err_val <= 0.15f) { // Close to target depth
+          fsm->hover_accumulated_adc += fsm->current_actuator_pos;
+          fsm->hover_sample_count++;
+        }
+      }
+
       recorded_depths[fsm->sample_index] = fsm->current_depth;
       recorded_times[fsm->sample_index] = now;
       recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
@@ -400,6 +420,18 @@ void float_fsm_update(float_fsm_t *fsm) {
                            1000));
 
             if (stage_complete) {
+                // Adaptive Neutral Learning: Compute and update learned neutral point
+                if (fsm->hover_sample_count >= 3) {
+                    uint16_t learned_neutral = fsm->hover_accumulated_adc / fsm->hover_sample_count;
+                    if (learned_neutral >= 1300 && learned_neutral <= 2500) {
+                        float_settings_t live_settings;
+                        storage_get_settings(&live_settings);
+                        live_settings.neutral_buoyancy_adc = learned_neutral;
+                        storage_set_settings(&live_settings);
+                        printf(">> [ADAPTIVE] Hold complete. Learned neutral buoyancy ADC: %u (updated in RAM)\n", learned_neutral);
+                    }
+                }
+
                 if (fsm->mission_stage == STAGE_DEEP) {
                     // Check if shallow stage is disabled (e.g. 0.0m)
                     if (settings.shallow_target_m <= 0.05f) {

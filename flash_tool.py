@@ -18,13 +18,25 @@ def calculate_crc32(data):
     # Final XOR 0xFFFFFFFF is standard for CRC32 (zlib)
     return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF
 
+# Global buffer for accumulating serial data
+_serial_buffer = ""
+
 def read_node_output(ser):
-    """Drain any waiting characters from the node and print them."""
-    while ser.in_waiting > 0:
-        line = ser.readline().decode('utf-8', errors='ignore').strip()
+    """Drain any waiting characters from the node and return complete lines."""
+    global _serial_buffer
+    
+    # Read all currently available bytes from serial
+    if ser.in_waiting > 0:
+        _serial_buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+    
+    # Check if we have a full line delimited by \n
+    if '\n' in _serial_buffer:
+        line, _serial_buffer = _serial_buffer.split('\n', 1)
+        line = line.strip()
         if line:
             print(f" [Surface] {line}")
-            return line
+        return line
+        
     return None
 
 def stream_firmware(port, bin_path):
@@ -52,7 +64,7 @@ def stream_firmware(port, bin_path):
     print(f"Last 16:  {firmware_data[-16:].hex(' ')}")
 
     try:
-        ser = serial.Serial(port, 115200, timeout=0.1)
+        ser = serial.Serial(port, 115200, timeout=1.0)
         time.sleep(1) # Wait for serial bridge to settle
         ser.reset_input_buffer()
 

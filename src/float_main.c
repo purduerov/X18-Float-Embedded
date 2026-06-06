@@ -191,6 +191,10 @@ int main() {
         }
       }
       
+      if (prev_state == FLOAT_PROFILING && global_fsm.state == FLOAT_PROFILE_DONE) {
+          printf(">> [STORAGE] Profile completed. Saving learned settings to Flash...\n");
+          storage_save();
+      }
       prev_state = global_fsm.state;
       last_depth_pid_time = now;
     }
@@ -219,6 +223,7 @@ int main() {
       radio_event_flag = false;
       float_fsm_process_event(&global_fsm);
     }
+    reflash_target_tick(radio_get_instance());
     sleep_ms(1);
   }
   return 0;

@@ -17,7 +17,10 @@ class HardwareManager:
         self.mission_status = "IDLE"
         self.first_timestamp = None
         self.reflash_in_progress = False
+        self.reflash_cancelled = False
         self.reflash_progress = 0
+        self.last_acked_bytes = -1
+        self.reflash_error = None
         
         self.float_settings = {
             "P": "--", "I": "--", "D": "--", "Deep": "--", "Shallow": "--", "N": "--",
@@ -52,7 +55,7 @@ class HardwareManager:
                     pass
             try:
                 # Increased timeout for more reliable readline()
-                self.ser = serial.Serial(port, baud, timeout=0.1, write_timeout=0.5)
+                self.ser = serial.Serial(port, baud, timeout=1.0, write_timeout=None)
                 # Force DTR/RTS to reset Pico serial if needed
                 self.ser.dtr = False
                 self.ser.rts = False
@@ -174,6 +177,12 @@ class HardwareManager:
         # Final XOR 0xFFFFFFFF is standard for CRC32 (zlib)
         return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF
 
+    def cancel_reflash(self):
+        """Signals the reflash thread to stop at the next safe point."""
+        with self.lock:
+            self.reflash_cancelled = True
+            self.console_log.append("🟡 OTA cancelled by user. Surface will recover in ~5s.")
+
     def reflash_firmware(self, firmware_data):
         """Starts a background thread to handle the OTA reflash process."""
         if not self.ser or not self.ser.is_open:
@@ -183,7 +192,10 @@ class HardwareManager:
         def run_reflash():
             with self.lock:
                 self.reflash_in_progress = True
+                self.reflash_cancelled = False
                 self.reflash_progress = 0
+                self.last_acked_bytes = -1
+                self.reflash_error = None
                 
             # 1. Prepare Data
             CHUNK_SIZE = 220
@@ -204,22 +216,21 @@ class HardwareManager:
                 self.ser.write(header)
                 self.ser.flush()
                 
-                # 3. Wait for Sync
+                # 3. Wait for Sync (Wait for ACK for seq 0xFFFFFFFF)
                 sync_start = time.time()
                 synced = False
                 while time.time() - sync_start < 15:
                     with self.lock:
-                        recent_logs = list(self.console_log[-5:])
-                    if any("ACK received for seq" in line for line in recent_logs):
-                        synced = True
-                        break
-                    if any("Failed to start" in line for line in recent_logs):
-                        break
+                        if self.last_acked_bytes == 0xFFFFFFFF or any("ACK received for seq" in line for line in self.console_log[-5:]):
+                            synced = True
+                            break
+                        if self.reflash_error:
+                            break
                     time.sleep(0.1)
                 
                 if not synced:
                     with self.lock:
-                        self.console_log.append("🔴 REFLASH ERROR: Timeout waiting for sync.")
+                        self.console_log.append(f"🔴 REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
                         self.reflash_in_progress = False
                     return
 
@@ -227,31 +238,42 @@ class HardwareManager:
                 sent_bytes = 0
                 while sent_bytes < file_size:
                     chunk = padded_data[sent_bytes:sent_bytes+CHUNK_SIZE]
+
+                    # Give the Pico's USB stack time to flush the "Progress" print
+                    # and enter the getchar_timeout_us read loop before blasting 220 bytes.
+                    time.sleep(0.02)
+
+                    # Send full chunk — write_timeout=None means this blocks until drained
+                    with self.lock:
+                        if self.reflash_cancelled:
+                            self.console_log.append(f"🟡 OTA cancelled at {sent_bytes} bytes.")
+                            self.reflash_in_progress = False
+                            return
                     self.ser.write(chunk)
                     self.ser.flush()
-                    
-                    # Wait for ACK/Progress
+
+                    # Wait for Progress (no Python-side timeout — surface firmware drives it via "Link lost")
+                    target_bytes = sent_bytes + CHUNK_SIZE
                     chunk_ack = False
-                    chunk_start = time.time()
-                    while time.time() - chunk_start < 10:
+                    while True:
                         with self.lock:
-                            recent_logs = list(self.console_log[-5:])
-                        if any("Progress" in line for line in recent_logs):
-                            chunk_ack = True
-                            break
-                        if any("Link lost" in line for line in recent_logs):
-                            break
+                            if self.last_acked_bytes >= target_bytes:
+                                chunk_ack = True
+                                break
+                            if self.reflash_error:
+                                break
                         time.sleep(0.01)
                     
                     if not chunk_ack:
                         with self.lock:
-                            self.console_log.append(f"🔴 REFLASH ERROR: Link lost at {sent_bytes} bytes.")
+                            self.console_log.append(f"🔴 REFLASH ERROR: {self.reflash_error if self.reflash_error else f'Link lost at {sent_bytes} bytes.'}")
                             self.reflash_in_progress = False
                         return
                         
                     sent_bytes += CHUNK_SIZE
                     with self.lock:
                         self.reflash_progress = int((sent_bytes / file_size) * 100)
+
                 
                 with self.lock:
                     self.console_log.append("✅ REFLASH SUCCESS: Data transfer complete.")
@@ -326,22 +348,24 @@ class HardwareManager:
             self.console_log.append(f"🔴 AUTO-SAVE ERROR: {e}")
 
     def serial_listener(self):
+        serial_buffer = ""
         while self.running:
             if self.ser and self.ser.is_open:
                 try:
-                    # Read single line if available (non-blocking due to serial timeout)
+                    # Read all available bytes to prevent readline() from splitting lines
                     if self.ser.in_waiting > 0:
-                        line_raw = self.ser.readline()
-                        if not line_raw:
-                            continue
-                            
-                        line = line_raw.decode('utf-8', errors='ignore').strip()
+                        serial_buffer += self.ser.read(self.ser.in_waiting).decode('utf-8', errors='ignore')
+
+                    while '\n' in serial_buffer:
+                        line_raw, serial_buffer = serial_buffer.split('\n', 1)
+                        line = line_raw.strip()
+
                         if line:
                             with self.lock:
                                 self.console_log.append(line)
                                 if len(self.console_log) > 100: 
                                     self.console_log.pop(0)
-                            
+
                             # Mission Status Logic
                             if "PRE-DIVE Packet Logged" in line: 
                                 self.mission_status = "PROFILING (Diving to Deep)"
@@ -374,7 +398,7 @@ class HardwareManager:
                                             self.float_settings[key] = value
                                     with self.lock:
                                         self.console_log.append(f"✅ UI Synced Successfully.")
-                            
+
                             # OTA Progress Detection (for smoother UI)
                             if "Progress:" in line:
                                 try:
@@ -383,8 +407,12 @@ class HardwareManager:
                                     cur = int(parts[0])
                                     total = int(parts[1])
                                     self.reflash_progress = int((cur/total) * 100)
+                                    self.last_acked_bytes = cur
                                 except:
                                     pass
+
+                            if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
+                                self.reflash_error = line
 
                             # CSV Parsing Logic
                             parts = [p.strip() for p in line.split(',')]
@@ -392,27 +420,28 @@ class HardwareManager:
                                 try:
                                     abs_time_ms = int(parts[1])
                                     depth_m = float(parts[2])
-                                    
+
                                     if self.first_timestamp is None:
                                         self.first_timestamp = abs_time_ms
                                     rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
-                                    
+
                                     entry = {
                                         "Time (s)": rel_time_s,
                                         "Depth (m)": depth_m
                                     }
-                                    
+
                                     if len(parts) >= 4 and parts[3].isdigit():
                                         entry["Actuator (ADC)"] = int(parts[3])
                                     if len(parts) >= 5 and parts[4].isdigit():
                                         entry["Target (ADC)"] = int(parts[4])
-                                        
+
                                     with self.lock:
                                         self.data_log.append(entry)
                                 except (ValueError, IndexError):
                                     pass
                     else:
-                        time.sleep(0.01) 
+                        time.sleep(0.01)
+ 
                 except (serial.SerialException, OSError, Exception) as e:
                     with self.lock:
                         if self.ser:

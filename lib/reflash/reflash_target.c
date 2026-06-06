@@ -9,14 +9,17 @@
 #include <stdio.h>
 #include <string.h>
 
+#define OTA_TIMEOUT_MS 30000  // Reset OTA state after 30s of no packets (outlasts 10 retries × 2s on surface)
+
 static bool in_progress = false;
 static uint32_t total_size = 0;
 static uint32_t expected_master_crc = 0;
 static uint32_t bytes_received = 0;
 static uint32_t next_seq = 0;
-static uint8_t page_buffer[512]; // Buffer enough to hold non-256 chunks
+static uint8_t page_buffer[512];
 static uint32_t page_buffer_idx = 0;
 static uint32_t current_flash_addr = SLOT_1_OFFSET;
+static uint32_t last_packet_ms = 0;  // Timestamp of last received OTA packet
 
 // Critical Swap Routine: Must be in RAM, disable interrupts, erase Slot 0, copy Slot 1 -> Slot 0 in chunks
 static void __no_inline_not_in_flash_func(critical_swap_routine)() {
@@ -72,10 +75,7 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
         
         printf("[OTA] Start Msg: Size %lu, CRC 0x%08lX. Erasing Slot 1...\n", total_size, expected_master_crc);
         
-        // 1. Switch to high-speed OTA bandwidth
-        RadioLib_SX127x_SetBandwidth(lora, 500.0);
-
-        // 2. Send ACK immediately so the Surface knows we are starting
+        // Send ACK at 125kHz so surface knows we are starting
         send_ack(lora, 0xFFFFFFFF);
         page_buffer_idx = 0;
         current_flash_addr = SLOT_1_OFFSET;
@@ -93,6 +93,7 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
         
         printf("[OTA] Erase Complete. Waiting for data...\n");
         in_progress = true;
+        last_packet_ms = to_ms_since_boot(get_absolute_time());
         return true;
     } 
     else if (msg_type == REFLASH_MSG_DATA && in_progress && len >= sizeof(reflash_data_msg_t)) {
@@ -122,6 +123,7 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
                 send_ack(lora, next_seq);
                 next_seq++;
                 bytes_received += REFLASH_CHUNK_SIZE;
+                last_packet_ms = to_ms_since_boot(get_absolute_time());
                 printf("[OTA] Received Seq %lu (%lu/%lu)\n", data_pkt->seq_num, bytes_received, total_size);
 
                 if (bytes_received >= total_size) {
@@ -168,4 +170,23 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
     }
     
     return false;
+}
+
+void reflash_target_tick(RadioLibSX127x_t *lora) {
+    if (!in_progress) return;
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - last_packet_ms > OTA_TIMEOUT_MS) {
+        printf("[OTA] Transfer timeout! Resetting OTA state. Ready for new attempt.\n");
+        in_progress = false;
+        bytes_received = 0;
+        next_seq = 0;
+        page_buffer_idx = 0;
+        current_flash_addr = SLOT_1_OFFSET;
+        // Already at 125kHz — no BW reset needed
+    }
+}
+
+bool reflash_target_is_in_progress(void) {
+    return in_progress;
 }

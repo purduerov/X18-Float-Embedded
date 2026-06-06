@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "hardware/watchdog.h"
+#include "hw_config.h"
 
 static bool wait_for_ack(RadioLibSX127x_t *lora, uint32_t expected_seq) {
     uint8_t buffer[256];
@@ -15,8 +16,8 @@ static bool wait_for_ack(RadioLibSX127x_t *lora, uint32_t expected_seq) {
     RadioLib_SX127x_StartReceive(lora);
 
     while (to_ms_since_boot(get_absolute_time()) - start_time < 2000) {
-        // Poll the IRQ pin (GPIO 9)
-        if (gpio_get(9)) {
+        // Poll the IRQ pin (target-specific via hw_config.h)
+        if (gpio_get(PIN_IRQ)) {
             int16_t state = RadioLib_SX127x_ReadData(lora, buffer, sizeof(buffer));
             if (state > 0 && buffer[0] == REFLASH_MSG_ACK) {
                 reflash_ack_msg_t *ack = (reflash_ack_msg_t *)buffer;
@@ -40,8 +41,12 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
     // Read 8 bytes (4 size, 4 crc). 'S' is already consumed by surface_main.c
     uint8_t header[8];
     for (int i = 0; i < 8; i++) {
-        int c;
-        while ((c = getchar_timeout_us(5000000)) == PICO_ERROR_TIMEOUT); // 5s timeout
+        int c = getchar_timeout_us(5000000);
+        if (c == PICO_ERROR_TIMEOUT) {
+            printf("[HOST] Timeout reading header byte %d. Aborting.\n", i);
+            RadioLib_SX127x_SetBandwidth(lora, 125.0);
+            return;
+        }
         header[i] = (uint8_t)c;
     }
 
@@ -60,12 +65,8 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
     bool started = false;
     for (int retry = 0; retry < 5; retry++) {
-        // Ensure we transmit START at 125kHz so the target hears it
-        RadioLib_SX127x_SetBandwidth(lora, 125.0);
+        // Transmit START at 125kHz
         RadioLib_SX127x_Transmit(lora, (uint8_t *)&start_msg, sizeof(start_msg));
-        
-        // Immediately switch to 500kHz to await the target's high-speed ACK
-        RadioLib_SX127x_SetBandwidth(lora, 500.0);
         
         if (wait_for_ack(lora, 0xFFFFFFFF)) {
             started = true;
@@ -88,8 +89,12 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
     while (bytes_sent < total_size) {
         uint32_t chunk_len = (total_size - bytes_sent > REFLASH_CHUNK_SIZE) ? REFLASH_CHUNK_SIZE : (total_size - bytes_sent);
         for (uint32_t i = 0; i < chunk_len; i++) {
-            int c;
-            while ((c = getchar_timeout_us(1000000)) == PICO_ERROR_TIMEOUT); // 1s timeout
+            int c = getchar_timeout_us(5000000); // 5s per byte — covers LoRa retry window
+            if (c == PICO_ERROR_TIMEOUT) {
+                printf("[HOST] Stalled waiting for data byte %lu of seq %lu. Aborting.\n", i, seq_num);
+                RadioLib_SX127x_SetBandwidth(lora, 125.0); // restore normal BW
+                return; // back to main loop — surface will resume printing
+            }
             data_pkt.data[i] = (uint8_t)c;
         }
         if (chunk_len < REFLASH_CHUNK_SIZE) {

@@ -10,6 +10,8 @@ typedef struct {
     double prev_error;
     double output_min;
     double output_max;
+    double integral_min;  // Minimum value for the integral contribution
+    double integral_max;  // Maximum value for the integral contribution
     double integral_gate; // Conditional integration threshold (0 to disable)
     double prev_D;        // Previous filtered derivative state for EMA
 } PIDController;

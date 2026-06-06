@@ -139,7 +139,13 @@ def render_sidebar(hw):
 
         if hw.reflash_in_progress:
             st.progress(hw.reflash_progress / 100.0, text=f"Flashing... {hw.reflash_progress}%")
-            st.warning("Do not close dashboard or disconnect during flash!")
+            col_warn, col_cancel = st.columns([3, 1])
+            with col_warn:
+                st.warning("Do not disconnect during flash! Click Cancel to abort safely.")
+            with col_cancel:
+                if st.button("🛑 Cancel OTA", width="stretch", type="secondary"):
+                    hw.cancel_reflash()
+                    st.rerun()
 
 def render_metrics(hw):
     with hw.lock:

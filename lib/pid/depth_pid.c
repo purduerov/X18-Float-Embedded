@@ -3,10 +3,12 @@
 
 void depth_pid_init(DepthPID *dpid, double kp, double ki, double kd, double dt, int pos_min, int pos_max) {
     // Initialize underlying PID controller.
-    // SYMMETRIC LIMITS:
-    // Allow the PID to span the entire ±4095 range so it can reach any actuator position
-    // regardless of what the "Neutral ADC" guess is set to.
-    pid_init(&dpid->pid, kp, ki, kd, dt, -4095.0, 4095.0);
+    // Allow total output to span the full physical/soft limits (usually 0 to 4095)
+    pid_init(&dpid->pid, kp, ki, kd, dt, (double)pos_min, (double)pos_max);
+    
+    // Restrict integral term specifically to the neutral buoyancy envelope to prevent windup
+    dpid->pid.integral_min = 1300.0;
+    dpid->pid.integral_max = 2500.0;
     
     // Enable Integral Gating to prevent windup during the descent.
     dpid->pid.integral_gate = (double)INTEGRAL_GATE_M;
