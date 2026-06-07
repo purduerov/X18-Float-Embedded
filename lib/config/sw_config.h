@@ -69,6 +69,6 @@
 // ==========================================
 // 4. FIRMWARE VERSION
 // ==========================================
-#define FIRMWARE_VERSION 103
+#define FIRMWARE_VERSION 106
 
 #endif // SW_CONFIG_H

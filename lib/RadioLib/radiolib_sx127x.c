@@ -2,6 +2,8 @@
 #include <math.h>
 #include <stdio.h> // Required for debug prints
 
+static int16_t setMode(RadioLibSX127x_t* chip, uint8_t mode);
+
 int16_t RadioLib_SX127x_SetFrequency(RadioLibSX127x_t* chip, float freq) {
     // Check frequency limits (SX1276 range: 137 - 1020 MHz)
     if (freq < 137.0 || freq > 1020.0) return -3; // RADIOLIB_ERR_INVALID_FREQUENCY
@@ -34,9 +36,21 @@ int16_t RadioLib_SX127x_SetBandwidth(RadioLibSX127x_t* chip, float bw) {
 
     if (bwVal == 0xFF) return -3; // RADIOLIB_ERR_INVALID_BANDWIDTH
 
+    // Keep track of current mode
+    uint8_t currentMode = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_OP_MODE) & 0x07;
+
+    // Switch to Standby to allow writing config registers
+    setMode(chip, RADIOLIB_SX127X_STANDBY);
+
     // Set bandwidth in ModemConfig1 (bits 7-4)
     int16_t state = RadioLib_Module_SPIsetRegValue(chip->mod, RADIOLIB_SX127X_REG_MODEM_CONFIG_1, bwVal << 4, 7, 4, 5, 0xFF, false);
     if (state == RADIOLIB_ERR_NONE) chip->bandwidth = bw;
+
+    // Restore the mode if it wasn't Standby
+    if (currentMode != RADIOLIB_SX127X_STANDBY) {
+        setMode(chip, currentMode);
+    }
+
     return state;
 }
 
@@ -251,14 +265,20 @@ int16_t RadioLib_SX127x_StartReceive(RadioLibSX127x_t* chip) {
 }
 
 int16_t RadioLib_SX127x_ReadData(RadioLibSX127x_t* chip, uint8_t* data, size_t len) {
-    // 1. Check for CRC Error (IRQ Flag Bit 5)
+    // 1. Check if a packet has actually been received (RxDone flag, Bit 6)
     uint8_t flags = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS);
+    if (!(flags & 0x40)) {
+        // No packet has been received or RxDone is not set
+        return 0;
+    }
+
+    // 2. Check for CRC Error (IRQ Flag Bit 5)
     if (flags & 0x20) { 
         RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
         return RADIOLIB_ERR_CRC_MISMATCH; 
     }
 
-    // 2. Read packet length
+    // 3. Read packet length
     uint8_t length = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_RX_NB_BYTES);
     
     // 3. Set FIFO pointer to current packet address

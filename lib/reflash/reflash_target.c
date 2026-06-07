@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "hardware/gpio.h"
 #include "hardware/watchdog.h"
 #include "hardware/structs/xip_ctrl.h"
 #include <stdio.h>
@@ -16,7 +17,7 @@ static uint32_t total_size = 0;
 static uint32_t expected_master_crc = 0;
 static uint32_t bytes_received = 0;
 static uint32_t next_seq = 0;
-static uint8_t page_buffer[512];
+static uint8_t page_buffer[512] __attribute__((aligned(4)));
 static uint32_t page_buffer_idx = 0;
 static uint32_t current_flash_addr = SLOT_1_OFFSET;
 static uint32_t last_packet_ms = 0;  // Timestamp of last received OTA packet
@@ -57,8 +58,21 @@ static void __no_inline_not_in_flash_func(critical_swap_routine)() {
 }
 
 static void send_ack(RadioLibSX127x_t *lora, uint32_t seq) {
+    // Disable rising-edge interrupt on the radio IRQ pin during synchronous transmit
+    // to prevent the TxDone event from triggering a duplicate event check.
+    if (lora->mod->irqPin != RADIOLIB_NC) {
+        gpio_set_irq_enabled(lora->mod->irqPin, GPIO_IRQ_EDGE_RISE, false);
+    }
+
     reflash_ack_msg_t ack = {.type = REFLASH_MSG_ACK, .seq_num = seq};
     RadioLib_SX127x_Transmit(lora, (uint8_t *)&ack, sizeof(ack));
+
+    if (lora->mod->irqPin != RADIOLIB_NC) {
+        // Acknowledge/clear the latch of any TxDone edge that occurred during transmission
+        gpio_acknowledge_irq(lora->mod->irqPin, GPIO_IRQ_EDGE_RISE);
+        // Re-enable interrupt
+        gpio_set_irq_enabled(lora->mod->irqPin, GPIO_IRQ_EDGE_RISE, true);
+    }
 }
 
 bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size_t len) {
@@ -137,10 +151,18 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
                         page_buffer_idx = 0;
                     }
 
+                    // Flush the XIP cache robustly
+                    xip_ctrl_hw->flush = 1;
+                    while (!(xip_ctrl_hw->stat & XIP_STAT_FLUSH_RDY)) {
+                        tight_loop_contents();
+                    }
+
                     // Diagnostic Dumps
                     const uint8_t *slot1_ptr = (const uint8_t *)(XIP_BASE + SLOT_1_OFFSET);
                     printf("[OTA] First 16: ");
                     for(int i=0; i<16; i++) printf("%02x ", slot1_ptr[i]);
+                    printf("\n[OTA] Mid (40k): ");
+                    for(int i=0; i<16; i++) printf("%02x ", slot1_ptr[40000 + i]);
                     printf("\n[OTA] Last 16: ");
                     for(int i=0; i<16; i++) printf("%02x ", slot1_ptr[total_size - 16 + i]);
                     printf("\n");

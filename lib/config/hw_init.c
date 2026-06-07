@@ -20,10 +20,10 @@
 bool system_init(void (*radio_irq_callback)(void), MS5837_t *depth_sensor) {
     // 1. Initialize Serial
     stdio_init_all();
-    
-    // 2. MANDATORY WAIT for USB (Crucial for seeing first prints)
-    sleep_ms(2000); 
+    stdio_set_translate_crlf(&stdio_usb, false); // Disable CRLF translation for binary safety
 
+    // 2. MANDATORY WAIT for USB (Crucial for seeing first prints)
+    sleep_ms(2000);
     printf("\n\n[SYSTEM] --- X18 STARTUP DIAGNOSTIC ---\n");
 
 #ifdef TARGET_SURFACE

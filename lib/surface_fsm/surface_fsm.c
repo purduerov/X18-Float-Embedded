@@ -193,7 +193,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%u TarAct=%u ActMin=%u ActMax=%u Neutral=%u Tol=%.2f LiveDepth=%.3f FW=%u\n",
+                    printf("\n[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%u TarAct=%u ActMin=%u ActMax=%u Neutral=%u Tol=%.2f LiveDepth=%.3f FW=%lu\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
                     rx_pkt.payload.settings.deep_target_m,
