@@ -9,9 +9,6 @@
 #define SLOT_1_OFFSET 0x00100000 // 1MB Offset
 #define SLOT_SIZE     0x00100000 // 1MB
 
-#define REFLASH_BW_NORMAL 125.0f
-#define REFLASH_BW_FAST   500.0f
-
 typedef enum {
     REFLASH_MSG_START = 0xF1,
     REFLASH_MSG_DATA  = 0xF2,

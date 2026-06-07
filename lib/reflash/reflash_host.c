@@ -44,7 +44,7 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
         int c = getchar_timeout_us(5000000);
         if (c == PICO_ERROR_TIMEOUT) {
             printf("[HOST] Timeout reading header byte %d. Aborting.\n", i);
-            RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL);
+            RadioLib_SX127x_SetBandwidth(lora, 125.0);
             return;
         }
         header[i] = (uint8_t)c;
@@ -67,11 +67,9 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
     for (int retry = 0; retry < 5; retry++) {
         // Transmit START at 125kHz
         RadioLib_SX127x_Transmit(lora, (uint8_t *)&start_msg, sizeof(start_msg));
-
+        
         if (wait_for_ack(lora, 0xFFFFFFFF)) {
             started = true;
-            // Switch to high-speed reflash bandwidth
-            RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_FAST);
             break;
         }
         printf("[HOST] Start retry %d...\n", retry + 1);
@@ -79,7 +77,7 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
     if (!started) {
         printf("[HOST] Failed to start reflash (no ACK from receiver)\n");
-        RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL); // Reset bandwidth on failure
+        RadioLib_SX127x_SetBandwidth(lora, 125.0); // Reset bandwidth on failure
         return; // Return to normal operations
     }
 
@@ -94,7 +92,7 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
             int c = getchar_timeout_us(5000000); // 5s per byte — covers LoRa retry window
             if (c == PICO_ERROR_TIMEOUT) {
                 printf("[HOST] Stalled waiting for data byte %lu of seq %lu. Aborting.\n", i, seq_num);
-                RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL); // restore normal BW
+                RadioLib_SX127x_SetBandwidth(lora, 125.0); // restore normal BW
                 return; // back to main loop — surface will resume printing
             }
             data_pkt.data[i] = (uint8_t)c;
@@ -118,7 +116,6 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
         if (!pkt_acked) {
             printf("[HOST] Link lost at seq %lu\n", seq_num);
-            RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL); // restore normal BW
             break;
         }
 
@@ -130,7 +127,6 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
 
     if (bytes_sent == total_size) {
         printf("[HOST] Reflash transfer complete! Rebooting Surface...\n");
-        RadioLib_SX127x_SetBandwidth(lora, REFLASH_BW_NORMAL); // restore normal BW
         sleep_ms(500);
         watchdog_reboot(0, 0, 100);
     }
