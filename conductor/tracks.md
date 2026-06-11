@@ -14,6 +14,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: MATE 2026 Mission Sequencer**
+- [x] **Track: MATE 2026 Mission Sequencer**
 *Link: [./tracks/mate_mission_2026/](./tracks/mate_mission_2026/)*
 

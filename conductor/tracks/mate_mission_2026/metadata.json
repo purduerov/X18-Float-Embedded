@@ -1,7 +1,7 @@
 {
     "id": "mate_mission_2026",
     "title": "MATE 2026 Mission Sequencer",
-    "status": "planned",
+    "status": "completed",
     "priority": "high",
     "owner": "Gemini CLI"
 }

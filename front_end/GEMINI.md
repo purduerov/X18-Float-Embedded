@@ -13,3 +13,4 @@ The `front_end` directory contains the Python/Streamlit-based Mission Control Da
 - **Auto-Grab:** Uses `HardwareManager.load_local_firmware()` to read raw binary data from `.pio/build/float/firmware.bin`.
 - **Confirmation:** Requires checking the "Confirm firmware flash to Float" checkbox before displaying the flash trigger.
 - **Telemetry Sync:** Displays wireless firmware version `FW` extracted from serial sync packets.
+- **Serial Thread Lock:** A mutex (`self.serial_lock`) in `modules/hardware.py` protects all serial port accesses. It locks serial reads during transmission of reflash packets to eliminate competition between the telemetry reading thread and the reflash thread, preventing packet fragmentation and CRC errors.
