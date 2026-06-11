@@ -213,8 +213,10 @@ class HardwareManager:
                 # 2. Handshake
                 # Header: 'S', 4-byte size, 4-byte CRC
                 header = b'S' + struct.pack('<I', file_size) + struct.pack('<I', file_crc)
-                self.ser.write(header)
-                self.ser.flush()
+                with self.lock:
+                    if self.ser and self.ser.is_open:
+                        self.ser.write(header)
+                        self.ser.flush()
                 
                 # 3. Wait for Sync (Wait for ACK for seq 0xFFFFFFFF)
                 sync_start = time.time()
@@ -249,8 +251,9 @@ class HardwareManager:
                             self.console_log.append(f"🟡 OTA cancelled at {sent_bytes} bytes.")
                             self.reflash_in_progress = False
                             return
-                    self.ser.write(chunk)
-                    self.ser.flush()
+                        if self.ser and self.ser.is_open:
+                            self.ser.write(chunk)
+                            self.ser.flush()
 
                     # Wait for Progress (no Python-side timeout — surface firmware drives it via "Link lost")
                     target_bytes = sent_bytes + CHUNK_SIZE
@@ -353,8 +356,14 @@ class HardwareManager:
             if self.ser and self.ser.is_open:
                 try:
                     # Read all available bytes to prevent readline() from splitting lines
-                    if self.ser.in_waiting > 0:
-                        serial_buffer += self.ser.read(self.ser.in_waiting).decode('utf-8', errors='ignore')
+                    data = b''
+                    with self.lock:
+                        if self.ser and self.ser.is_open:
+                            in_waiting = self.ser.in_waiting
+                            if in_waiting > 0:
+                                data = self.ser.read(in_waiting)
+                    if data:
+                        serial_buffer += data.decode('utf-8', errors='ignore')
 
                     while '\n' in serial_buffer:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
