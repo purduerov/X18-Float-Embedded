@@ -50,6 +50,13 @@ typedef struct {
     uint32_t hover_accumulated_adc;
     uint32_t hover_sample_count;
 
+    // --- Buoyancy Control Phase ---
+    uint8_t ctrl_state; // 0: Transit, 1: Braking, 2: Hover
+    float filtered_velocity;
+    float last_depth;
+    uint32_t last_nudge_time;
+    uint16_t active_neutral_adc;
+
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

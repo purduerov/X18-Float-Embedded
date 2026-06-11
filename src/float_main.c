@@ -23,7 +23,6 @@
 static float_fsm_t global_fsm;
 static volatile bool radio_event_flag = false;
 static MS5837_t depth_sensor;
-static DepthPID dpid;
 
 void onInterrupt(void) { radio_event_flag = true; }
 
@@ -88,11 +87,6 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
 
-  // We now use the PID to calculate absolute positions.
-  // We initialize the depth PID with the physical limits of the actuator.
-  depth_pid_init(&dpid, settings.kp, settings.ki, settings.kd, 0.1, settings.act_min, settings.act_max);
-  depth_pid_set_target(&dpid, settings.deep_target_m);
-
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
   float_fsm_init(&global_fsm, &depth_sensor);
 
@@ -109,7 +103,7 @@ int main() {
 
     storage_get_settings(&settings);
 
-    // --- 2. Outer Depth PID Loop (10Hz) ---
+    // --- 2. Outer Depth Loop (10Hz) ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 10000.0f; // Default to error indicator
       
@@ -118,6 +112,15 @@ int main() {
         consecutive_sensor_failures = 0;
         float depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
         current_depth = (double)depth;
+        
+        // Update velocity (EMA filtered)
+        if (prev_state == FLOAT_PROFILING) {
+          float raw_velocity = (depth - global_fsm.last_depth) / 0.1f;
+          global_fsm.filtered_velocity = (VELOCITY_EMA_ALPHA * raw_velocity) + ((1.0f - VELOCITY_EMA_ALPHA) * global_fsm.filtered_velocity);
+        } else {
+          global_fsm.filtered_velocity = 0.0f;
+        }
+        global_fsm.last_depth = depth;
         global_fsm.current_depth = depth; // Sync for FSM use
       } else {
         consecutive_sensor_failures++;
@@ -148,46 +151,121 @@ int main() {
         }
       }
 
-      dpid.pid.kp = settings.kp;
-      dpid.pid.ki = settings.ki;
-      dpid.pid.kd = settings.kd;
-
       if (global_fsm.state == FLOAT_PROFILING) {
-        float target_m = 0.0f;
-        if (global_fsm.mission_stage == STAGE_DEEP) target_m = settings.deep_target_m;
-        else if (global_fsm.mission_stage == STAGE_SHALLOW) target_m = settings.shallow_target_m;
-        else if (global_fsm.mission_stage == STAGE_EXITING) target_m = -0.5f;
-
-        depth_pid_set_target(&dpid, target_m);
+        float nominal_target = 0.0f;
+        float effective_target = 0.0f;
         
-        // Seed PID baseline on first entry to profiling
+        if (global_fsm.mission_stage == STAGE_DEEP) {
+          nominal_target = settings.deep_target_m;
+          effective_target = settings.deep_target_m;
+        } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
+          nominal_target = settings.shallow_target_m;
+          effective_target = 0.55f; // BIASED TARGET to avoid breaking surface
+        } else if (global_fsm.mission_stage == STAGE_EXITING) {
+          nominal_target = -0.5f;
+          effective_target = -0.5f;
+        }
+
+        // Initialize active baseline on first entry
         if (prev_state != FLOAT_PROFILING) {
-            printf(">> PID: Entering PROFILING mode. Seeding Integral with Neutral ADC: %d\n", settings.neutral_buoyancy_adc);
-            depth_pid_reset(&dpid);
-            pid_set_integral(&dpid.pid, (double)settings.neutral_buoyancy_adc);
+            printf(">> Control: Entering PROFILING mode. Base Neutral ADC: %d\n", settings.neutral_buoyancy_adc);
+            global_fsm.active_neutral_adc = settings.neutral_buoyancy_adc;
+            global_fsm.ctrl_state = 0; // CTRL_TRANSIT
             global_fsm.actuator_target = settings.neutral_buoyancy_adc;
         }
 
-        // --- TWO-STAGE PID LOGIC ---
-        double depth_error = fabs(current_depth - target_m);
-        dpid.pid.kp = settings.kp;
-        if (depth_error > TRANSIT_THRESHOLD_M) {
-            dpid.pid.kp *= TRANSIT_P_MULTIPLIER; // Boost P during descent/ascent
+        float depth_error = current_depth - effective_target;
+        
+        // --- Hard Recovery Check ---
+        // If we drift too far, reset back to Transit
+        if (global_fsm.ctrl_state == 2 && fabs(current_depth - nominal_target) > HOVER_RECOVERY_M) {
+            printf("!! Control: Hard drift detected (%.2fm). Re-entering TRANSIT.\n", fabs(current_depth - nominal_target));
+            global_fsm.ctrl_state = 0; // CTRL_TRANSIT
         }
-        dpid.pid.ki = settings.ki;
-        dpid.pid.kd = settings.kd;
 
-        // --- DEAD-BAND OPTIMIZATION ---
-        // If we are within the arrival band, we STOP the PID to save battery and prevent yo-yoing.
-        // We only do this if we aren't in the EXITING (surfacing) stage.
-        if (global_fsm.mission_stage != STAGE_EXITING && depth_error <= settings.arrival_band_m) {
-            // Within band: Lock actuator at current position
-            // (Note: we don't call depth_pid_calculate_target_pos here)
-        } else {
-            // Outside band: Run PID control
-            int current_target = (int)global_fsm.actuator_target;
-            depth_pid_calculate_target_pos(&dpid, current_depth, settings.neutral_buoyancy_adc, &current_target);
-            global_fsm.actuator_target = (uint16_t)current_target;
+        // --- STATE MACHINE UPDATE ---
+        if (global_fsm.ctrl_state == 0) { // CTRL_TRANSIT
+            // 1. Actuate for transit direction
+            if (depth_error < 0.0f) {
+                // Too shallow (need to dive)
+                global_fsm.actuator_target = settings.act_min;
+            } else {
+                // Too deep (need to rise)
+                global_fsm.actuator_target = settings.act_max;
+            }
+
+            // 2. Braking Condition check
+            bool trigger_braking = false;
+            if (depth_error < 0.0f) { // Diving
+                if (-depth_error <= global_fsm.filtered_velocity * settings.kp) {
+                    trigger_braking = true;
+                }
+            } else { // Rising
+                if (depth_error <= -global_fsm.filtered_velocity * settings.kp) {
+                    trigger_braking = true;
+                }
+            }
+
+            if (trigger_braking && global_fsm.mission_stage != STAGE_EXITING) {
+                printf(">> Control: Transit -> BRAKING (Vel: %.3f m/s, Err: %.2f m)\n", global_fsm.filtered_velocity, depth_error);
+                global_fsm.ctrl_state = 1; // CTRL_BRAKING
+            }
+        }
+        else if (global_fsm.ctrl_state == 1) { // CTRL_BRAKING
+            // Command active counter-buoyancy
+            if (depth_error < 0.0f) {
+                // Diving: apply positive buoyancy to slow down
+                global_fsm.actuator_target = global_fsm.active_neutral_adc + (int)settings.ki;
+            } else {
+                // Rising: apply negative buoyancy to slow down
+                global_fsm.actuator_target = global_fsm.active_neutral_adc - (int)settings.ki;
+            }
+
+            // Check if vertical speed has dropped near zero inside arrival band
+            if (fabs(global_fsm.filtered_velocity) <= 0.02f && fabs(current_depth - nominal_target) <= settings.arrival_band_m) {
+                printf(">> Control: Braking -> HOVER (Target reached and stopped. Depth: %.2f m)\n", current_depth);
+                global_fsm.ctrl_state = 2; // CTRL_HOVER
+                global_fsm.last_nudge_time = now;
+            }
+        }
+        else if (global_fsm.ctrl_state == 2) { // CTRL_HOVER
+            // Check for drifts and apply nudges
+            bool too_deep = false;
+            bool too_shallow = false;
+
+            if (global_fsm.mission_stage == STAGE_SHALLOW) {
+                // Asymmetric shallow band: drift down to 0.65m, drift up to 0.42m
+                if (current_depth > HOVER_ASYMM_SHALLOW_UP) too_deep = true;
+                if (current_depth < HOVER_ASYMM_SHALLOW_DOWN) too_shallow = true;
+            } else {
+                // Standard symmetric band: +/- settings.kd around target
+                if (depth_error > settings.kd) too_deep = true;
+                if (depth_error < -settings.kd) too_shallow = true;
+            }
+
+            if (too_deep || too_shallow) {
+                if (now - global_fsm.last_nudge_time >= (uint32_t)NUDGE_WAIT_S * 1000) {
+                    if (too_deep) {
+                        global_fsm.active_neutral_adc += NUDGE_STEP_ADC;
+                        printf(">> Control: Too Deep. Nudging Neutral Up -> %u\n", global_fsm.active_neutral_adc);
+                    } else if (too_shallow) {
+                        global_fsm.active_neutral_adc -= NUDGE_STEP_ADC;
+                        printf(">> Control: Too Shallow. Nudging Neutral Down -> %u\n", global_fsm.active_neutral_adc);
+                    }
+
+                    // Clamp learned neutral point
+                    if (global_fsm.active_neutral_adc > settings.neutral_buoyancy_adc + 500) {
+                        global_fsm.active_neutral_adc = settings.neutral_buoyancy_adc + 500;
+                    }
+                    if (global_fsm.active_neutral_adc < settings.neutral_buoyancy_adc - 500) {
+                        global_fsm.active_neutral_adc = settings.neutral_buoyancy_adc - 500;
+                    }
+
+                    global_fsm.last_nudge_time = now;
+                }
+            }
+
+            global_fsm.actuator_target = global_fsm.active_neutral_adc;
         }
       }
       

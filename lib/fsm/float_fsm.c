@@ -88,9 +88,14 @@ void float_fsm_process_event(float_fsm_t *fsm) {
       fsm->last_stall_check_time = fsm->profile_start_time;
       fsm->stall_reference_depth = fsm->current_depth;
 
-      // Initialize Adaptive Neutral Learning
+      // Initialize Adaptive Neutral Learning & Control State
       fsm->hover_accumulated_adc = 0;
       fsm->hover_sample_count = 0;
+      fsm->ctrl_state = 0; // CTRL_TRANSIT
+      fsm->filtered_velocity = 0.0f;
+      fsm->last_depth = fsm->current_depth;
+      fsm->last_nudge_time = fsm->profile_start_time;
+      fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
     }
     radio_start_receive();
   } else {
@@ -341,54 +346,75 @@ void float_fsm_update(float_fsm_t *fsm) {
           update_status_led(fsm->state);
         } else {
           printf(">> MISSION: Arrived at %s (%.2fm). Starting %u sec hold...\n",
-                 stage_name, target_m, settings.profile_duration_s);
+                  stage_name, target_m, settings.profile_duration_s);
           fsm->target_depth_reached = true;
           fsm->hover_accumulated_adc = 0;
           fsm->hover_sample_count = 0;
           fsm->profile_start_time = now;
           if (fsm->profile_start_time == 0)
             fsm->profile_start_time = 1;
+          
+          if (fsm->mission_stage == STAGE_DEEP) {
+            fsm->sample_index = 0;
+          } else if (fsm->mission_stage == STAGE_SHALLOW) {
+            fsm->sample_index = 7;
+          }
         }
       }
     } else {
       // Reset timer if we drift out of band (Consecutive Hold requirement)
       if (fsm->mission_stage != STAGE_EXITING &&
           depth_error > settings.arrival_band_m) {
-        printf("!! MISSION: Drifted out of band! Resetting %s timer.\n",
+        printf("!! MISSION: Drifted out of band! Resetting %s timer and logs.\n",
                stage_name);
         fsm->target_depth_reached = false;
         fsm->hover_accumulated_adc = 0;
         fsm->hover_sample_count = 0;
         fsm->profile_start_time = now;
+        
+        // Reset sequential packet logging
+        if (fsm->mission_stage == STAGE_DEEP) {
+          fsm->sample_index = 0;
+        } else if (fsm->mission_stage == STAGE_SHALLOW) {
+          fsm->sample_index = 7;
+        }
       }
     }
 
-    // Sampling Loop
-    if ((fsm->sample_index == 0 ||
-         (now - fsm->last_sample_time >= SAMPLE_INTERVAL_MS)) &&
-        fsm->sample_index < MAX_RECORDED_SAMPLES) {
-      // Adaptive Neutral Learning: Accumulate actuator position while holding
-      if (fsm->target_depth_reached) {
+    // Sampling Loop (5s interval, hold phase only)
+    if (fsm->target_depth_reached && fsm->profile_start_time > 0) {
+      uint32_t elapsed_ms = now - fsm->profile_start_time;
+      uint32_t expected_elapsed_ms = 0;
+      
+      if (fsm->mission_stage == STAGE_DEEP) {
+        expected_elapsed_ms = fsm->sample_index * 5000;
+      } else if (fsm->mission_stage == STAGE_SHALLOW) {
+        expected_elapsed_ms = (fsm->sample_index - 7) * 5000;
+      }
+      
+      if (elapsed_ms >= expected_elapsed_ms && fsm->sample_index < 14) {
+        recorded_times[fsm->sample_index] = expected_elapsed_ms; 
+        recorded_depths[fsm->sample_index] = fsm->current_depth;
+        recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
+        recorded_target_adcs[fsm->sample_index] = fsm->actuator_target;
+        
+        // Adaptive Neutral Learning: Accumulate actuator position while holding close to target
         float err_val = fsm->current_depth - target_m;
         if (err_val < 0) err_val = -err_val;
-        if (err_val <= 0.15f) { // Close to target depth
+        if (err_val <= 0.15f) { 
           fsm->hover_accumulated_adc += fsm->current_actuator_pos;
           fsm->hover_sample_count++;
         }
+        
+        printf(">> Hold Sample %u/7 [%s]: Time %lu s | Depth %.2f m | ADC %u | TargetADC %u\n",
+               (fsm->mission_stage == STAGE_DEEP ? fsm->sample_index + 1 : fsm->sample_index - 7 + 1),
+               stage_name, expected_elapsed_ms / 1000,
+               recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index],
+               recorded_target_adcs[fsm->sample_index]);
+               
+        fsm->sample_index++;
+        fsm->last_sample_time = now;
       }
-
-      recorded_depths[fsm->sample_index] = fsm->current_depth;
-      recorded_times[fsm->sample_index] = now;
-      recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
-      recorded_target_adcs[fsm->sample_index] = fsm->actuator_target;
-      printf(
-          ">> Sample %u/%u: Time %lu ms | Depth %.2f m | ADC %u | TargetADC %u [%s%s]\n",
-          fsm->sample_index + 1, MAX_RECORDED_SAMPLES, recorded_times[fsm->sample_index],
-          recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index], 
-          recorded_target_adcs[fsm->sample_index],
-          stage_name, fsm->target_depth_reached ? " HOLDING" : " DIVING");
-      fsm->sample_index++;
-      fsm->last_sample_time = now;
     }
 
     // --- Stall Detection (Early Abort) ---
@@ -441,17 +467,22 @@ void float_fsm_update(float_fsm_t *fsm) {
                             fsm->mission_stage = STAGE_EXITING;
                             fsm->target_depth_reached = false;
                             fsm->actuator_target = settings.act_max; 
+                            fsm->ctrl_state = 0;
                         } else {
                             fsm->current_profile++;
                             fsm->mission_stage = STAGE_DEEP;
                             fsm->target_depth_reached = false;
                             fsm->profile_start_time = now;
+                            fsm->ctrl_state = 0;
+                            fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
                         }
                     } else {
                         printf(">> MISSION: Deep stage %u/%u done. Moving to SHALLOW.\n", fsm->current_profile, settings.num_profiles);
                         fsm->mission_stage = STAGE_SHALLOW;
                         fsm->target_depth_reached = false;
                         fsm->profile_start_time = now;
+                        fsm->ctrl_state = 0;
+                        fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
                     }
                 } else {
                     printf(">> MISSION: Shallow stage %u/%u done.\n", fsm->current_profile, settings.num_profiles);
@@ -460,11 +491,14 @@ void float_fsm_update(float_fsm_t *fsm) {
                         fsm->mission_stage = STAGE_EXITING;
                         fsm->target_depth_reached = false;
                         fsm->actuator_target = settings.act_max;
+                        fsm->ctrl_state = 0;
                     } else {
                         fsm->current_profile++;
                         fsm->mission_stage = STAGE_DEEP;
                         fsm->target_depth_reached = false;
                         fsm->profile_start_time = now;
+                        fsm->ctrl_state = 0;
+                        fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
                     }
                 }
                 update_status_led(fsm->state);
@@ -475,6 +509,7 @@ void float_fsm_update(float_fsm_t *fsm) {
                 fsm->mission_stage = STAGE_EXITING;
                 fsm->target_depth_reached = false;
                 fsm->actuator_target = settings.act_max;
+                fsm->ctrl_state = 0;
                 update_status_led(fsm->state);
             }
     }
