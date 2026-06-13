@@ -11,7 +11,7 @@ DEFAULT_ACTUATOR_POS = 4095
 
 # UI/UX Constants
 PAGE_TITLE = "Mission Control"
-PAGE_ICON = "🌊"
+PAGE_ICON = ":material/water:"
 REFRESH_RATE_S = 0.5
 
 # CSS/Styles

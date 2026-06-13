@@ -8,7 +8,7 @@ from modules.constants import *
 
 def render_sidebar(hw):
     with st.sidebar:
-        st.header("🔌 Connection")
+        st.header("Connection", icon=":material/power:")
         available_ports = hw.get_available_ports()
         if available_ports:
             selected_port_obj = st.selectbox(
@@ -26,20 +26,21 @@ def render_sidebar(hw):
         with col2:
             if st.button("Disconnect", width="stretch"): hw.disconnect()
                 
-        st.write(f"**Status:** {'🟢 Connected' if hw.ser and hw.ser.is_open else '🔴 Disconnected'}")
+        status_txt = ":green[Connected]" if hw.ser and hw.ser.is_open else ":red[Disconnected]"
+        st.write(f"**Status:** {status_txt}")
         st.divider()
         
-        st.header("⚙️ Float Settings")
+        st.header("Float Settings", icon=":material/settings:")
         
-        if st.button("📏 ZERO DEPTH", width="stretch", type="secondary"):
+        if st.button("ZERO DEPTH", icon=":material/straighten:", width="stretch", type="secondary"):
             hw.zero_depth()
         st.caption("Sets current pressure as 0.0m depth.")
 
-        if st.button("⚠️ RESET FSM", width="stretch", type="primary"):
+        if st.button("RESET FSM", icon=":material/warning:", width="stretch", type="primary"):
             hw.reset_fsm()
         st.caption("Forces the Surface and Float back to IDLE.")
 
-        if st.button("🧪 TEST / CALIBRATE MODE", width="stretch", type="secondary"):
+        if st.button("TEST / CALIBRATE MODE", icon=":material/biotech:", width="stretch", type="secondary"):
             hw.test_mode()
         st.caption("Continuously stream live depth and ADC.")
 
@@ -74,15 +75,15 @@ def render_sidebar(hw):
             if st.form_submit_button("UPDATE GAINS", width="stretch"): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
 
         st.divider()
-        st.header("🦾 Actuator Control")
+        st.header("Actuator Control", icon=":material/precision_manufacturing:")
 
         # Quick Presets
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🔽 DIVE (0)", width="stretch"):
+            if st.button("DIVE (0)", icon=":material/arrow_downward:", width="stretch"):
                 hw.move_actuator(0)
         with c2:
-            if st.button("🔼 SURFACE (4095)", width="stretch"):
+            if st.button("SURFACE (4095)", icon=":material/arrow_upward:", width="stretch"):
                 hw.move_actuator(4095)
 
         with st.form("actuator_form"):
@@ -102,11 +103,11 @@ def render_sidebar(hw):
             if st.form_submit_button("SET NEUTRAL ADC", width="stretch"): hw.update_neutral_adc(int(n_adc))
 
         st.divider()
-        st.header("🆙 OTA Reflash")
+        st.header("OTA Reflash", icon=":material/publish:")
         
         col_load, col_upload = st.columns(2)
         with col_load:
-            if st.button("📂 Load Built Float Firmware", width="stretch", disabled=hw.reflash_in_progress):
+            if st.button("Load Built Float Firmware", icon=":material/folder_open:", width="stretch", disabled=hw.reflash_in_progress):
                 data, err = hw.load_local_firmware()
                 if err:
                     st.session_state["fw_data"] = None
@@ -131,7 +132,7 @@ def render_sidebar(hw):
         if "fw_data" in st.session_state and st.session_state["fw_data"] is not None:
             st.success(st.session_state["fw_info"])
             confirm_flash = st.checkbox("Confirm firmware flash to Float", value=False)
-            if st.button("🚀 FLASH FIRMWARE", width="stretch", type="primary", disabled=(not confirm_flash or hw.reflash_in_progress)):
+            if st.button("FLASH FIRMWARE", icon=":material/flash_on:", width="stretch", type="primary", disabled=(not confirm_flash or hw.reflash_in_progress)):
                 hw.reflash_firmware(st.session_state["fw_data"])
                 st.session_state["fw_data"] = None
                 st.session_state["fw_info"] = None
@@ -143,7 +144,7 @@ def render_sidebar(hw):
             with col_warn:
                 st.warning("Do not disconnect during flash! Click Cancel to abort safely.")
             with col_cancel:
-                if st.button("🛑 Cancel OTA", width="stretch", type="secondary"):
+                if st.button("Cancel OTA", icon=":material/cancel:", width="stretch", type="secondary"):
                     hw.cancel_reflash()
                     st.rerun()
 
@@ -167,9 +168,9 @@ def render_metrics(hw):
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Mission State", hw.mission_status)
-    m2.metric("⏱️ Countdown", time_left_str)
-    m3.metric("Max Depth", f"{max_depth:.2f} m")
-    m4.metric("Data Points", data_points)
+    m2.metric(":material/timer: Countdown", time_left_str)
+    m3.metric(":material/height: Max Depth", f"{max_depth:.2f} m")
+    m4.metric(":material/query_stats: Data Points", data_points)
 
 def render_packet_log(hw):
     with hw.lock:
@@ -185,7 +186,7 @@ def render_packet_log(hw):
         styled = styled.replace(", Pressure:", '</span>, Pressure:<span style="color:#ffcc00;">')
         styled = styled.replace(", Depth:", '</span>, Depth:<span style="color:#39ff14;">')
         styled += '</span>'
-        formatted_packets.append(f'<div style="margin-bottom: 6px; border-bottom: 1px dashed #142834; padding-bottom: 4px;">📥 {styled}</div>')
+        formatted_packets.append(f'<div style="margin-bottom: 6px; border-bottom: 1px dashed #142834; padding-bottom: 4px;">► {styled}</div>')
         
     log_html = "".join(formatted_packets)
     components.html(PACKET_CONSOLE_STYLE.format(log_html=log_html), height=420)
@@ -195,7 +196,7 @@ def render_main_content(hw):
     left_col, right_col = st.columns(2, gap="large")
     
     with left_col:
-        st.subheader("📥 Left Panel: Text/Data Log")
+        st.subheader("Left Panel: Text/Data Log", icon=":material/terminal:")
         st.caption("Scrolling telemetry showing raw incoming packet strings (Depth & Pressure)")
         
         render_packet_log(hw)
@@ -203,20 +204,20 @@ def render_main_content(hw):
         st.markdown("### Action Controls")
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.button("🚀 BEGIN PROFILE", use_container_width=True, type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
+            st.button("BEGIN PROFILE", icon=":material/play_arrow:", use_container_width=True, type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
         with c2:
-            st.button("🔄 SYNC FROM FLOAT", use_container_width=True, key="btn_sync_settings", on_click=lambda: hw.send_command('?'))
+            st.button("SYNC FROM FLOAT", icon=":material/sync:", use_container_width=True, key="btn_sync_settings", on_click=lambda: hw.send_command('?'))
         with c3:
             with hw.lock:
                 local_data = list(hw.data_log)
             if local_data:
                 df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8')
-                st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True, key="btn_download_csv")
+                st.download_button("DOWNLOAD CSV", icon=":material/download:", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True, key="btn_download_csv")
             else:
-                st.button("📥 DOWNLOAD CSV", use_container_width=True, disabled=True, key="btn_download_csv_disabled")
+                st.button("DOWNLOAD CSV", icon=":material/download:", use_container_width=True, disabled=True, key="btn_download_csv_disabled")
 
     with right_col:
-        st.subheader("📈 Right Panel: Depth vs Time Chart")
+        st.subheader("Right Panel: Depth vs Time Chart", icon=":material/show_chart:")
         st.caption("Clean digital line graph of under-ice profile depths (No secondary Y-axis)")
         
         with hw.lock:
@@ -246,7 +247,7 @@ def render_main_content(hw):
                 
                 # Expandable Actuator Position Chart
                 if "Actuator (ADC)" in df.columns:
-                    with st.expander("🦾 View Actuator Position Chart"):
+                    with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
                         hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
                         fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
                         fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
@@ -282,22 +283,22 @@ def render_main_content(hw):
             st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
 
 def render_console(hw):
-    st.markdown("📟 **System Debug Serial Console**")
+    st.subheader("System Debug Serial Console", icon=":material/developer_board:")
     with hw.lock:
         raw_logs = list(hw.console_log)
     
     formatted_lines = []
     for line in raw_logs:
         # Style lines to maximize readability for debugging
-        if "🔴" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
+        if "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
             color = "#ff4b4b"  # bright red
-        elif "🔵" in line or "sent:" in line.lower() or "commanding" in line.lower():
+        elif "🔵" in line or "[TX]" in line or "sent:" in line.lower() or "commanding" in line.lower():
             color = "#00a3ff"  # bright blue
-        elif "🟢" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
+        elif "🟢" in line or "✅" in line or "[SUCCESS]" in line or "[OK]" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
             color = "#00ff66"  # bright green
-        elif "🟡" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
+        elif "🟡" in line or "[WARN]" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
             color = "#ffd700"  # gold/yellow
-        elif "⚠️" in line:
+        elif "⚠️" in line or "[WARNING]" in line:
             color = "#ffa500"  # orange
         else:
             color = "#a0a5b5"  # default visible grey-blue

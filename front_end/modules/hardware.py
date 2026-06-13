@@ -64,11 +64,11 @@ class HardwareManager:
                 self.ser.dtr = True
                 self.ser.rts = True
                 
-                self.console_log.append(f"🟢 Connected to {port} at {baud} baud.")
+                self.console_log.append(f"[SUCCESS] Connected to {port} at {baud} baud.")
                 self.mission_status = "IDLE"
             except Exception as e:
                 self.ser = None
-                self.console_log.append(f"🔴 ERROR: Could not connect to {port}. {e}")
+                self.console_log.append(f"[ERROR] Could not connect to {port}. {e}")
 
     def disconnect(self):
         with self.lock:
@@ -78,7 +78,7 @@ class HardwareManager:
                 except:
                     pass
                 self.ser = None
-                self.console_log.append("⚪ Disconnected.")
+                self.console_log.append("[INFO] Disconnected.")
                 self.mission_status = "DISCONNECTED"
 
     def send_command(self, cmd):
@@ -86,72 +86,72 @@ class HardwareManager:
             if self.ser and self.ser.is_open:
                 try:
                     self.ser.write(f"{cmd}\n".encode('utf-8'))
-                    self.console_log.append(f"🔵 > Sent: {cmd}")
+                    self.console_log.append(f"[TX] > Sent: {cmd}")
                 except (serial.SerialException, OSError) as e:
-                    self.console_log.append(f"🔴 Connection Lost: {e}")
+                    self.console_log.append(f"[ERROR] Connection Lost: {e}")
                     self.ser = None
                     self.mission_status = "DISCONNECTED"
             else:
-                self.console_log.append("🔴 Cannot send command: Not connected.")
+                self.console_log.append("[ERROR] Cannot send command: Not connected.")
 
     def update_team_id(self, val):
         self.send_command(f"c {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
         
     def update_duration(self, val):
         self.send_command(f"t {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_deep_target(self, val):
         self.send_command(f"d {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_shallow_target(self, val):
         self.send_command(f"u {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_num_profiles(self, val):
         self.send_command(f"m {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
         
     def update_pid(self, p, i, d):
         self.send_command(f"s {p} {i} {d}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_bounds(self, min_val, max_val):
         self.send_command(f"b {min_val} {max_val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_neutral_adc(self, val):
         self.send_command(f"n {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def update_tolerance(self, val):
         self.send_command(f"v {val}")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def zero_depth(self):
         self.send_command("z")
         time.sleep(0.5)
-        self.console_log.append("🔄 Auto-Syncing...")
+        self.console_log.append("[SYNC] Auto-Syncing...")
         self.send_command("?")
 
     def reset_fsm(self):
@@ -159,7 +159,7 @@ class HardwareManager:
         self.mission_status = "IDLE"
         with self.lock:
             self.packet_log = []
-        self.console_log.append("⚠️ > Sent: r (Forced FSM Reset)")
+        self.console_log.append("[WARNING] > Sent: r (Forced FSM Reset)")
 
     def move_actuator(self, val):
         self.send_command(f"a {val}")
@@ -184,12 +184,12 @@ class HardwareManager:
         """Signals the reflash thread to stop at the next safe point."""
         with self.lock:
             self.reflash_cancelled = True
-            self.console_log.append("🟡 OTA cancelled by user. Surface will recover in ~5s.")
+            self.console_log.append("[WARN] OTA cancelled by user. Surface will recover in ~5s.")
 
     def reflash_firmware(self, firmware_data):
         """Starts a background thread to handle the OTA reflash process."""
         if not self.ser or not self.ser.is_open:
-            self.console_log.append("🔴 Cannot reflash: Not connected.")
+            self.console_log.append("[ERROR] Cannot reflash: Not connected.")
             return
 
         def run_reflash():
@@ -210,7 +210,7 @@ class HardwareManager:
             file_crc = self.calculate_crc32(padded_data)
             
             with self.lock:
-                self.console_log.append(f"🛠️ STARTING OTA REFLASH: {file_size} bytes, CRC 0x{file_crc:08X}")
+                self.console_log.append(f"[SYSTEM] STARTING OTA REFLASH: {file_size} bytes, CRC 0x{file_crc:08X}")
             
             try:
                 # 2. Handshake
@@ -235,7 +235,7 @@ class HardwareManager:
                 
                 if not synced:
                     with self.lock:
-                        self.console_log.append(f"🔴 REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
+                        self.console_log.append(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
                         self.reflash_in_progress = False
                     return
 
@@ -251,7 +251,7 @@ class HardwareManager:
                     # Send full chunk — write_timeout=None means this blocks until drained
                     with self.lock:
                         if self.reflash_cancelled:
-                            self.console_log.append(f"🟡 OTA cancelled at {sent_bytes} bytes.")
+                            self.console_log.append(f"[WARN] OTA cancelled at {sent_bytes} bytes.")
                             self.reflash_in_progress = False
                             return
                         if self.ser and self.ser.is_open:
@@ -272,7 +272,7 @@ class HardwareManager:
                     
                     if not chunk_ack:
                         with self.lock:
-                            self.console_log.append(f"🔴 REFLASH ERROR: {self.reflash_error if self.reflash_error else f'Link lost at {sent_bytes} bytes.'}")
+                            self.console_log.append(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else f'Link lost at {sent_bytes} bytes.'}")
                             self.reflash_in_progress = False
                         return
                         
@@ -282,10 +282,10 @@ class HardwareManager:
 
                 
                 with self.lock:
-                    self.console_log.append("✅ REFLASH SUCCESS: Data transfer complete.")
+                    self.console_log.append("[SUCCESS] REFLASH SUCCESS: Data transfer complete.")
             except Exception as e:
                 with self.lock:
-                    self.console_log.append(f"🔴 REFLASH CRITICAL ERROR: {e}")
+                    self.console_log.append(f"[ERROR] REFLASH CRITICAL ERROR: {e}")
             finally:
                 with self.lock:
                     self.reflash_in_progress = False
@@ -357,9 +357,9 @@ class HardwareManager:
                         line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
                     f.write(line)
 
-            self.console_log.append(f"📂 AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
+            self.console_log.append(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
         except Exception as e:
-            self.console_log.append(f"🔴 AUTO-SAVE ERROR: {e}")
+            self.console_log.append(f"[ERROR] AUTO-SAVE ERROR: {e}")
 
     def serial_listener(self):
         serial_buffer = ""
@@ -418,7 +418,7 @@ class HardwareManager:
                                         if key in self.float_settings:
                                             self.float_settings[key] = value
                                     with self.lock:
-                                        self.console_log.append(f"✅ UI Synced Successfully.")
+                                        self.console_log.append(f"[SUCCESS] UI Synced Successfully.")
 
                             # OTA Progress Detection (for smoother UI)
                             if "Progress:" in line:
@@ -508,6 +508,6 @@ class HardwareManager:
                             except: pass
                             self.ser = None
                             self.mission_status = "DISCONNECTED"
-                            self.console_log.append(f"🔴 Serial error: {e}")
+                            self.console_log.append(f"[ERROR] Serial error: {e}")
             else:
                 time.sleep(0.1)
