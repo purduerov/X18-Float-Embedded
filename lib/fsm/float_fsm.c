@@ -539,17 +539,23 @@ void float_fsm_update(float_fsm_t *fsm) {
                 }
                 update_status_led(fsm->state);
             } else if (safety_timeout || buffer_full) {
-                if (safety_timeout) printf("!! [SAFETY] Mission Timeout in %s. Surfacing...\n", stage_name);
-                else printf(">> [INFO] Data Buffer Full. Surfacing...\n");
-                printf(">> MISSION: Moving to EXITING stage.\n");
-                fsm->mission_stage = STAGE_EXITING;
-                fsm->target_depth_reached = false;
-                fsm->actuator_target = settings.act_max;
-                fsm->ctrl_state = 0;
-                fsm->last_stall_check_time = now;
-                fsm->stall_reference_depth = fsm->current_depth;
-                fsm->profile_start_time = now;
-                fsm->stage_start_time = now;
+                if (safety_timeout) printf("!! [SAFETY] Mission Timeout in %s.\n", stage_name);
+                else printf(">> [INFO] Data Buffer Full.\n");
+
+                if (fsm->mission_stage == STAGE_EXITING) {
+                    printf(">> MISSION: Timeout/Buffer full during exit. Profile Done.\n");
+                    fsm->state = FLOAT_PROFILE_DONE;
+                } else {
+                    printf(">> MISSION: Moving to EXITING stage.\n");
+                    fsm->mission_stage = STAGE_EXITING;
+                    fsm->target_depth_reached = false;
+                    fsm->actuator_target = settings.act_max;
+                    fsm->ctrl_state = 0;
+                    fsm->last_stall_check_time = now;
+                    fsm->stall_reference_depth = fsm->current_depth;
+                    fsm->profile_start_time = now;
+                    fsm->stage_start_time = now;
+                }
                 update_status_led(fsm->state);
             }
     }
