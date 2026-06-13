@@ -62,14 +62,13 @@ This document maps the **MATE 2026 EXPLORER Class** competition rules for Task 4
   struct __attribute__((packed)) {
       uint16_t company_number;
       uint32_t time_ms;
-      float depth_m;
-      uint16_t actuator_pos;
-      uint16_t target_actuator_pos;
-  } telemetry;
-  ```
-* > [!WARNING]
-  > **COMPLIANCE GAP IDENTIFIED:**
-  > The current `telemetry` structure contains depth (`depth_m`) but **lacks a pressure field** (Pa or kPa). The struct must be refactored to include a pressure calculation field (calculated from `ms5837_get_pressure()`) to be fully compliant.
+        float depth_m;
+        float pressure_kpa; // Added for MATE 2026 compliance
+        uint16_t actuator_pos;
+        uint16_t target_actuator_pos;
+    } telemetry;
+    ```
+* **Status:** **RESOLVED.** The telemetry structure contains `pressure_kpa` calculated from `ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f` in the pre-dive, hold sampling, and data dump loops, meeting the MATE 2026 pressure logging compliance rule.
 
 ---
 

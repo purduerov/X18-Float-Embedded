@@ -13,6 +13,8 @@ static float recorded_depths[MAX_RECORDED_SAMPLES];
 static uint32_t recorded_times[MAX_RECORDED_SAMPLES];
 static uint16_t recorded_adcs[MAX_RECORDED_SAMPLES];
 static uint16_t recorded_target_adcs[MAX_RECORDED_SAMPLES];
+static float recorded_pressures[MAX_RECORDED_SAMPLES];
+
 
 const char *FloatStateNames[] = {"IDLE",         "PRE_DIVE",
                                  "PROFILING",    "PROFILE_DONE",
@@ -302,6 +304,7 @@ void float_fsm_update(float_fsm_t *fsm) {
 
     // Use cached depth from main loop
     tx_pkt.payload.telemetry.depth_m = fsm->current_depth;
+    tx_pkt.payload.telemetry.pressure_kpa = fsm->depth_sensor ? ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f : 101.325f;
 
     tx_pkt.payload.telemetry.actuator_pos = fsm->current_actuator_pos;
     tx_pkt.payload.telemetry.target_actuator_pos = fsm->actuator_target;
@@ -397,6 +400,7 @@ void float_fsm_update(float_fsm_t *fsm) {
       if (elapsed_ms >= expected_elapsed_ms && stage_sample_idx < 7 && fsm->sample_index < MAX_RECORDED_SAMPLES) {
         recorded_times[fsm->sample_index] = expected_elapsed_ms; 
         recorded_depths[fsm->sample_index] = fsm->current_depth;
+        recorded_pressures[fsm->sample_index] = fsm->depth_sensor ? ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f : 101.325f;
         recorded_adcs[fsm->sample_index] = fsm->current_actuator_pos;
         recorded_target_adcs[fsm->sample_index] = fsm->actuator_target;
         
@@ -536,6 +540,8 @@ void float_fsm_update(float_fsm_t *fsm) {
           recorded_times[fsm->current_seq_num - 1];
       tx_pkt.payload.telemetry.depth_m =
           recorded_depths[fsm->current_seq_num - 1];
+      tx_pkt.payload.telemetry.pressure_kpa =
+          recorded_pressures[fsm->current_seq_num - 1];
       tx_pkt.payload.telemetry.actuator_pos =
           recorded_adcs[fsm->current_seq_num - 1];
       tx_pkt.payload.telemetry.target_actuator_pos =

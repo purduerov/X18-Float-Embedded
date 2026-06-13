@@ -11,6 +11,7 @@ typedef struct {
   uint16_t company_number;
   uint32_t time_ms;
   float depth_m;
+  float pressure_kpa; // Added for MATE 2026 compliance
   uint16_t actuator_pos;
   uint16_t target_actuator_pos;
 } SensorReading_t;
@@ -30,10 +31,11 @@ void data_logger_reset(void);
  * @param co: Company ID
  * @param time: Timestamp in ms
  * @param depth: Depth in meters
+ * @param pressure: Pressure in kPa
  * @param actuator_pos: Actuator position (ADC value)
  * @param target_actuator_pos: Target actuator position (PID output)
  */
-void data_logger_add_sample(uint16_t co, uint32_t time, float depth, uint16_t actuator_pos, uint16_t target_actuator_pos);
+void data_logger_add_sample(uint16_t co, uint32_t time, float depth, float pressure, uint16_t actuator_pos, uint16_t target_actuator_pos);
 
 /**
  * Dump all logged data as CSV formatted text to stdout

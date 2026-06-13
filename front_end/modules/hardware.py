@@ -339,11 +339,17 @@ class HardwareManager:
                 f.write("# ------------------------------------------\n")
                 
                 # Write CSV Header
-                f.write("Time (s),Depth (m),Actuator (ADC),Target (ADC)\n")
+                if any("Pressure (kPa)" in entry for entry in self.data_log):
+                    f.write("Time (s),Depth (m),Pressure (kPa),Actuator (ADC),Target (ADC)\n")
+                else:
+                    f.write("Time (s),Depth (m),Actuator (ADC),Target (ADC)\n")
                 
                 # Write Data
                 for entry in self.data_log:
-                    line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
+                    if "Pressure (kPa)" in entry:
+                        line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Pressure (kPa)', 0):.2f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
+                    else:
+                        line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
                     f.write(line)
 
             self.console_log.append(f"📂 AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
@@ -439,10 +445,18 @@ class HardwareManager:
                                         "Depth (m)": depth_m
                                     }
 
-                                    if len(parts) >= 4 and parts[3].isdigit():
-                                        entry["Actuator (ADC)"] = int(parts[3])
-                                    if len(parts) >= 5 and parts[4].isdigit():
-                                        entry["Target (ADC)"] = int(parts[4])
+                                    if len(parts) >= 6:
+                                        try:
+                                            entry["Pressure (kPa)"] = float(parts[3])
+                                            entry["Actuator (ADC)"] = int(parts[4])
+                                            entry["Target (ADC)"] = int(parts[5])
+                                        except ValueError:
+                                            pass
+                                    else:
+                                        if len(parts) >= 4 and parts[3].isdigit():
+                                            entry["Actuator (ADC)"] = int(parts[3])
+                                        if len(parts) >= 5 and parts[4].isdigit():
+                                            entry["Target (ADC)"] = int(parts[4])
 
                                     with self.lock:
                                         self.data_log.append(entry)

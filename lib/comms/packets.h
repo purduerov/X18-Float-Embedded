@@ -44,6 +44,7 @@ typedef struct __attribute__((packed))
             uint16_t company_number;
             uint32_t time_ms;
             float depth_m;
+            float pressure_kpa; // Added for MATE 2026 compliance
             uint16_t actuator_pos;
             uint16_t target_actuator_pos;
         } telemetry;         
