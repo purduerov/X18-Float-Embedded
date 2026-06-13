@@ -13,6 +13,7 @@ class HardwareManager:
         self.ser = None
         self.data_log = []
         self.console_log = []
+        self.packet_log = []
         self.lock = threading.Lock()
         self.mission_status = "IDLE"
         self.first_timestamp = None
@@ -156,6 +157,8 @@ class HardwareManager:
     def reset_fsm(self):
         self.send_command("r")
         self.mission_status = "IDLE"
+        with self.lock:
+            self.packet_log = []
         self.console_log.append("⚠️ > Sent: r (Forced FSM Reset)")
 
     def move_actuator(self, val):
@@ -306,6 +309,8 @@ class HardwareManager:
 
     def start_profile(self):
         """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
+        with self.lock:
+            self.packet_log = []
         self.send_command('p') 
 
     def save_profile_data(self):
@@ -401,6 +406,7 @@ class HardwareManager:
                                 self.mission_status = "DOWNLOADING DATA"
                                 with self.lock:
                                     self.data_log = [] 
+                                    self.packet_log = []
                                 self.first_timestamp = None 
                             elif "Download Complete" in line: 
                                 self.mission_status = "MISSION COMPLETE"
@@ -428,6 +434,28 @@ class HardwareManager:
 
                             if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
                                 self.reflash_error = line
+
+                            # Match live telemetry logs printed by surface unit
+                            # ">> PRE-DIVE Packet Logged: Co# 18 | Time 15000 ms | Depth 2.48 m | Pressure 124.30 kPa"
+                            # ">> Stored Data #1: Co# 18 | Time 16000 ms | Depth 2.48 m | Pressure 124.30 kPa"
+                            m = re.search(
+                                r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
+                                line
+                            )
+                            if m:
+                                try:
+                                    co_id = int(m.group(1))
+                                    time_ms = int(m.group(2))
+                                    depth_m = float(m.group(3))
+                                    pressure_kpa = float(m.group(4))
+                                    time_s = time_ms / 1000.0
+                                    raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+                                    with self.lock:
+                                        self.packet_log.append(raw_str)
+                                        if len(self.packet_log) > 100:
+                                            self.packet_log.pop(0)
+                                except Exception:
+                                    pass
 
                             # CSV Parsing Logic
                             parts = [p.strip() for p in line.split(',')]
@@ -458,8 +486,16 @@ class HardwareManager:
                                         if len(parts) >= 5 and parts[4].isdigit():
                                             entry["Target (ADC)"] = int(parts[4])
 
+                                    co_id = int(parts[0])
+                                    pressure_kpa = entry.get("Pressure (kPa)", 0.0)
+                                    raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+
                                     with self.lock:
                                         self.data_log.append(entry)
+                                        if raw_str not in self.packet_log:
+                                            self.packet_log.append(raw_str)
+                                            if len(self.packet_log) > 100:
+                                                self.packet_log.pop(0)
                                 except (ValueError, IndexError):
                                     pass
                     else:

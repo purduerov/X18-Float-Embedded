@@ -171,71 +171,140 @@ def render_metrics(hw):
     m3.metric("Max Depth", f"{max_depth:.2f} m")
     m4.metric("Data Points", data_points)
 
-def render_main_content(hw):
-    col_chart, col_actions = st.columns([4, 1], gap="medium")
+def render_packet_log(hw):
+    with hw.lock:
+        raw_packets = list(hw.packet_log)
     
-    with col_chart:
+    formatted_packets = []
+    for pkt in raw_packets:
+        escaped = html.escape(pkt)
+        styled = escaped
+        # Add highlight colors for inline telemetry items
+        styled = styled.replace("Company #", '<span style="color:#00ffcc; font-weight:bold;">Company #</span><span style="color:#ffffff; font-weight:bold;">')
+        styled = styled.replace(", Time:", '</span>, Time:<span style="color:#ffffff;">')
+        styled = styled.replace(", Pressure:", '</span>, Pressure:<span style="color:#ffcc00;">')
+        styled = styled.replace(", Depth:", '</span>, Depth:<span style="color:#39ff14;">')
+        styled += '</span>'
+        formatted_packets.append(f'<div style="margin-bottom: 6px; border-bottom: 1px dashed #142834; padding-bottom: 4px;">📥 {styled}</div>')
+        
+    log_html = "".join(formatted_packets)
+    components.html(PACKET_CONSOLE_STYLE.format(log_html=log_html), height=420)
+
+def render_main_content(hw):
+    # Two distinct halves
+    left_col, right_col = st.columns(2, gap="large")
+    
+    with left_col:
+        st.subheader("📥 Left Panel: Text/Data Log")
+        st.caption("Scrolling telemetry showing raw incoming packet strings (Depth & Pressure)")
+        
+        render_packet_log(hw)
+        
+        st.markdown("### Action Controls")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.button("🚀 BEGIN PROFILE", use_container_width=True, type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
+        with c2:
+            st.button("🔄 SYNC FROM FLOAT", use_container_width=True, key="btn_sync_settings", on_click=lambda: hw.send_command('?'))
+        with c3:
+            with hw.lock:
+                local_data = list(hw.data_log)
+            if local_data:
+                df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8')
+                st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True, key="btn_download_csv")
+            else:
+                st.button("📥 DOWNLOAD CSV", use_container_width=True, disabled=True, key="btn_download_csv_disabled")
+
+    with right_col:
+        st.subheader("📈 Right Panel: Depth vs Time Chart")
+        st.caption("Clean digital line graph of under-ice profile depths (No secondary Y-axis)")
+        
         with hw.lock:
             local_data = list(hw.data_log)
-        
+            
         if local_data:
             df = pd.DataFrame(local_data)
             
             # Downsample if too many points to keep UI snappy
             if len(df) > 300:
                 df = df.iloc[::max(1, len(df)//300)]
-
-            # Ensure required columns exist
+                
             if "Time (s)" in df.columns and "Depth (m)" in df.columns:
-                tab1, tab2 = st.tabs(["📉 Depth Profile", "🦾 Actuator Position"])
+                hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
+                fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
+                fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
+                fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
+                fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+                fig.update_layout(
+                    plot_bgcolor='#070f1a',
+                    paper_bgcolor='#070f1a',
+                    font=dict(color='#00ffcc', family='monospace'),
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig, key="p_depth_chart", use_container_width=True)
                 
-                with tab1:
-                    # Use Scattergl (Web GL) for high-performance plotting of large datasets
-                    hover_cols = [c for c in ["Depth (m)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
-                    fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=350)
-                    fig.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
-                    fig.update_yaxes(autorange="reversed")
-                    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
-                    st.plotly_chart(fig, width="stretch", key="p_depth_chart", use_container_width=True)
-                
-                with tab2:
-                    if "Actuator (ADC)" in df.columns:
-                        hover_cols = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
-                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols, render_mode='webgl', height=350)
-                        fig2.update_traces(mode='lines+markers', line=dict(width=2), marker=dict(size=4))
-                        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
-                        st.plotly_chart(fig2, width="stretch", key="p_act_chart", use_container_width=True)
-                    else:
-                        st.info("Actuator data not available for this session.")
+                # Expandable Actuator Position Chart
+                if "Actuator (ADC)" in df.columns:
+                    with st.expander("🦾 View Actuator Position Chart"):
+                        hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
+                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
+                        fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
+                        fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
+                        fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+                        fig2.update_layout(
+                            plot_bgcolor='#070f1a',
+                            paper_bgcolor='#070f1a',
+                            font=dict(color='#ffaa00', family='monospace'),
+                            margin=dict(l=0, r=0, t=10, b=0),
+                            hovermode="x unified"
+                        )
+                        st.plotly_chart(fig2, key="p_act_chart", use_container_width=True)
             else:
                 st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
         else:
-            st.info("Waiting for telemetry data... (No data points received yet)")
-
-    with col_actions:
-        st.button("🚀 BEGIN PROFILE", width="stretch", type="primary", on_click=lambda: hw.start_profile())
-        st.button("🔄 SYNC FROM FLOAT", width="stretch", on_click=lambda: hw.send_command('?'))
-        
-        st.markdown("### Active Config")
-        st.write(f"**FW Version:** v{hw.float_settings.get('FW', '--')} | **ID:** {hw.float_settings.get('Co#', '--')} | **Profiles:** {hw.float_settings.get('N', '--')}")
-        st.write(f"**Deep Target:** {hw.float_settings.get('Deep', '--')} m")
-        st.write(f"**Shallow Target:** {hw.float_settings.get('Shallow', '--')} m")
-        st.write(f"**Hold Duration:** {hw.float_settings.get('Time', '--')} s")
-        st.write(f"**Arrival Tol:** {hw.float_settings.get('Tol', '--')} m")
-        st.write(f"**PID:** {hw.float_settings.get('P', '--')} / {hw.float_settings.get('I', '--')} / {hw.float_settings.get('D', '--')}")
-        st.write(f"**Bounds:** {hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}")
-        st.write(f"**Neutral ADC:** {hw.float_settings.get('Neutral', '--')}")
-        st.write(f"**Depth Offset:** {hw.float_settings.get('Off', '--')} m")
-        st.write(f"**Live Depth:** {hw.float_settings.get('LiveDepth', '--')} m")
-        st.write(f"**Live ADC:** {hw.float_settings.get('ADC', '--')}")
-        
-        if local_data:
-            df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8')
-            st.download_button("📥 DOWNLOAD CSV", data=df_csv, file_name="mate_profile.csv", mime="text/csv", width="stretch")
+            # Informative visual placeholder when no data exists yet
+            st.info("Waiting for profile telemetry data... Start a profile to see real-time plots.")
+            
+        st.markdown("### Active Configuration")
+        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+        with col_cfg1:
+            st.markdown(f"**FW Version:** `v{hw.float_settings.get('FW', '--')}`")
+            st.markdown(f"**Company ID:** `{hw.float_settings.get('Co#', '--')}`")
+            st.markdown(f"**Profiles (N):** `{hw.float_settings.get('N', '--')}`")
+        with col_cfg2:
+            st.markdown(f"**Deep Target:** `{hw.float_settings.get('Deep', '--')} m`")
+            st.markdown(f"**Shallow Target:** `{hw.float_settings.get('Shallow', '--')} m`")
+            st.markdown(f"**Hold Duration:** `{hw.float_settings.get('Time', '--')} s`")
+        with col_cfg3:
+            st.markdown(f"**PID Gains:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
+            st.markdown(f"**Bounds:** `{hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}`")
+            st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
 
 def render_console(hw):
-    st.markdown("**Live Serial Console**")
+    st.markdown("📟 **System Debug Serial Console**")
     with hw.lock:
-        escaped_logs = [html.escape(line) for line in hw.console_log]
-    log_html = "<br>".join(escaped_logs)
-    components.html(CONSOLE_STYLE.format(log_html=log_html), height=220)
+        raw_logs = list(hw.console_log)
+    
+    formatted_lines = []
+    for line in raw_logs:
+        # Style lines to maximize readability for debugging
+        if "🔴" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
+            color = "#ff4b4b"  # bright red
+        elif "🔵" in line or "sent:" in line.lower() or "commanding" in line.lower():
+            color = "#00a3ff"  # bright blue
+        elif "🟢" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
+            color = "#00ff66"  # bright green
+        elif "🟡" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
+            color = "#ffd700"  # gold/yellow
+        elif "⚠️" in line:
+            color = "#ffa500"  # orange
+        else:
+            color = "#a0a5b5"  # default visible grey-blue
+            
+        escaped = html.escape(line)
+        formatted_lines.append(f'<span style="color: {color};">{escaped}</span>')
+        
+    log_html = "<br>".join(formatted_lines)
+    components.html(CONSOLE_STYLE.format(log_html=log_html), height=320)
+

@@ -16,8 +16,8 @@ REFRESH_RATE_S = 0.5
 
 # CSS/Styles
 CONSOLE_STYLE = """
-    <div id="term" style="background-color: #0e1117; color: #00ff00; font-family: 'Courier New', Courier, monospace; 
-         font-size: 14px; height: 200px; overflow-y: auto; padding: 10px; border: 1px solid #444; border-radius: 5px;">
+    <div id="term" style="background-color: #0e1117; color: #d4d4d4; font-family: 'Courier New', Courier, monospace; 
+         font-size: 13px; height: 300px; overflow-y: auto; padding: 10px; border: 1px solid #333; border-radius: 5px; line-height: 1.4;">
         {log_html}
     </div>
     <script>
@@ -25,3 +25,15 @@ CONSOLE_STYLE = """
         d.scrollTop = d.scrollHeight;
     </script>
 """
+
+PACKET_CONSOLE_STYLE = """
+    <div id="pterm" style="background-color: #070f1a; color: #00ffcc; font-family: 'Courier New', Courier, monospace; 
+         font-size: 14px; height: 400px; overflow-y: auto; padding: 12px; border: 1px solid #00ccff; border-radius: 5px; line-height: 1.5; box-shadow: inset 0 0 10px rgba(0, 204, 255, 0.2);">
+        {log_html}
+    </div>
+    <script>
+        var d = document.getElementById("pterm");
+        d.scrollTop = d.scrollHeight;
+    </script>
+"""
+
