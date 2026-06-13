@@ -350,21 +350,22 @@ int main() {
         float depth_error = current_depth - effective_target;
         
         // --- Hard Recovery Check ---
-        // If we drift too far, reset back to Transit
+        // If we drift too far AND are moving away, reset back to Transit
         bool hard_drift = false;
         if (global_fsm.ctrl_state == CTRL_HOVER) {
             if (fabs(current_depth - nominal_target) > HOVER_RECOVERY_M) {
-                hard_drift = true;
+                // Only bail out if we are moving in the wrong direction
+                if ((current_depth > nominal_target && global_fsm.filtered_velocity > 0.05f) ||
+                    (current_depth < nominal_target && global_fsm.filtered_velocity < -0.05f)) {
+                    hard_drift = true;
+                }
             }
         } else if (global_fsm.ctrl_state == CTRL_BRAKING) {
+            // Give braking more leeway; only abort if wildly off course
             if (global_fsm.mission_stage == STAGE_DEEP) {
-                if (current_depth > nominal_target + HOVER_RECOVERY_M) {
-                    hard_drift = true;
-                }
+                if (current_depth > nominal_target + (HOVER_RECOVERY_M * 1.5f)) hard_drift = true;
             } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
-                if (current_depth < nominal_target - HOVER_RECOVERY_M) {
-                    hard_drift = true;
-                }
+                if (current_depth < nominal_target - (HOVER_RECOVERY_M * 1.5f)) hard_drift = true;
             }
         }
 
