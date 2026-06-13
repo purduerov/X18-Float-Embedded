@@ -38,23 +38,24 @@
 #define STALL_CHECK_DURATION_MS 15000
 #define STALL_DEPTH_THRESHOLD_M 0.01f
 
-#define DEFAULT_PID_P 4.00f   // Mapped to Braking Time Constant (seconds)
-#define DEFAULT_PID_I 300.0f  // Mapped to Braking Effort (ADC units)
-#define DEFAULT_PID_D 0.15f   // Mapped to Hover Deadband (meters)
+#define DEFAULT_PID_P 4.00f  // Mapped to Braking Time Constant (seconds)
+#define DEFAULT_PID_I 300.0f // Mapped to Braking Effort (ADC units)
+#define DEFAULT_PID_D 0.15f  // Mapped to Hover Deadband (meters)
 
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
 
 // --- Hybrid Buoyancy Control Constants ---
-#define VELOCITY_EMA_ALPHA        0.30f
-#define BRAKING_TIME_S            4.00f
-#define BRAKING_EFFORT_ADC        300
-#define HOVER_DEADBAND_M          0.15f
-#define HOVER_ASYMM_SHALLOW_UP    0.65f  // Drift deep limit before nudging up
-#define HOVER_ASYMM_SHALLOW_DOWN  0.42f  // Drift shallow limit before nudging down
-#define NUDGE_STEP_ADC            100
-#define NUDGE_WAIT_S              8.00f
-#define HOVER_RECOVERY_M          0.50f
+#define VELOCITY_EMA_ALPHA 0.30f
+#define BRAKING_TIME_S 4.00f
+#define BRAKING_EFFORT_ADC 300
+#define HOVER_DEADBAND_M 0.15f
+#define HOVER_ASYMM_SHALLOW_UP 0.65f // Drift deep limit before nudging up
+#define HOVER_ASYMM_SHALLOW_DOWN                                               \
+  0.42f // Drift shallow limit before nudging down
+#define NUDGE_STEP_ADC 100
+#define NUDGE_WAIT_S 8.00f
+#define HOVER_RECOVERY_M 0.50f
 
 // ==========================================
 // 2. MISSION & SENSOR FAIL-SAFES
@@ -80,6 +81,6 @@
 // ==========================================
 // 4. FIRMWARE VERSION
 // ==========================================
-#define FIRMWARE_VERSION 106
+#define FIRMWARE_VERSION 101
 
 #endif // SW_CONFIG_H

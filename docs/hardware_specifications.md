@@ -75,7 +75,7 @@ graph LR
 
 ### Feedback Mapping
 *   **ADC Range:** 0 to 4095.
-*   **Position Tolerance:** ±30 counts (~0.7% error) to prevent motor jitter (hunting).
+*   **Position Tolerance:** Hysteresis deadzone (Enter at 20 counts, Exit at 50 counts) to prevent motor jitter (hunting).
 *   **Arrival Band:** ±0.33m for depth arrival detection.
 *   **Mission Safety Timeout:** 60s buffer after `profile_duration_s` before forced surfacing.
 *   **Movement Timeout:** 8 seconds per movement to prevent battery drain on jam.
