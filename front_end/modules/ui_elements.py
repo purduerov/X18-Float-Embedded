@@ -290,49 +290,53 @@ def render_charts_and_visualizer(hw):
         with hw.lock:
             local_data = list(hw.data_log)
             
+        # Always build a DataFrame to keep the Plotly components mounted
         if local_data:
             df = pd.DataFrame(local_data)
-            
             # Downsample if too many points to keep UI snappy
             if len(df) > 300:
                 df = df.iloc[::max(1, len(df)//300)]
-                
-            if "Time (s)" in df.columns and "Depth (m)" in df.columns:
-                hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
-                fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
-                fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
-                fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
-                fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
-                fig.update_layout(
-                    plot_bgcolor='#070f1a',
-                    paper_bgcolor='#070f1a',
-                    font=dict(color='#00ffcc', family='monospace'),
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    hovermode="x unified"
-                )
-                st.plotly_chart(fig, key="p_depth_chart", use_container_width=True)
-                
-                # Expandable Actuator Position Chart
-                if "Actuator (ADC)" in df.columns:
-                    with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
-                        hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
-                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
-                        fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
-                        fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
-                        fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
-                        fig2.update_layout(
-                            plot_bgcolor='#070f1a',
-                            paper_bgcolor='#070f1a',
-                            font=dict(color='#ffaa00', family='monospace'),
-                            margin=dict(l=0, r=0, t=10, b=0),
-                            hovermode="x unified"
-                        )
-                        st.plotly_chart(fig2, key="p_act_chart", use_container_width=True)
-            else:
-                st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
         else:
-            # Informative visual placeholder when no data exists yet
-            st.info("Waiting for profile telemetry data... Start a profile to see real-time plots.")
+            df = pd.DataFrame(columns=["Time (s)", "Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"])
+            
+        if "Time (s)" in df.columns and "Depth (m)" in df.columns:
+            hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
+            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
+            fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
+            fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
+            fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+            fig.update_layout(
+                plot_bgcolor='#070f1a',
+                paper_bgcolor='#070f1a',
+                font=dict(color='#00ffcc', family='monospace'),
+                margin=dict(l=0, r=0, t=10, b=0),
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig, key="p_depth_chart", use_container_width=True)
+            
+            # Expandable Actuator Position Chart
+            if "Actuator (ADC)" in df.columns:
+                with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
+                    hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
+                    fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
+                    fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
+                    fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
+                    fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+                    fig2.update_layout(
+                        plot_bgcolor='#070f1a',
+                        paper_bgcolor='#070f1a',
+                        font=dict(color='#ffaa00', family='monospace'),
+                        margin=dict(l=0, r=0, t=10, b=0),
+                        hovermode="x unified"
+                    )
+                    st.plotly_chart(fig2, key="p_act_chart", use_container_width=True)
+            
+            if not local_data:
+                st.caption("ℹ️ Waiting for profile telemetry... Start a profile to see real-time data points.")
+            else:
+                st.caption("📊 Live telemetry active.")
+        else:
+            st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
             
         st.markdown("### Active Configuration")
         col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
