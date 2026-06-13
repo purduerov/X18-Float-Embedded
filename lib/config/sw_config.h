@@ -38,25 +38,22 @@
 #define STALL_CHECK_DURATION_MS 15000
 #define STALL_DEPTH_THRESHOLD_M 0.01f
 
-#define DEFAULT_PID_P 6.00f  // Mapped to Braking Time Constant (seconds)
-#define DEFAULT_PID_I 600.0f // Mapped to Braking Effort (ADC units)
-#define DEFAULT_PID_D 0.15f  // Mapped to Hover Deadband (meters)
+#define DEFAULT_PID_P 8.00f  // Increased for earlier braking (lead time)
+#define DEFAULT_PID_I 800.0f // Increased for stronger braking effort
+#define DEFAULT_PID_D 0.20f  // Increased to widen hover deadband
 
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
 
 // --- Hybrid Buoyancy Control Constants ---
 #define VELOCITY_EMA_ALPHA 0.30f
-#define BRAKING_TIME_S 6.00f
-#define BRAKING_EFFORT_ADC 600
-#define HOVER_DEADBAND_M 0.15f
 #define HOVER_ASYMM_SHALLOW_UP 0.65f // Drift deep limit before nudging up
 #define HOVER_ASYMM_SHALLOW_DOWN                                               \
   0.42f // Drift shallow limit before nudging down
 #define NUDGE_STEP_ADC 100
 #define NUDGE_WAIT_MS  8000U  // ms — use this instead of casting NUDGE_WAIT_S to uint32_t
 #define NUDGE_WAIT_S   8.00f  // kept for documentation; use NUDGE_WAIT_MS in comparisons
-#define HOVER_RECOVERY_M 0.50f
+#define HOVER_RECOVERY_M 0.80f // Increased from 0.50f to prevent premature TRANSIT fallback
 
 // --- Mission & Control Named Thresholds (avoids magic numbers in logic) ---
 #define SHALLOW_BIASED_TARGET_M   0.55f  // Effective target for shallow hold to avoid surfacing
