@@ -281,71 +281,73 @@ def render_packet_log(hw):
 
 @st.fragment(run_every=REFRESH_RATE_S)
 def render_charts_and_visualizer(hw):
-    # Display live 2D pool animation
-    render_pool_visualizer(hw)
-    st.divider()
-    
-    with hw.lock:
-        local_data = list(hw.data_log)
+    chart_container = st.empty()
+    with chart_container.container():
+        # Display live 2D pool animation
+        render_pool_visualizer(hw)
+        st.divider()
         
-    if local_data:
-        df = pd.DataFrame(local_data)
-        
-        # Downsample if too many points to keep UI snappy
-        if len(df) > 300:
-            df = df.iloc[::max(1, len(df)//300)]
+        with hw.lock:
+            local_data = list(hw.data_log)
             
-        if "Time (s)" in df.columns and "Depth (m)" in df.columns:
-            hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
-            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
-            fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
-            fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
-            fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
-            fig.update_layout(
-                plot_bgcolor='#070f1a',
-                paper_bgcolor='#070f1a',
-                font=dict(color='#00ffcc', family='monospace'),
-                margin=dict(l=0, r=0, t=10, b=0),
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, key="p_depth_chart", use_container_width=True)
+        if local_data:
+            df = pd.DataFrame(local_data)
             
-            # Expandable Actuator Position Chart
-            if "Actuator (ADC)" in df.columns:
-                with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
-                    hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
-                    fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
-                    fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
-                    fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
-                    fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
-                    fig2.update_layout(
-                        plot_bgcolor='#070f1a',
-                        paper_bgcolor='#070f1a',
-                        font=dict(color='#ffaa00', family='monospace'),
-                        margin=dict(l=0, r=0, t=10, b=0),
-                        hovermode="x unified"
-                    )
-                    st.plotly_chart(fig2, key="p_act_chart", use_container_width=True)
+            # Downsample if too many points to keep UI snappy
+            if len(df) > 300:
+                df = df.iloc[::max(1, len(df)//300)]
+                
+            if "Time (s)" in df.columns and "Depth (m)" in df.columns:
+                hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
+                fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
+                fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
+                fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
+                fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+                fig.update_layout(
+                    plot_bgcolor='#070f1a',
+                    paper_bgcolor='#070f1a',
+                    font=dict(color='#00ffcc', family='monospace'),
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig, key="p_depth_chart", use_container_width=True)
+                
+                # Expandable Actuator Position Chart
+                if "Actuator (ADC)" in df.columns:
+                    with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
+                        hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
+                        fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
+                        fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
+                        fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
+                        fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
+                        fig2.update_layout(
+                            plot_bgcolor='#070f1a',
+                            paper_bgcolor='#070f1a',
+                            font=dict(color='#ffaa00', family='monospace'),
+                            margin=dict(l=0, r=0, t=10, b=0),
+                            hovermode="x unified"
+                        )
+                        st.plotly_chart(fig2, key="p_act_chart", use_container_width=True)
+            else:
+                st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
         else:
-            st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
-    else:
-        # Informative visual placeholder when no data exists yet
-        st.info("Waiting for profile telemetry data... Start a profile to see real-time plots.")
-        
-    st.markdown("### Active Configuration")
-    col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
-    with col_cfg1:
-        st.markdown(f"**FW Version:** `v{hw.float_settings.get('FW', '--')}`")
-        st.markdown(f"**Company ID:** `{hw.float_settings.get('Co#', '--')}`")
-        st.markdown(f"**Profiles (N):** `{hw.float_settings.get('N', '--')}`")
-    with col_cfg2:
-        st.markdown(f"**Deep Target:** `{hw.float_settings.get('Deep', '--')} m`")
-        st.markdown(f"**Shallow Target:** `{hw.float_settings.get('Shallow', '--')} m`")
-        st.markdown(f"**Hold Duration:** `{hw.float_settings.get('Time', '--')} s`")
-    with col_cfg3:
-        st.markdown(f"**PID Gains:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
-        st.markdown(f"**Bounds:** `{hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}`")
-        st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
+            # Informative visual placeholder when no data exists yet
+            st.info("Waiting for profile telemetry data... Start a profile to see real-time plots.")
+            
+        st.markdown("### Active Configuration")
+        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+        with col_cfg1:
+            st.markdown(f"**FW Version:** `v{hw.float_settings.get('FW', '--')}`")
+            st.markdown(f"**Company ID:** `{hw.float_settings.get('Co#', '--')}`")
+            st.markdown(f"**Profiles (N):** `{hw.float_settings.get('N', '--')}`")
+        with col_cfg2:
+            st.markdown(f"**Deep Target:** `{hw.float_settings.get('Deep', '--')} m`")
+            st.markdown(f"**Shallow Target:** `{hw.float_settings.get('Shallow', '--')} m`")
+            st.markdown(f"**Hold Duration:** `{hw.float_settings.get('Time', '--')} s`")
+        with col_cfg3:
+            st.markdown(f"**PID Gains:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
+            st.markdown(f"**Bounds:** `{hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}`")
+            st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
 
 def render_main_content(hw):
     st.markdown("""
@@ -389,71 +391,73 @@ def render_main_content(hw):
 
 @st.fragment(run_every=REFRESH_RATE_S)
 def render_log_view(hw, search_query, log_type_filter):
-    with hw.lock:
-        raw_logs = list(hw.console_log)
-        
-    # 2. Filter logic
-    filtered_lines = []
-    for line in raw_logs:
-        # Classify the log line
-        is_float = "[Float USB]" in line or "[HIL Target]" in line
-        is_error = "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "failed" in line.lower()
-        is_tx = "🔵" in line or "[TX]" in line or "sent:" in line.lower()
-        
-        # Check source filters
-        show_line = False
-        if is_float and "Float USB Logs" in log_type_filter:
-            show_line = True
-        elif is_error and "Errors / Warnings" in log_type_filter:
-            show_line = True
-        elif is_tx and "Commands (TX)" in log_type_filter:
-            show_line = True
-        elif not is_float and not is_error and not is_tx and "Surface Logs" in log_type_filter:
-            show_line = True
+    log_container = st.empty()
+    with log_container.container():
+        with hw.lock:
+            raw_logs = list(hw.console_log)
             
-        # Check search query
-        if show_line and search_query:
-            if search_query.lower() not in line.lower():
-                show_line = False
+        # 2. Filter logic
+        filtered_lines = []
+        for line in raw_logs:
+            # Classify the log line
+            is_float = "[Float USB]" in line or "[HIL Target]" in line
+            is_error = "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "failed" in line.lower()
+            is_tx = "🔵" in line or "[TX]" in line or "sent:" in line.lower()
+            
+            # Check source filters
+            show_line = False
+            if is_float and "Float USB Logs" in log_type_filter:
+                show_line = True
+            elif is_error and "Errors / Warnings" in log_type_filter:
+                show_line = True
+            elif is_tx and "Commands (TX)" in log_type_filter:
+                show_line = True
+            elif not is_float and not is_error and not is_tx and "Surface Logs" in log_type_filter:
+                show_line = True
                 
-        if show_line:
-            filtered_lines.append(line)
+            # Check search query
+            if show_line and search_query:
+                if search_query.lower() not in line.lower():
+                    show_line = False
+                    
+            if show_line:
+                filtered_lines.append(line)
+                
+        # 3. Render colorized log window (flexbox column-reverse)
+        formatted_lines = []
+        for line in reversed(filtered_lines):
+            if "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
+                color = "#ff4b4b"  # bright red
+            elif "🔵" in line or "[TX]" in line or "sent:" in line.lower() or "commanding" in line.lower():
+                color = "#00a3ff"  # bright blue
+            elif "🟢" in line or "✅" in line or "[SUCCESS]" in line or "[OK]" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
+                color = "#00ff66"  # bright green
+            elif "🟡" in line or "[WARN]" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
+                color = "#ffd700"  # gold/yellow
+            elif "⚠️" in line or "[WARNING]" in line:
+                color = "#ffa500"  # orange
+            else:
+                color = "#a0a5b5"  # default visible grey-blue
+                
+            escaped = html.escape(line)
+            formatted_lines.append(f'<div style="color: {color}; margin-bottom: 2px;">{escaped}</div>')
             
-    # 3. Render colorized log window (flexbox column-reverse)
-    formatted_lines = []
-    for line in reversed(filtered_lines):
-        if "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
-            color = "#ff4b4b"  # bright red
-        elif "🔵" in line or "[TX]" in line or "sent:" in line.lower() or "commanding" in line.lower():
-            color = "#00a3ff"  # bright blue
-        elif "🟢" in line or "✅" in line or "[SUCCESS]" in line or "[OK]" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
-            color = "#00ff66"  # bright green
-        elif "🟡" in line or "[WARN]" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
-            color = "#ffd700"  # gold/yellow
-        elif "⚠️" in line or "[WARNING]" in line:
-            color = "#ffa500"  # orange
-        else:
-            color = "#a0a5b5"  # default visible grey-blue
-            
-        escaped = html.escape(line)
-        formatted_lines.append(f'<div style="color: {color}; margin-bottom: 2px;">{escaped}</div>')
+        log_html = "".join(formatted_lines)
         
-    log_html = "".join(formatted_lines)
-    
-    container_style = (
-        f'<div style="background-color: #0e1117; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
-        f'font-size: 13px; height: 300px; overflow-y: auto; padding: 10px; border: 1px solid #333; border-radius: 5px; '
-        f'line-height: 1.4; display: flex; flex-direction: column-reverse;">'
-        f'{log_html}'
-        f'</div>'
-    )
-    st.markdown(container_style, unsafe_allow_html=True)
-    
-    # 4. Copy helper: Expandable raw log block
-    if filtered_lines:
-        with st.expander("📋 Copy Raw Log Text", expanded=False):
-            st.caption("Click the copy button in the top-right corner of the code block below to copy the filtered logs.")
-            st.code("\n".join(filtered_lines), language="text")
+        container_style = (
+            f'<div style="background-color: #0e1117; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
+            f'font-size: 13px; height: 300px; overflow-y: auto; padding: 10px; border: 1px solid #333; border-radius: 5px; '
+            f'line-height: 1.4; display: flex; flex-direction: column-reverse;">'
+            f'{log_html}'
+            f'</div>'
+        )
+        st.markdown(container_style, unsafe_allow_html=True)
+        
+        # 4. Copy helper: Expandable raw log block
+        if filtered_lines:
+            with st.expander("📋 Copy Raw Log Text", expanded=False):
+                st.caption("Click the copy button in the top-right corner of the code block below to copy the filtered logs.")
+                st.code("\n".join(filtered_lines), language="text")
 
 def render_console(hw):
     st.subheader(":material/developer_board: System Debug Serial Console")
