@@ -25,17 +25,17 @@ CONSOLE_STYLE = """
         var autoScroll = sessionStorage.getItem("term_autoScroll");
         var prevScrollTop = sessionStorage.getItem("term_scrollTop");
         
-        if (autoScroll === "false" && prevScrollTop !== null) {
+        if (autoScroll === "false" && prevScrollTop !== null) {{
             d.scrollTop = parseInt(prevScrollTop, 10);
-        } else {
+        }} else {{
             d.scrollTop = d.scrollHeight;
-        }
+        }}
         
-        d.addEventListener("scroll", function() {
+        d.addEventListener("scroll", function() {{
             var isAtBottom = d.scrollHeight - d.scrollTop - d.clientHeight < 50;
             sessionStorage.setItem("term_autoScroll", isAtBottom ? "true" : "false");
             sessionStorage.setItem("term_scrollTop", d.scrollTop.toString());
-        });
+        }});
     </script>
 """
 
@@ -49,17 +49,17 @@ PACKET_CONSOLE_STYLE = """
         var autoScroll = sessionStorage.getItem("pterm_autoScroll");
         var prevScrollTop = sessionStorage.getItem("pterm_scrollTop");
         
-        if (autoScroll === "false" && prevScrollTop !== null) {
+        if (autoScroll === "false" && prevScrollTop !== null) {{
             d.scrollTop = parseInt(prevScrollTop, 10);
-        } else {
+        }} else {{
             d.scrollTop = d.scrollHeight;
-        }
+        }}
         
-        d.addEventListener("scroll", function() {
+        d.addEventListener("scroll", function() {{
             var isAtBottom = d.scrollHeight - d.scrollTop - d.clientHeight < 50;
             sessionStorage.setItem("pterm_autoScroll", isAtBottom ? "true" : "false");
             sessionStorage.setItem("pterm_scrollTop", d.scrollTop.toString());
-        });
+        }});
     </script>
 """
 
