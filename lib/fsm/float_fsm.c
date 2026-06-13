@@ -430,15 +430,20 @@ void float_fsm_update(float_fsm_t *fsm) {
 
     // --- Stall Detection (Early Abort) ---
     // If we are supposed to be moving (diving/rising) but depth hasn't changed...
-    // Guard: do NOT fire during EXITING stage — we're already surfacing, not stuck.
-    if (!fsm->target_depth_reached && fsm->mission_stage != STAGE_EXITING &&
+    if (!fsm->target_depth_reached &&
         (now - fsm->last_stall_check_time >= STALL_CHECK_DURATION_MS)) {
         float depth_change = fabsf(fsm->current_depth - fsm->stall_reference_depth);
         if (depth_change < STALL_DEPTH_THRESHOLD_M) {
             printf("!! [STALL] No depth change detected (%.3fm). Aborting mission...\n", depth_change);
-            fsm->mission_stage = STAGE_EXITING;
-            fsm->target_depth_reached = false;
-            fsm->actuator_target = settings.act_max;
+            if (fsm->mission_stage == STAGE_EXITING) {
+                // If we stall while already trying to exit, give up and finish
+                printf(">> MISSION: Stalled during exit. Profile Done.\n");
+                fsm->state = FLOAT_PROFILE_DONE;
+            } else {
+                fsm->mission_stage = STAGE_EXITING;
+                fsm->target_depth_reached = false;
+                fsm->actuator_target = settings.act_max;
+            }
             update_status_led(fsm->state);
         }
         fsm->last_stall_check_time = now;
