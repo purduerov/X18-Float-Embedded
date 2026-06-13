@@ -400,11 +400,19 @@ def render_main_content(hw):
         with c3:
             with hw.lock:
                 local_data = list(hw.data_log)
-            if local_data:
-                df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8')
-                st.download_button("DOWNLOAD CSV", icon=":material/download:", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True, key="btn_download_csv")
-            else:
-                st.button("DOWNLOAD CSV", icon=":material/download:", use_container_width=True, disabled=True, key="btn_download_csv_disabled")
+            
+            # Use a stable widget type and key to prevent fragment mutation crashes
+            df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8') if local_data else b""
+            st.download_button(
+                "DOWNLOAD CSV", 
+                icon=":material/download:", 
+                data=df_csv, 
+                file_name="mate_profile.csv", 
+                mime="text/csv", 
+                use_container_width=True, 
+                key="btn_download_csv",
+                disabled=not local_data
+            )
 
     with right_col:
         st.subheader(":material/show_chart: Right Panel: Depth vs Time Chart")

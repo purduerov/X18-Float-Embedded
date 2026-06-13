@@ -1,0 +1,14 @@
+# MISSION PROFILE DATA
+# Timestamp: 2026-06-13 02:40:38
+# Deep Target: 2.50 m
+# Shallow Target: 0.40 m
+# Profile Count: 1
+# Arrival Tolerance: 0.33 m
+# Hold Duration: 10 s
+# PID: P=500.00, I=25.00, D=200.00
+# Neutral ADC: 900
+# Bounds: 0 to 4095
+# Depth Offset: -0.127 m
+# ------------------------------------------
+Time (s),Depth (m),Pressure (kPa),Actuator (ADC),Target (ADC)
+0.00,0.000,0.00,0,0

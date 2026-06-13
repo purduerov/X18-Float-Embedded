@@ -15,7 +15,7 @@ class HardwareManager:
         self.data_log = []
         self.console_log = []
         self.packet_log = []
-        self.lock = threading.Lock()
+        self.lock = threading.RLock() # Changed to RLock to allow nested calls
         self.mission_status = "IDLE"
         self.first_timestamp = None
         self.reflash_in_progress = False
@@ -60,8 +60,37 @@ class HardwareManager:
         self.hil_port = None
         
         self.running = True
-        self.thread = threading.Thread(target=self.serial_listener, daemon=True)
+        
+        # Stop any previous threads that might be hanging around (Streamlit reloads)
+        for t in threading.enumerate():
+            if t.name == "HardwareListener" or t.name == "HILListener":
+                # We can't easily kill them, but we can signal them if they share a class attribute
+                pass
+
+        self.thread = threading.Thread(target=self.serial_listener, daemon=True, name="HardwareListener")
         self.thread.start()
+
+    def log_message(self, message):
+        """Centralized logging to the console with size capping to prevent WebSocket overflow."""
+        # Safety check: if this is an old instance being used by a new thread
+        if not hasattr(self, 'console_log'):
+            return
+            
+        with self.lock:
+            self.console_log.append(message)
+            if len(self.console_log) > 100:
+                self.console_log.pop(0)
+
+    def _safe_log(self, message):
+        """Internal helper to log even if log_message is somehow missing (e.g. race during reload)."""
+        try:
+            self.log_message(message)
+        except AttributeError:
+            with self.lock:
+                if hasattr(self, 'console_log'):
+                    self.console_log.append(message)
+                    if len(self.console_log) > 100:
+                        self.console_log.pop(0)
 
     def get_available_ports(self):
         """Returns a list of ListPortInfo objects containing device, description, etc."""
@@ -84,11 +113,11 @@ class HardwareManager:
                 self.ser.dtr = True
                 self.ser.rts = True
                 
-                self.console_log.append(f"[SUCCESS] Connected to {port} at {baud} baud.")
+                self._safe_log(f"[SUCCESS] Connected to {port} at {baud} baud.")
                 self.mission_status = "IDLE"
             except Exception as e:
                 self.ser = None
-                self.console_log.append(f"[ERROR] Could not connect to {port}. {e}")
+                self._safe_log(f"[ERROR] Could not connect to {port}. {e}")
 
     def disconnect(self):
         self.disconnect_hil()
@@ -99,8 +128,8 @@ class HardwareManager:
                 except:
                     pass
                 self.ser = None
-                self.console_log.append("[INFO] Disconnected.")
-                self.mission_status = "DISCONNECTED"
+            self.mission_status = "DISCONNECTED"
+            self._safe_log("[INFO] Disconnected.")
 
     def connect_hil(self, port, baud=115200):
         with self.lock:
@@ -118,7 +147,7 @@ class HardwareManager:
                 self.hil_ser.rts = True
                 self.hil_port = port
                 
-                self.console_log.append(f"[SYSTEM] HIL Link connected to {port} at {baud} baud.")
+                self._safe_log(f"[SYSTEM] HIL Link connected to {port} at {baud} baud.")
                 
                 # Start HIL background listening thread
                 self.hil_thread = threading.Thread(target=self.hil_serial_listener, daemon=True)
@@ -126,7 +155,7 @@ class HardwareManager:
             except Exception as e:
                 self.hil_ser = None
                 self.hil_port = None
-                self.console_log.append(f"[ERROR] Could not connect HIL Link to {port}. {e}")
+                self._safe_log(f"[ERROR] Could not connect HIL Link to {port}. {e}")
 
     def disconnect_hil(self):
         with self.lock:
@@ -137,7 +166,7 @@ class HardwareManager:
                     pass
                 self.hil_ser = None
                 self.hil_port = None
-                self.console_log.append("[SYSTEM] HIL Link disconnected.")
+                self._safe_log("[SYSTEM] HIL Link disconnected.")
 
     def hil_serial_listener(self):
         serial_buffer = ""
@@ -176,9 +205,9 @@ class HardwareManager:
             if self.ser and self.ser.is_open:
                 try:
                     self.ser.write(f"{cmd}\n".encode('utf-8'))
-                    self.console_log.append(f"[TX] > Sent: {cmd}")
+                    self._safe_log(f"[TX] > Sent: {cmd}")
                 except (serial.SerialException, OSError) as e:
-                    self.console_log.append(f"[ERROR] Surface Link Lost: {e}")
+                    self._safe_log(f"[ERROR] Surface Link Lost: {e}")
                     self.ser = None
                     self.mission_status = "DISCONNECTED"
             
@@ -191,13 +220,13 @@ class HardwareManager:
                     self.hil_ser.write(f"{cmd}\n".encode('utf-8'))
                     # We don't duplicate the [TX] log if already sent to Surface
                     if not (self.ser and self.ser.is_open):
-                        self.console_log.append(f"[TX-HIL] > Sent: {cmd}")
+                        self._safe_log(f"[TX-HIL] > Sent: {cmd}")
                 except Exception as e:
-                    self.console_log.append(f"[ERROR] HIL Link Write Failed: {e}")
+                    self._safe_log(f"[ERROR] HIL Link Write Failed: {e}")
             
             # Final fallback if no ports open
             if not (self.ser and self.ser.is_open) and not (self.hil_enabled and self.hil_ser and self.hil_ser.is_open):
-                self.console_log.append("[ERROR] Cannot send command: No active connection.")
+                self._safe_log("[ERROR] Cannot send command: No active connection.")
 
     def _threaded_cmd_sequence(self, commands, delay=0.5):
         """Runs a sequence of commands with a delay in a background thread."""
@@ -243,7 +272,7 @@ class HardwareManager:
         self.mission_status = "IDLE"
         with self.lock:
             self.packet_log = []
-        self.console_log.append("[WARNING] > Sent: r (Forced FSM Reset)")
+        self._safe_log("[WARNING] > Sent: r (Forced FSM Reset)")
 
     def move_actuator(self, val):
         self.send_command(f"a {val}")
@@ -268,12 +297,12 @@ class HardwareManager:
         """Signals the reflash thread to stop at the next safe point."""
         with self.lock:
             self.reflash_cancelled = True
-            self.console_log.append("[WARN] OTA cancelled by user. Surface will recover in ~5s.")
+        self._safe_log("[WARN] OTA cancelled by user. Surface will recover in ~5s.")
 
     def reflash_firmware(self, firmware_data):
         """Starts a background thread to handle the OTA reflash process."""
         if not self.ser or not self.ser.is_open:
-            self.console_log.append("[ERROR] Cannot reflash: Not connected.")
+            self._safe_log("[ERROR] Cannot reflash: Not connected.")
             return
 
         def run_reflash():
@@ -293,8 +322,7 @@ class HardwareManager:
             file_size = len(padded_data)
             file_crc = self.calculate_crc32(padded_data)
             
-            with self.lock:
-                self.console_log.append(f"[SYSTEM] STARTING OTA REFLASH: {file_size} bytes, CRC 0x{file_crc:08X}")
+            self._safe_log(f"[SYSTEM] STARTING OTA REFLASH: {file_size} bytes, CRC 0x{file_crc:08X}")
             
             try:
                 # 2. Handshake
@@ -318,8 +346,8 @@ class HardwareManager:
                     time.sleep(0.1)
                 
                 if not synced:
+                    self._safe_log(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
                     with self.lock:
-                        self.console_log.append(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else 'Timeout waiting for sync.'}")
                         self.reflash_in_progress = False
                     return
 
@@ -335,7 +363,7 @@ class HardwareManager:
                     # Send full chunk — write_timeout=None means this blocks until drained
                     with self.lock:
                         if self.reflash_cancelled:
-                            self.console_log.append(f"[WARN] OTA cancelled at {sent_bytes} bytes.")
+                            self._safe_log(f"[WARN] OTA cancelled at {sent_bytes} bytes.")
                             self.reflash_in_progress = False
                             return
                         if self.ser and self.ser.is_open:
@@ -355,8 +383,8 @@ class HardwareManager:
                         time.sleep(0.01)
                     
                     if not chunk_ack:
+                        self._safe_log(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else f'Link lost at {sent_bytes} bytes.'}")
                         with self.lock:
-                            self.console_log.append(f"[ERROR] REFLASH ERROR: {self.reflash_error if self.reflash_error else f'Link lost at {sent_bytes} bytes.'}")
                             self.reflash_in_progress = False
                         return
                         
@@ -365,11 +393,9 @@ class HardwareManager:
                         self.reflash_progress = int((sent_bytes / file_size) * 100)
 
                 
-                with self.lock:
-                    self.console_log.append("[SUCCESS] REFLASH SUCCESS: Data transfer complete.")
+                self._safe_log("[SUCCESS] REFLASH SUCCESS: Data transfer complete.")
             except Exception as e:
-                with self.lock:
-                    self.console_log.append(f"[ERROR] REFLASH CRITICAL ERROR: {e}")
+                self._safe_log(f"[ERROR] REFLASH CRITICAL ERROR: {e}")
             finally:
                 with self.lock:
                     self.reflash_in_progress = False
@@ -432,24 +458,27 @@ class HardwareManager:
                     # Run buoyancy physics step using stored calibration
                     sim_depth = self.simulator.step(current_adc=adc)
                     
-                    # Feed simulated depth back to Pico
+                    # Update Internal metrics for UI
                     with self.lock:
-                        # 1. Update Internal metrics for UI
                         self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
-                        
-                        # 2. Send 'h' command to the direct HIL Target link
-                        if self.hil_ser and self.hil_ser.is_open:
-                            try:
-                                self.hil_ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
-                            except Exception as e:
-                                self.console_log.append(f"[ERROR] HIL Feed failed (Target): {e}")
+                    
+                    # ONLY feed depth back if the Float is in a state expecting HIL input
+                    # (PROFILING=2 or TEST_CALIBRATE=5)
+                    if is_profiling or is_test_mode:
+                        with self.lock:
+                            # 1. Send 'h' command to the direct HIL Target link
+                            if self.hil_ser and self.hil_ser.is_open:
+                                try:
+                                    self.hil_ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
+                                except Exception as e:
+                                    self._safe_log(f"[ERROR] HIL Feed failed (Target): {e}")
 
-                        # 3. ALSO send to primary Surface link (Radio relay to Float)
-                        if self.ser and self.ser.is_open:
-                            try:
-                                self.ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
-                            except Exception as e:
-                                self.console_log.append(f"[ERROR] HIL Feed failed (Surface): {e}")
+                            # 2. ALSO send to primary Surface link (Radio relay to Float)
+                            if self.ser and self.ser.is_open:
+                                try:
+                                    self.ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
+                                except Exception as e:
+                                    self._safe_log(f"[ERROR] HIL Feed failed (Surface): {e}")
                     
                     # Log data point for live chart (Log in HIL mode if profiling or in test mode)
                     if is_profiling or is_test_mode:
@@ -485,8 +514,7 @@ class HardwareManager:
                                 if len(self.packet_log) > 100:
                                     self.packet_log.pop(0)
         except Exception as e:
-            with self.lock:
-                self.console_log.append(f"[ERROR] HIL Packet error: {e}")
+            self._safe_log(f"[ERROR] HIL Packet error: {e}")
 
     def save_profile_data(self):
         """Automatically saves mission telemetry and config to a CSV file."""
@@ -534,39 +562,14 @@ class HardwareManager:
                         line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
                     f.write(line)
 
-            with self.lock:
-                self.console_log.append(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
+            self._safe_log(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
         except Exception as e:
-            with self.lock:
-                self.console_log.append(f"[ERROR] AUTO-SAVE ERROR: {e}")
+            self._safe_log(f"[ERROR] AUTO-SAVE ERROR: {e}")
 
-    def parse_hil_output(self, line):
-        """Specifically handles [HIL_OUT] lines to avoid recursion in parse_incoming_line."""
-        # Separate the [HIL_OUT] part from any other text on the same line
-        if "HIL_OUT]" in line:
-            parts = line.split("HIL_OUT]", 1)
-            hil_part = "[HIL_OUT]" + parts[1]
-            self.handle_hil_packet(hil_part)
-            
-            # If there was text before HIL_OUT, parse it normally (no recursion)
-            before = parts[0].strip()
-            if before.endswith('['):
-                before = before[:-1].strip()
-            if before:
-                self.parse_incoming_line(before)
-
-    def parse_incoming_line(self, line, from_usb=False):
-        # Recursion guard: if this line contains HIL_OUT, use the dedicated non-recursive parser
-        if "HIL_OUT]" in line:
-            self.parse_hil_output(line)
-            return
-
+    def _process_normal_line(self, line, from_usb=False):
+        """Internal helper to process a single line of standard telemetry (non-HIL)."""
         display_line = f"[Float USB] {line}" if from_usb else line
-        
-        with self.lock:
-            self.console_log.append(display_line)
-            if len(self.console_log) > 100:
-                self.console_log.pop(0)
+        self._safe_log(display_line)
 
         # Capture Surface FSM State for UI status
         if "[DEBUG] State:" in line:
@@ -628,22 +631,7 @@ class HardwareManager:
                 for key, value in matches:
                     if key in self.float_settings:
                         self.float_settings[key] = value
-                with self.lock:
-                    self.console_log.append(f"[SUCCESS] UI Synced Successfully.")
-
-        # OTA Progress Detection (for smoother UI)
-        if "Progress:" in line:
-            try:
-                parts = line.split("Progress: ")[1].split("/")
-                cur = int(parts[0])
-                total = int(parts[1])
-                self.reflash_progress = int((cur/total) * 100)
-                self.last_acked_bytes = cur
-            except:
-                pass
-
-        if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
-            self.reflash_error = line
+                self._safe_log("[SUCCESS] UI Synced Successfully.")
 
         # Telemetry Log Parsing
         m = re.search(
@@ -707,6 +695,25 @@ class HardwareManager:
             except (ValueError, IndexError):
                 pass
 
+    def parse_incoming_line(self, line, from_usb=False):
+        """Iteratively extract HIL data and process other text without recursion."""
+        # Format: [HIL_OUT] Target=%d ADC=%d State=%d Stage=%d Depth=%.3f
+        hil_pattern = r"\[HIL_OUT\].*?(?=\[HIL_OUT\]|$)"
+        
+        # 1. Process all HIL packets in the line
+        for match in re.finditer(hil_pattern, line):
+            self.handle_hil_packet(match.group(0))
+            
+        # 2. Process all non-HIL parts of the line
+        non_hil_parts = re.split(hil_pattern, line)
+        for part in non_hil_parts:
+            part = part.strip()
+            # Clean up potential leading '[' if it was part of "[HIL_OUT]" splitting artifact
+            if part.endswith('['):
+                part = part[:-1].strip()
+            if part:
+                self._process_normal_line(part, from_usb)
+
     def serial_listener(self):
         serial_buffer = ""
         while self.running:
@@ -726,11 +733,8 @@ class HardwareManager:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
                         if line:
-                            # Extract HIL data early to prevent recursion in parse_incoming_line
-                            if "[HIL_OUT]" in line:
-                                self.parse_hil_output(line)
-                            else:
-                                self.parse_incoming_line(line, from_usb=False)
+                            # Use unified iterative parser
+                            self.parse_incoming_line(line, from_usb=False)
                     else:
                         time.sleep(0.01)
  
@@ -741,6 +745,6 @@ class HardwareManager:
                             except: pass
                             self.ser = None
                             self.mission_status = "DISCONNECTED"
-                            self.console_log.append(f"[ERROR] Serial error: {e}")
+                            self._safe_log(f"[ERROR] Serial error: {e}")
             else:
                 time.sleep(0.1)
