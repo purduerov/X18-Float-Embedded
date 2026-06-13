@@ -83,10 +83,146 @@ static void handle_hil(const char *params) {
 }
 #endif
 
+static void handle_team(const char *params) {
+    int val;
+    if (sscanf(params, "%d", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.company_number = (uint16_t)val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Company ID set to %u\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_duration(const char *params) {
+    int val;
+    if (sscanf(params, "%d", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.profile_duration_s = (uint16_t)val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Duration set to %u s\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_deep(const char *params) {
+    float val;
+    if (sscanf(params, "%f", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.deep_target_m = val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Deep Target set to %.2f m\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_shallow(const char *params) {
+    float val;
+    if (sscanf(params, "%f", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.shallow_target_m = val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Shallow Target set to %.2f m\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_profiles(const char *params) {
+    int val;
+    if (sscanf(params, "%d", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.num_profiles = (uint16_t)val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Profile Count set to %u\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_tolerance(const char *params) {
+    float val;
+    if (sscanf(params, "%f", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.arrival_band_m = val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Tolerance set to %.2f m\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_pid_console(const char *params) {
+    float p, i, d;
+    if (sscanf(params, "%f %f %f", &p, &i, &d) == 3) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.kp = p;
+        settings.ki = i;
+        settings.kd = d;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] PID set to P=%.2f I=%.2f D=%.2f\n", p, i, d);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_bounds_console(const char *params) {
+    int min, max;
+    if (sscanf(params, "%d %d", &min, &max) == 2) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.act_min = (uint16_t)min;
+        settings.act_max = (uint16_t)max;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Bounds set to %d - %d\n", min, max);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_neutral_console(const char *params) {
+    int val;
+    if (sscanf(params, "%d", &val) == 1) {
+        float_settings_t settings;
+        storage_get_settings(&settings);
+        settings.neutral_buoyancy_adc = (uint16_t)val;
+        storage_set_settings(&settings);
+        storage_save();
+        printf(">> [CONSOLE] Neutral ADC set to %u\n", val);
+        handle_sync(NULL);
+    }
+}
+
+static void handle_reset_console(const char *params) {
+    printf(">> [CONSOLE] Resetting FSM to IDLE...\n");
+    global_fsm.state = FLOAT_IDLE;
+    global_fsm.current_profile = 0;
+}
+
 static const console_command_t cmd_table[] = {
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position"},
     {'p', handle_profile, "Start Profile"},
+    {'c', handle_team, "Set Team ID"},
+    {'t', handle_duration, "Set Duration"},
+    {'d', handle_deep, "Set Deep Target"},
+    {'u', handle_shallow, "Set Shallow Target"},
+    {'m', handle_profiles, "Set Num Profiles"},
+    {'v', handle_tolerance, "Set Tolerance"},
+    {'s', handle_pid_console, "Set PID Gains"},
+    {'b', handle_bounds_console, "Set Actuator Bounds"},
+    {'n', handle_neutral_console, "Set Neutral ADC"},
+    {'r', handle_reset_console, "Reset FSM"},
     {'?', handle_sync, "Sync Settings"},
 #ifdef HIL_MODE
     {'h', handle_hil, "HIL Update"},
