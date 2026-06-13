@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // --- Custom Library Includes ---
 #include "actuator.h"
@@ -65,11 +66,27 @@ static void handle_profile(const char *params) {
     printf(">> [CONSOLE] Starting Profile command via serial...\n");
 }
 
+#ifdef HIL_MODE
+static void handle_hil(const char *params) {
+    float depth;
+    if (sscanf(params, "%f", &depth) == 1) {
+        extern volatile float hil_depth;
+        extern volatile float hil_pressure;
+        hil_depth = depth;
+        hil_pressure = (depth * 1000.0f * 9.80665f + 101325.0f) / 1000.0f; // in kPa
+    }
+}
+#endif
+
 static const console_command_t cmd_table[] = {
     {'z', handle_zero, "Zero Depth"},
     {'a', handle_actuator, "Set Actuator Position"},
     {'p', handle_profile, "Start Profile"},
-    {'?', handle_sync, "Sync Settings"}};
+    {'?', handle_sync, "Sync Settings"},
+#ifdef HIL_MODE
+    {'h', handle_hil, "HIL Update"},
+#endif
+};
 
 int main() {
   // system_init handles everything including stdio_init_all
@@ -110,7 +127,11 @@ int main() {
       // --- SENSOR READ & RECOVERY ---
       if (ms5837_read(&depth_sensor)) {
         consecutive_sensor_failures = 0;
+#ifdef HIL_MODE
+        float depth = ms5837_get_depth(&depth_sensor);
+#else
         float depth = ms5837_get_depth(&depth_sensor) - settings.depth_offset;
+#endif
         current_depth = (double)depth;
         
         // Update velocity (EMA filtered)
@@ -194,18 +215,18 @@ int main() {
                 global_fsm.actuator_target = settings.act_max;
             }
 
-            // 2. Braking Condition check
+            // Run bang-bang / braking transition
             bool trigger_braking = false;
-            if (depth_error < 0.0f) { // Diving
+            if (global_fsm.mission_stage == STAGE_DEEP) { // Diving stage
                 if (-depth_error <= global_fsm.filtered_velocity * settings.kp) {
                     trigger_braking = true;
                 }
-            } else { // Rising
+            } else if (global_fsm.mission_stage == STAGE_SHALLOW) { // Rising stage
                 if (depth_error <= -global_fsm.filtered_velocity * settings.kp) {
                     trigger_braking = true;
                 }
             }
-
+            
             if (trigger_braking && global_fsm.mission_stage != STAGE_EXITING) {
                 printf(">> Control: Transit -> BRAKING (Vel: %.3f m/s, Err: %.2f m)\n", global_fsm.filtered_velocity, depth_error);
                 global_fsm.ctrl_state = 1; // CTRL_BRAKING
@@ -213,10 +234,10 @@ int main() {
         }
         else if (global_fsm.ctrl_state == 1) { // CTRL_BRAKING
             // Command active counter-buoyancy
-            if (depth_error < 0.0f) {
+            if (global_fsm.mission_stage == STAGE_DEEP) {
                 // Diving: apply positive buoyancy to slow down
                 global_fsm.actuator_target = global_fsm.active_neutral_adc + (int)settings.ki;
-            } else {
+            } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
                 // Rising: apply negative buoyancy to slow down
                 global_fsm.actuator_target = global_fsm.active_neutral_adc - (int)settings.ki;
             }
@@ -302,6 +323,20 @@ int main() {
       float_fsm_process_event(&global_fsm);
     }
     reflash_target_tick(radio_get_instance());
+
+#ifdef HIL_MODE
+    static uint32_t last_hil_print_time = 0;
+    if (now - last_hil_print_time >= 100) { // 10Hz
+        printf("[HIL_OUT] Target=%d ADC=%d State=%d Stage=%d Depth=%.3f\n",
+               global_fsm.actuator_target,
+               global_fsm.current_actuator_pos,
+               global_fsm.state,
+               global_fsm.mission_stage,
+               global_fsm.current_depth);
+        last_hil_print_time = now;
+    }
+#endif
+
     sleep_ms(1);
   }
   return 0;

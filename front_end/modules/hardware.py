@@ -39,6 +39,21 @@ class HardwareManager:
         self.profile_start_time = None
         self.active_duration = 0
         
+        # HIL Simulation State
+        from modules.simulator import BuoyancySimulator
+        self.simulator = BuoyancySimulator(
+            mass_g=3489,
+            diameter_in=4.5,
+            length_in=12,
+            syringe_ml=90,
+            pool_depth_ft=15
+        )
+        self.hil_enabled = False
+        self.hil_start_time = None
+        self.hil_ser = None
+        self.hil_thread = None
+        self.hil_port = None
+        
         self.running = True
         self.thread = threading.Thread(target=self.serial_listener, daemon=True)
         self.thread.start()
@@ -71,6 +86,7 @@ class HardwareManager:
                 self.console_log.append(f"[ERROR] Could not connect to {port}. {e}")
 
     def disconnect(self):
+        self.disconnect_hil()
         with self.lock:
             if self.ser:
                 try:
@@ -80,6 +96,81 @@ class HardwareManager:
                 self.ser = None
                 self.console_log.append("[INFO] Disconnected.")
                 self.mission_status = "DISCONNECTED"
+
+    def connect_hil(self, port, baud=115200):
+        with self.lock:
+            if self.hil_ser and self.hil_ser.is_open:
+                try:
+                    self.hil_ser.close()
+                except:
+                    pass
+            try:
+                self.hil_ser = serial.Serial(port, baud, timeout=1.0, write_timeout=None)
+                self.hil_ser.dtr = False
+                self.hil_ser.rts = False
+                time.sleep(0.1)
+                self.hil_ser.dtr = True
+                self.hil_ser.rts = True
+                self.hil_port = port
+                
+                self.console_log.append(f"[SYSTEM] HIL Link connected to {port} at {baud} baud.")
+                
+                # Start HIL background listening thread
+                self.hil_thread = threading.Thread(target=self.hil_serial_listener, daemon=True)
+                self.hil_thread.start()
+            except Exception as e:
+                self.hil_ser = None
+                self.hil_port = None
+                self.console_log.append(f"[ERROR] Could not connect HIL Link to {port}. {e}")
+
+    def disconnect_hil(self):
+        with self.lock:
+            if self.hil_ser:
+                try:
+                    self.hil_ser.close()
+                except:
+                    pass
+                self.hil_ser = None
+                self.hil_port = None
+                self.console_log.append("[SYSTEM] HIL Link disconnected.")
+
+    def hil_serial_listener(self):
+        serial_buffer = ""
+        while self.running:
+            active_ser = None
+            with self.lock:
+                if self.hil_ser and self.hil_ser.is_open:
+                    active_ser = self.hil_ser
+            
+            if not active_ser:
+                time.sleep(0.1)
+                continue
+                
+            try:
+                data = b''
+                # Read all available bytes to avoid blocking
+                in_waiting = active_ser.in_waiting
+                if in_waiting > 0:
+                    data = active_ser.read(in_waiting)
+                    
+                if data:
+                    serial_buffer += data.decode('utf-8', errors='ignore')
+                    
+                while '\n' in serial_buffer:
+                    line_raw, serial_buffer = serial_buffer.split('\n', 1)
+                    line = line_raw.strip()
+                    if line:
+                        if line.startswith("[HIL_OUT]"):
+                            self.handle_hil_packet(line)
+                        else:
+                            # Echo other diagnostic printfs from Float to debug log
+                            with self.lock:
+                                self.console_log.append(f"[Float USB] {line}")
+                                if len(self.console_log) > 100:
+                                    self.console_log.pop(0)
+            except Exception as e:
+                time.sleep(0.5)
+            time.sleep(0.001)
 
     def send_command(self, cmd):
         with self.lock:
@@ -311,7 +402,101 @@ class HardwareManager:
         """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
         with self.lock:
             self.packet_log = []
+            self.data_log = []
+            if self.hil_enabled:
+                self.hil_start_time = None
+                self.simulator.reset()
         self.send_command('p') 
+
+    def handle_hil_packet(self, line):
+        # Format: [HIL_OUT] Target=%d ADC=%d State=%d Stage=%d Depth=%.3f
+        try:
+            m = re.search(r"Target=(-?\d+)\s+ADC=(\d+)\s+State=(\d+)\s+Stage=(\d+)\s+Depth=([\d\.-]+)", line)
+            if m:
+                target = int(m.group(1))
+                adc = int(m.group(2))
+                state = int(m.group(3))
+                stage = int(m.group(4))
+                depth = float(m.group(5))
+                
+                # Update live settings values for metric widgets
+                self.float_settings["ADC"] = str(adc)
+                self.float_settings["TarAct"] = str(target)
+                self.float_settings["LiveDepth"] = f"{depth:.3f}"
+                
+                if self.hil_enabled:
+                    neutral_adc = 2048
+                    try:
+                        neutral_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                    except ValueError:
+                        pass
+                        
+                    act_min = 126
+                    try:
+                        act_min = int(float(self.float_settings.get("ActMin", 126)))
+                    except ValueError:
+                        pass
+                        
+                    act_max = 3900
+                    try:
+                        act_max = int(float(self.float_settings.get("ActMax", 3900)))
+                    except ValueError:
+                        pass
+                    
+                    # Run buoyancy physics step
+                    sim_depth = self.simulator.step(
+                        current_adc=adc,
+                        neutral_adc=neutral_adc,
+                        act_min=act_min,
+                        act_max=act_max
+                    )
+                    
+                    # Feed simulated depth back to Pico
+                    with self.lock:
+                        if self.hil_ser and self.hil_ser.is_open:
+                            try:
+                                self.hil_ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
+                            except Exception:
+                                pass
+                        elif self.ser and self.ser.is_open:
+                            try:
+                                self.ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
+                            except Exception:
+                                pass
+                            
+                    self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
+                    
+                    # Log data point for live chart
+                    if self.hil_start_time is None:
+                        self.hil_start_time = time.time()
+                    rel_time_s = time.time() - self.hil_start_time
+                    
+                    # Calculate pressure in kPa for MATE 2026 compliance
+                    pressure_kpa = (sim_depth * 1000.0 * 9.80665 + 101325.0) / 1000.0
+                    
+                    try:
+                        co_id = int(float(self.float_settings.get("Co#", DEFAULT_TEAM_ID)))
+                    except ValueError:
+                        co_id = DEFAULT_TEAM_ID
+                        
+                    raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
+                    
+                    entry = {
+                        "Time (s)": rel_time_s,
+                        "Depth (m)": sim_depth,
+                        "Pressure (kPa)": pressure_kpa,
+                        "Actuator (ADC)": adc,
+                        "Target (ADC)": target
+                    }
+                    with self.lock:
+                        self.data_log.append(entry)
+                        if len(self.data_log) > 1000:
+                            self.data_log.pop(0)
+                        self.packet_log.append(raw_str)
+                        if len(self.packet_log) > 100:
+                            self.packet_log.pop(0)
+        except Exception:
+            pass
 
     def save_profile_data(self):
         """Automatically saves mission telemetry and config to a CSV file."""
@@ -381,6 +566,10 @@ class HardwareManager:
                         line = line_raw.strip()
 
                         if line:
+                            if line.startswith("[HIL_OUT]"):
+                                self.handle_hil_packet(line)
+                                continue
+                                
                             with self.lock:
                                 self.console_log.append(line)
                                 if len(self.console_log) > 100: 
@@ -404,9 +593,10 @@ class HardwareManager:
                                 self.profile_start_time = None
                             elif "START DATA DUMP" in line:
                                 self.mission_status = "DOWNLOADING DATA"
-                                with self.lock:
-                                    self.data_log = [] 
-                                    self.packet_log = []
+                                if not self.hil_enabled:
+                                    with self.lock:
+                                        self.data_log = [] 
+                                        self.packet_log = []
                                 self.first_timestamp = None 
                             elif "Download Complete" in line: 
                                 self.mission_status = "MISSION COMPLETE"
@@ -433,71 +623,71 @@ class HardwareManager:
                                     pass
 
                             if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
-                                self.reflash_error = line
-
-                            # Match live telemetry logs printed by surface unit
+                                self.reflash_error = line                            # Match live telemetry logs printed by surface unit
                             # ">> PRE-DIVE Packet Logged: Co# 18 | Time 15000 ms | Depth 2.48 m | Pressure 124.30 kPa"
                             # ">> Stored Data #1: Co# 18 | Time 16000 ms | Depth 2.48 m | Pressure 124.30 kPa"
-                            m = re.search(
-                                r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
-                                line
-                            )
-                            if m:
-                                try:
-                                    co_id = int(m.group(1))
-                                    time_ms = int(m.group(2))
-                                    depth_m = float(m.group(3))
-                                    pressure_kpa = float(m.group(4))
-                                    time_s = time_ms / 1000.0
-                                    raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
-                                    with self.lock:
-                                        self.packet_log.append(raw_str)
-                                        if len(self.packet_log) > 100:
-                                            self.packet_log.pop(0)
-                                except Exception:
-                                    pass
-
-                            # CSV Parsing Logic
-                            parts = [p.strip() for p in line.split(',')]
-                            if len(parts) >= 3 and parts[0].isdigit():
-                                try:
-                                    abs_time_ms = int(parts[1])
-                                    depth_m = float(parts[2])
-
-                                    if self.first_timestamp is None:
-                                        self.first_timestamp = abs_time_ms
-                                    rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
-
-                                    entry = {
-                                        "Time (s)": rel_time_s,
-                                        "Depth (m)": depth_m
-                                    }
-
-                                    if len(parts) >= 6:
-                                        try:
-                                            entry["Pressure (kPa)"] = float(parts[3])
-                                            entry["Actuator (ADC)"] = int(parts[4])
-                                            entry["Target (ADC)"] = int(parts[5])
-                                        except ValueError:
-                                            pass
-                                    else:
-                                        if len(parts) >= 4 and parts[3].isdigit():
-                                            entry["Actuator (ADC)"] = int(parts[3])
-                                        if len(parts) >= 5 and parts[4].isdigit():
-                                            entry["Target (ADC)"] = int(parts[4])
-
-                                    co_id = int(parts[0])
-                                    pressure_kpa = entry.get("Pressure (kPa)", 0.0)
-                                    raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
-
-                                    with self.lock:
-                                        self.data_log.append(entry)
-                                        if raw_str not in self.packet_log:
+                            if not self.hil_enabled:
+                                m = re.search(
+                                    r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
+                                    line
+                                )
+                                if m:
+                                    try:
+                                        co_id = int(m.group(1))
+                                        time_ms = int(m.group(2))
+                                        depth_m = float(m.group(3))
+                                        pressure_kpa = float(m.group(4))
+                                        time_s = time_ms / 1000.0
+                                        raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+                                        with self.lock:
                                             self.packet_log.append(raw_str)
                                             if len(self.packet_log) > 100:
                                                 self.packet_log.pop(0)
-                                except (ValueError, IndexError):
-                                    pass
+                                    except Exception:
+                                        pass
+
+                            # CSV Parsing Logic
+                            if not self.hil_enabled:
+                                parts = [p.strip() for p in line.split(',')]
+                                if len(parts) >= 3 and parts[0].isdigit():
+                                    try:
+                                        abs_time_ms = int(parts[1])
+                                        depth_m = float(parts[2])
+
+                                        if self.first_timestamp is None:
+                                            self.first_timestamp = abs_time_ms
+                                        rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
+
+                                        entry = {
+                                            "Time (s)": rel_time_s,
+                                            "Depth (m)": depth_m
+                                        }
+
+                                        if len(parts) >= 6:
+                                            try:
+                                                entry["Pressure (kPa)"] = float(parts[3])
+                                                entry["Actuator (ADC)"] = int(parts[4])
+                                                entry["Target (ADC)"] = int(parts[5])
+                                            except ValueError:
+                                                pass
+                                        else:
+                                            if len(parts) >= 4 and parts[3].isdigit():
+                                                entry["Actuator (ADC)"] = int(parts[3])
+                                            if len(parts) >= 5 and parts[4].isdigit():
+                                                entry["Target (ADC)"] = int(parts[4])
+
+                                        co_id = int(parts[0])
+                                        pressure_kpa = entry.get("Pressure (kPa)", 0.0)
+                                        raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+
+                                        with self.lock:
+                                            self.data_log.append(entry)
+                                            if raw_str not in self.packet_log:
+                                                self.packet_log.append(raw_str)
+                                                if len(self.packet_log) > 100:
+                                                    self.packet_log.pop(0)
+                                    except (ValueError, IndexError):
+                                        pass
                     else:
                         time.sleep(0.01)
  

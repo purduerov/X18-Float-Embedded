@@ -22,19 +22,13 @@ st.title(f"{PAGE_ICON} MATE Floats 2026: {PAGE_TITLE}")
 # Render Sidebar (Connection & Settings)
 render_sidebar(hw)
 
-# Main Dashboard Area (Auto-refreshes every 0.25 seconds)
-@st.fragment(run_every=f"{REFRESH_RATE_S}s")
-def live_dashboard():
-    # Top Row: Key Metrics
-    render_metrics(hw)
-    st.divider()
+# Top Row: Key Metrics (auto-updates via internal fragment)
+render_metrics(hw)
+st.divider()
 
-    # Middle Row: Chart & Quick Actions
-    render_main_content(hw)
-    st.divider()
+# Middle Row: Chart & Quick Actions (auto-updates visualizer/plots via internal fragment)
+render_main_content(hw)
+st.divider()
 
-    # Bottom Row: Serial Console
-    render_console(hw)
-
-# Launch the live dashboard
-live_dashboard()
+# Bottom Row: Serial Console (auto-updates terminal display via internal fragment)
+render_console(hw)

@@ -4,6 +4,11 @@
 #include "pico/stdlib.h"
 #include <stdio.h> // Required for debug prints
 
+#ifdef HIL_MODE
+volatile float hil_depth = 0.0f;
+volatile float hil_pressure = 101.325f;
+#endif
+
 // These constants define the commands sent over I2C to control the sensor.
 #define MS5837_RESET_CMD 0x1E       // Command to reset the sensor.
 #define MS5837_ADC_READ 0x00        // Command to read the ADC result.
@@ -77,6 +82,13 @@ void ms5837_init_struct(MS5837_t *sensor)
 
 bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
 {
+#ifdef HIL_MODE
+    printf("HIL: Mocking MS5837 Sensor Initialization...\n");
+    sensor->i2c_inst = (void*)1; // Dummy non-NULL pointer
+    sensor->model = MS5837_30BA;
+    sensor->fluidDensity = 1029.0f;
+    return true;
+#else
     printf("Initializing MS5837 Sensor...\n");
     sensor->i2c_inst = i2c_inst;
 
@@ -120,10 +132,14 @@ bool ms5837_begin(MS5837_t *sensor, void *i2c_inst, uint8_t forced_model)
     }
 
     return true;
+#endif
 }
 
 bool ms5837_read(MS5837_t *sensor)
 {
+#ifdef HIL_MODE
+    return true;
+#else
     if (!sensor->i2c_inst) return false;
 
     uint8_t cmd;
@@ -154,6 +170,7 @@ bool ms5837_read(MS5837_t *sensor)
 
     ms5837_calculate(sensor);
     return true;
+#endif
 }
 
 void ms5837_calculate(MS5837_t *sensor)
@@ -243,6 +260,10 @@ void ms5837_calculate(MS5837_t *sensor)
 
 float ms5837_get_pressure(MS5837_t *sensor, float conversion)
 {
+#ifdef HIL_MODE
+    // hil_pressure is in kPa. Standard conversion scales relative to Pa (100.0f).
+    return (hil_pressure * 10.0f) * conversion;
+#else
     if (sensor->model == MS5837_02BA)
     {
         return (float)sensor->P * conversion / 100.0f;
@@ -252,6 +273,7 @@ float ms5837_get_pressure(MS5837_t *sensor, float conversion)
         // For 30BA, the pressure calculation results in 0.1 mbar units
         return (float)sensor->P * conversion / 10.0f;
     }
+#endif
 }
 
 float ms5837_get_temperature(MS5837_t *sensor)
@@ -264,10 +286,14 @@ float ms5837_get_temperature(MS5837_t *sensor)
 
 float ms5837_get_depth(MS5837_t *sensor)
 {
+#ifdef HIL_MODE
+    return hil_depth;
+#else
     if (!sensor->i2c_inst) return -1000.0f; // Sensor not initialized
 
     // Uses the standard atmospheric pressure of 101300 Pa as a baseline
     return (ms5837_get_pressure(sensor, Pa) - 101300.0f) / (sensor->fluidDensity * 9.80665f);
+#endif
 }
 
 float ms5837_get_altitude(MS5837_t *sensor)
