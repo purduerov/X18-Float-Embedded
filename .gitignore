@@ -31,6 +31,8 @@ compile_commands.json
 *.log
 .DS_Store
 Thumbs.db
+*.pyc
+__pycache__/
 
 RESEARCH.md
 TEST.md
