@@ -536,63 +536,87 @@ class HardwareManager:
             with self.lock:
                 self.console_log.append(f"[ERROR] AUTO-SAVE ERROR: {e}")
 
-    def parse_incoming_line(self, line, from_usb=False):
+    def parse_hil_output(self, line):
+        """Specifically handles [HIL_OUT] lines to avoid recursion in parse_incoming_line."""
+        # Separate the [HIL_OUT] part from any other text on the same line
         if "HIL_OUT]" in line:
             parts = line.split("HIL_OUT]", 1)
+            hil_part = "[HIL_OUT]" + parts[1]
+            self.handle_hil_packet(hil_part)
+            
+            # If there was text before HIL_OUT, parse it normally (no recursion)
             before = parts[0].strip()
-            # If before ends with '[', strip it to clean the line.
             if before.endswith('['):
                 before = before[:-1].strip()
-            hil_part = "[HIL_OUT]" + parts[1]
-            
             if before:
-                self.parse_incoming_line(before, from_usb=from_usb)
-                
-            self.handle_hil_packet(hil_part)
+                self.parse_incoming_line(before)
+
+    def parse_incoming_line(self, line, from_usb=False):
+        # Recursion guard: if this line contains HIL_OUT, use the dedicated non-recursive parser
+        if "HIL_OUT]" in line:
+            self.parse_hil_output(line)
             return
 
         display_line = f"[Float USB] {line}" if from_usb else line
+        
+        with self.lock:
+            self.console_log.append(display_line)
+            if len(self.console_log) > 100:
+                self.console_log.pop(0)
+
         # Capture Surface FSM State for UI status
         if "[DEBUG] State:" in line:
             try:
                 state_match = re.search(r"State:\s*(\w+)", line)
                 if state_match:
                     surface_state = state_match.group(1)
-                    # Update status if we aren't in a more specific profiling state
-                    if self.mission_status in ["IDLE", "WAITING_PROFILE", "DOWNLOADING", "DISCONNECTED"]:
-                        self.mission_status = surface_state
+                    with self.lock:
+                        # Update status if we aren't in a more specific profiling state
+                        if self.mission_status in ["IDLE", "WAITING_PROFILE", "DOWNLOADING", "DISCONNECTED"]:
+                            self.mission_status = surface_state
             except:
                 pass
 
         # Mission Status Logic
         if "PRE-DIVE Packet Logged" in line:
-            self.mission_status = "PROFILING (Diving to Deep)"
-            try:
-                self.active_duration = int(self.float_settings.get("Time", 30))
-            except ValueError:
-                self.active_duration = 30
-            self.profile_start_time = None
+            with self.lock:
+                self.mission_status = "PROFILING (Diving to Deep)"
+                try:
+                    self.active_duration = int(self.float_settings.get("Time", 30))
+                except ValueError:
+                    self.active_duration = 30
+                self.profile_start_time = None
         elif "MISSION: Arrived at" in line:
             stage = "Deep" if "DEEP" in line else "Shallow"
-            self.mission_status = f"PROFILING (Holding {stage})"
-            self.profile_start_time = time.time()
+            with self.lock:
+                self.mission_status = f"PROFILING (Holding {stage})"
+                self.profile_start_time = time.time()
         elif "Moving to" in line:
             stage = "Shallow" if "SHALLOW" in line else "Deep"
-            self.mission_status = f"PROFILING (Moving to {stage})"
-            self.profile_start_time = None
-        elif "START DATA DUMP" in line:
-            self.mission_status = "DOWNLOADING DATA"
             with self.lock:
+                self.mission_status = f"PROFILING (Moving to {stage})"
+                self.profile_start_time = None
+        elif "START DATA DUMP" in line:
+            with self.lock:
+                self.mission_status = "DOWNLOADING DATA"
                 self.data_log = []
                 self.packet_log = []
-            self.first_timestamp = None
+                self.first_timestamp = None
         elif "Download Complete" in line:
-            if self.mission_status != "MISSION COMPLETE":
-                self.mission_status = "MISSION COMPLETE"
+            should_save = False
+            with self.lock:
+                if self.mission_status != "MISSION COMPLETE":
+                    self.mission_status = "MISSION COMPLETE"
+                    should_save = True
+            if should_save:
                 self.save_profile_data()
         elif "Profile Done" in line or "Aborting mission" in line or "ABORTING MISSION" in line or "Mission Timeout" in line or "[STALL]" in line:
-            if self.mission_status not in ["MISSION COMPLETE", "MISSION ABORTED"]:
-                self.mission_status = "MISSION COMPLETE" if "Profile Done" in line else "MISSION ABORTED"
+            should_save = False
+            with self.lock:
+                if self.mission_status not in ["MISSION COMPLETE", "MISSION ABORTED"]:
+                    self.mission_status = "MISSION COMPLETE" if "Profile Done" in line else "MISSION ABORTED"
+                    should_save = True
+            if should_save:
                 self.save_profile_data()
         elif "[SYNC]" in line:
             matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
@@ -698,7 +722,11 @@ class HardwareManager:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
                         if line:
-                            self.parse_incoming_line(line, from_usb=False)
+                            # Extract HIL data early to prevent recursion in parse_incoming_line
+                            if "[HIL_OUT]" in line:
+                                self.parse_hil_output(line)
+                            else:
+                                self.parse_incoming_line(line, from_usb=False)
                     else:
                         time.sleep(0.01)
  

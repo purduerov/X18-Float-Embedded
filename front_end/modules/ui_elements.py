@@ -149,7 +149,6 @@ def render_sidebar(hw):
         st.divider()
         render_ota_section(hw)
 
-@st.fragment(run_every=REFRESH_RATE_S)
 def render_ota_section(hw):
     with st.container():
         st.header(":material/publish: OTA Reflash")
@@ -468,8 +467,8 @@ def render_log_view(hw, search_query, log_type_filter):
             
         log_html = "".join(formatted_lines)
         
-        # Unique ID for this log session to prevent script collisions
-        log_id = f"log_container_{len(filtered_lines)}"
+        # Static ID to prevent script collisions and JS errors on re-renders
+        log_id = "log_container_main"
         
         container_style = (
             f'<div id="{log_id}" style="background-color: #0e1117; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
