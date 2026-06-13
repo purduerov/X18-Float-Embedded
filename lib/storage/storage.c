@@ -14,6 +14,11 @@
 
 #define FLASH_TARGET_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
 
+// Catch at compile time if the settings struct grows beyond one flash page (256 bytes).
+// flash_range_program() would silently truncate a write larger than FLASH_PAGE_SIZE.
+_Static_assert(sizeof(float_settings_t) <= FLASH_PAGE_SIZE,
+    "float_settings_t exceeds FLASH_PAGE_SIZE (256 bytes) — increase buffer or shrink struct");
+
 // Define the global struct here
 static float_settings_t current_settings;
 

@@ -3,10 +3,11 @@
 
 #include <stdint.h>
 
-// Changed magic number to force a factory reset of the flash memory
-#define SETTINGS_MAGIC 0x20261337
+// Bump magic number whenever struct layout changes to force a clean factory reset on flash.
+// Last bumped: added __attribute__((packed)) to eliminate padding.
+#define SETTINGS_MAGIC 0x20261338
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     float kp;
     float ki;
     float kd;

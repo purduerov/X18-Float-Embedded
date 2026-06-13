@@ -16,6 +16,7 @@ typedef struct {
     uint ret_pin;    // Retract motor pin
     int moving;      // 0: idle, 1: extending, -1: retracting
     int move_target; // Raw ADC target (0-4095)
+    int cached_pos;  // Last position read by actuator_tick() — avoids redundant ADC reads
 
     // Moving Average Filter
     int pos_history[ACT_FILTER_SIZE];
@@ -55,15 +56,10 @@ int actuator_get_position(Actuator *act);
 void actuator_set_move_pins(Actuator *act, int direction);
 
 /**
- * @brief Sets a target position and begins a non-blocking move.
- * Call actuator_tick() periodically to monitor progress and handle stalls.
- */
-void actuator_move_to(Actuator *act, int new_position);
-
-/**
  * @brief Sets a new target position and resets monitoring state if the target has changed.
  */
 void actuator_set_target(Actuator *act, int target_pos);
+
 
 /**
  * @brief Monitors the move progress, handles stall detection and timeouts.
@@ -80,6 +76,6 @@ void actuator_vref_init(void);
  * @brief Sets the motor driver VREF (power level) based on PID output.
  * @param pid_output Raw PID output value to map to VREF duty cycle.
  */
-void actuator_vref_set(double pid_output);
+void actuator_vref_set(float pid_output);
 
 #endif // ACTUATOR_H

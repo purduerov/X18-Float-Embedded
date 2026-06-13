@@ -8,14 +8,14 @@
 #define DEFAULT_NEUTRAL_ADC 2048
 #define ACT_POS_TOL 20
 #define ACT_ADC_MAX 4095
-#define ACT_MOVE_TIMEOUT_MS 8000
-#define ACT_STALL_MS 300
+#define ACT_MOVE_TIMEOUT_MS 12000
+#define ACT_STALL_MS 600
 #define ACT_RETRY_BACKOFF_MS 2000
 #define ACT_MAX_RETRIES 1
 #define ACT_FILTER_SIZE 5
 #define ACT_STALL_THRESHOLD 2
 
-#define ACT_KP 0.8f
+#define ACT_KP 1.2f
 #define ACT_KI 0.05f
 #define ACT_KD 0.15f
 #define ACT_LOOP_MS 20
@@ -38,8 +38,8 @@
 #define STALL_CHECK_DURATION_MS 15000
 #define STALL_DEPTH_THRESHOLD_M 0.01f
 
-#define DEFAULT_PID_P 4.00f  // Mapped to Braking Time Constant (seconds)
-#define DEFAULT_PID_I 300.0f // Mapped to Braking Effort (ADC units)
+#define DEFAULT_PID_P 6.00f  // Mapped to Braking Time Constant (seconds)
+#define DEFAULT_PID_I 600.0f // Mapped to Braking Effort (ADC units)
 #define DEFAULT_PID_D 0.15f  // Mapped to Hover Deadband (meters)
 
 #define TRANSIT_THRESHOLD_M 0.5f
@@ -47,15 +47,23 @@
 
 // --- Hybrid Buoyancy Control Constants ---
 #define VELOCITY_EMA_ALPHA 0.30f
-#define BRAKING_TIME_S 4.00f
-#define BRAKING_EFFORT_ADC 300
+#define BRAKING_TIME_S 6.00f
+#define BRAKING_EFFORT_ADC 600
 #define HOVER_DEADBAND_M 0.15f
 #define HOVER_ASYMM_SHALLOW_UP 0.65f // Drift deep limit before nudging up
 #define HOVER_ASYMM_SHALLOW_DOWN                                               \
   0.42f // Drift shallow limit before nudging down
 #define NUDGE_STEP_ADC 100
-#define NUDGE_WAIT_S 8.00f
+#define NUDGE_WAIT_MS  8000U  // ms — use this instead of casting NUDGE_WAIT_S to uint32_t
+#define NUDGE_WAIT_S   8.00f  // kept for documentation; use NUDGE_WAIT_MS in comparisons
 #define HOVER_RECOVERY_M 0.50f
+
+// --- Mission & Control Named Thresholds (avoids magic numbers in logic) ---
+#define SHALLOW_BIASED_TARGET_M   0.55f  // Effective target for shallow hold to avoid surfacing
+#define SURFACE_DETECTION_M       0.05f  // Depth at which we consider the float surfaced
+#define ADAPTIVE_HOLD_THRESHOLD_M 0.15f  // Max depth error to accumulate adaptive neutral ADC
+#define NEUTRAL_ADC_MIN_VALID     1300U  // Sanity bounds for learned neutral ADC
+#define NEUTRAL_ADC_MAX_VALID     2500U
 
 // ==========================================
 // 2. MISSION & SENSOR FAIL-SAFES

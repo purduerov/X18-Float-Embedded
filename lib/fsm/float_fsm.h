@@ -58,7 +58,7 @@ typedef struct {
     uint32_t hover_sample_count;
 
     // --- Buoyancy Control Phase ---
-    uint8_t ctrl_state; // 0: Transit, 1: Braking, 2: Hover
+    BuoyancyControlState_t ctrl_state;
     float filtered_velocity;
     float last_depth;
     uint32_t last_nudge_time;

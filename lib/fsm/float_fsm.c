@@ -335,7 +335,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     if (!fsm->target_depth_reached) {
       bool arrived = false;
       if (fsm->mission_stage == STAGE_EXITING) {
-        if (fsm->current_depth <= 0.05f)
+        if (fsm->current_depth <= SURFACE_DETECTION_M)
           arrived = true;
       } else {
         if (depth_error <= settings.arrival_band_m)
@@ -410,7 +410,7 @@ void float_fsm_update(float_fsm_t *fsm) {
         // Adaptive Neutral Learning: Accumulate actuator position while holding close to target
         float err_val = fsm->current_depth - target_m;
         if (err_val < 0) err_val = -err_val;
-        if (err_val <= 0.15f) { 
+        if (err_val <= ADAPTIVE_HOLD_THRESHOLD_M) { 
           if (fsm->hover_sample_count < 1000000) {
               fsm->hover_accumulated_adc += fsm->current_actuator_pos;
               fsm->hover_sample_count++;
@@ -468,7 +468,7 @@ void float_fsm_update(float_fsm_t *fsm) {
                 // Adaptive Neutral Learning: Compute and update learned neutral point
                 if (fsm->hover_sample_count >= 3) {
                     uint16_t learned_neutral = fsm->hover_accumulated_adc / fsm->hover_sample_count;
-                    if (learned_neutral >= 1300 && learned_neutral <= 2500) {
+                    if (learned_neutral >= NEUTRAL_ADC_MIN_VALID && learned_neutral <= NEUTRAL_ADC_MAX_VALID) {
                         float_settings_t live_settings;
                         storage_get_settings(&live_settings);
                         live_settings.neutral_buoyancy_adc = learned_neutral;

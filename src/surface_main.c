@@ -177,9 +177,14 @@ int main() {
     }
 
     // 3. Process Radio Interface (Packets and IRQs)
-    if (radio_event_flag) {
+    {
+      uint32_t ints = save_and_disable_interrupts();
+      bool radio_event = radio_event_flag;
       radio_event_flag = false;
-      surface_fsm_process_event(&global_fsm);
+      restore_interrupts(ints);
+      if (radio_event) {
+        surface_fsm_process_event(&global_fsm);
+      }
     }
 
     sleep_ms(1);

@@ -73,18 +73,25 @@ typedef struct __attribute__((packed))
         } test_data;
         uint8_t raw[MAX_PAYLOAD_SIZE];     
     } payload;
-    uint8_t checksum; // XOR checksum of all preceding bytes
+    uint32_t checksum; // CRC32 of all preceding bytes (0xEDB88320 polynomial)
 } packet_t;
 
-// Helper to calculate a simple XOR checksum for the packet
-static inline uint8_t packet_calculate_checksum(const packet_t *pkt) {
+// CRC32 helper (standard 0xEDB88320 polynomial, same as crc32_software() used elsewhere)
+static inline uint32_t packet_calculate_checksum(const packet_t *pkt) {
     const uint8_t *data = (const uint8_t *)pkt;
-    uint8_t checksum = 0;
-    // Calculate over all bytes EXCEPT the checksum field itself (last byte)
-    for (size_t i = 0; i < sizeof(packet_t) - 1; i++) {
-        checksum ^= data[i];
+    uint32_t crc = 0xFFFFFFFFU;
+    // Calculate over all bytes EXCEPT the checksum field itself (last 4 bytes)
+    for (size_t i = 0; i < sizeof(packet_t) - sizeof(uint32_t); i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1U) {
+                crc = (crc >> 1) ^ 0xEDB88320U;
+            } else {
+                crc >>= 1;
+            }
+        }
     }
-    return checksum;
+    return crc ^ 0xFFFFFFFFU;
 }
 
 #endif // PACKETS_H

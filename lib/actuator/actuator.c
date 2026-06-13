@@ -93,15 +93,15 @@ void actuator_set_target(Actuator *act, int target_pos) {
     }
 }
 
-void actuator_move_to(Actuator *act, int new_position) {
-    actuator_set_target(act, new_position);
-}
-
 void actuator_tick(Actuator *act) {
     uint32_t t_now = to_ms_since_boot(get_absolute_time());
+    // Cache position once per tick — actuator_get_position() does 32 ADC
+    // samples and a moving-average filter, so calling it multiple times per
+    // tick wastes significant CPU time.
     int current_pos = actuator_get_position(act);
-    double error = (double)act->move_target - (double)current_pos;
-    double control_signal = 0;
+    act->cached_pos = current_pos; // expose for callers so they don't re-read
+    float error = (float)act->move_target - (float)current_pos;
+    float control_signal = 0.0f;
 
     // 1. Hysteresis (Deadzone) Logic
     if (!act->in_deadzone && abs((int)error) <= ACT_DEADZONE_ENTER) {
@@ -176,7 +176,7 @@ void actuator_tick(Actuator *act) {
     // 5. Active Control (PID)
     pid_update(&act->pid, error, &control_signal);
     actuator_vref_set(control_signal);
-    int direction = (control_signal > 0) ? 1 : -1;
+    int direction = (control_signal > 0.0f) ? 1 : -1;
     actuator_set_move_pins(act, direction);
 }
 
@@ -189,13 +189,13 @@ void actuator_vref_init(void) {
     printf("[ACTUATOR] VREF PWM Initialized on Pin %d\n", PIN_VREF);
 }
 
-void actuator_vref_set(double pid_output) {
+void actuator_vref_set(float pid_output) {
     uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
-    double abs_out = fabs(pid_output);
-    
+    float abs_out = fabsf(pid_output);
+
     // Scale PID range to PWM duty cycle
     if (abs_out > ACT_PID_LIMIT) abs_out = ACT_PID_LIMIT;
-    
+
     uint32_t duty = ACT_VREF_MIN_DUTY + (uint32_t)((abs_out / ACT_PID_LIMIT) * (ACT_VREF_MAX_DUTY - ACT_VREF_MIN_DUTY));
     pwm_set_chan_level(slice_num, pwm_gpio_to_channel(PIN_VREF), duty);
 }

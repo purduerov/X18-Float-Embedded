@@ -32,11 +32,14 @@ void onInterrupt(void) { radio_event_flag = true; }
 static void handle_zero(const char *params) {
     float_settings_t settings;
     storage_get_settings(&settings);
-    ms5837_read(&depth_sensor);
-    settings.depth_offset = ms5837_get_depth(&depth_sensor);
-    printf(">> [CONSOLE] Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
-    storage_set_settings(&settings);
-    storage_save();
+    if (ms5837_read(&depth_sensor)) {
+        settings.depth_offset = ms5837_get_depth(&depth_sensor);
+        printf(">> [CONSOLE] Depth Zeroed at: %.3f m. Saving to Flash...\n", settings.depth_offset);
+        storage_set_settings(&settings);
+        storage_save();
+    } else {
+        printf("!! [CONSOLE] Depth sensor read FAILED. Zero aborted.\n");
+    }
 }
 
 static void handle_sync(const char *params) {
@@ -72,16 +75,22 @@ static void handle_profile(const char *params) {
 }
 
 #ifdef HIL_MODE
+// HIL mode global state — shared between handle_hil() and the main loop
+volatile float hil_depth = 0.0f;
+volatile float hil_pressure = 101.325f;
+#endif
+
 static void handle_hil(const char *params) {
+#ifdef HIL_MODE
     float depth;
     if (sscanf(params, "%f", &depth) == 1) {
-        extern volatile float hil_depth;
-        extern volatile float hil_pressure;
         hil_depth = depth;
-        hil_pressure = (depth * 1000.0f * 9.80665f + 101325.0f) / 1000.0f; // in kPa
+        hil_pressure = (depth * 1000.0f * 9.80665f + 101325.0f) / 1000.0f;
     }
-}
+#else
+    (void)params;
 #endif
+}
 
 static void handle_team(const char *params) {
     int val;
@@ -177,15 +186,15 @@ static void handle_pid_console(const char *params) {
 }
 
 static void handle_bounds_console(const char *params) {
-    int min, max;
-    if (sscanf(params, "%d %d", &min, &max) == 2) {
+    unsigned int min, max;
+    if (sscanf(params, "%u %u", &min, &max) == 2) {
         float_settings_t settings;
         storage_get_settings(&settings);
         settings.act_min = (uint16_t)min;
         settings.act_max = (uint16_t)max;
         storage_set_settings(&settings);
         storage_save();
-        printf(">> [CONSOLE] Bounds set to %d - %d\n", min, max);
+        printf(">> [CONSOLE] Bounds set to %u - %u\n", min, max);
         handle_sync(NULL);
     }
 }
@@ -324,7 +333,7 @@ int main() {
           effective_target = settings.deep_target_m;
         } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
           nominal_target = settings.shallow_target_m;
-          effective_target = 0.55f; // BIASED TARGET to avoid breaking surface
+          effective_target = SHALLOW_BIASED_TARGET_M; // BIASED TARGET to avoid breaking surface
         } else if (global_fsm.mission_stage == STAGE_EXITING) {
           nominal_target = -0.5f;
           effective_target = -0.5f;
@@ -343,11 +352,11 @@ int main() {
         // --- Hard Recovery Check ---
         // If we drift too far, reset back to Transit
         bool hard_drift = false;
-        if (global_fsm.ctrl_state == 2) {
+        if (global_fsm.ctrl_state == CTRL_HOVER) {
             if (fabs(current_depth - nominal_target) > HOVER_RECOVERY_M) {
                 hard_drift = true;
             }
-        } else if (global_fsm.ctrl_state == 1) {
+        } else if (global_fsm.ctrl_state == CTRL_BRAKING) {
             if (global_fsm.mission_stage == STAGE_DEEP) {
                 if (current_depth > nominal_target + HOVER_RECOVERY_M) {
                     hard_drift = true;
@@ -426,7 +435,7 @@ int main() {
             }
 
             if (too_deep || too_shallow) {
-                if (now - global_fsm.last_nudge_time >= (uint32_t)NUDGE_WAIT_S * 1000) {
+            if (now - global_fsm.last_nudge_time >= NUDGE_WAIT_MS) {
                     if (too_deep) {
                         global_fsm.active_neutral_adc += NUDGE_STEP_ADC;
                         printf(">> Control: Too Deep. Nudging Neutral Up -> %u\n", global_fsm.active_neutral_adc);
@@ -476,12 +485,17 @@ int main() {
       last_act_loop_time = now;
     }
 
-    global_fsm.current_actuator_pos = actuator_get_position(&act);
+    global_fsm.current_actuator_pos = act.cached_pos;
     float_fsm_update(&global_fsm);
 
-    if (radio_event_flag) {
+    {
+      uint32_t ints = save_and_disable_interrupts();
+      bool radio_event = radio_event_flag;
       radio_event_flag = false;
-      float_fsm_process_event(&global_fsm);
+      restore_interrupts(ints);
+      if (radio_event) {
+        float_fsm_process_event(&global_fsm);
+      }
     }
     reflash_target_tick(radio_get_instance());
 
