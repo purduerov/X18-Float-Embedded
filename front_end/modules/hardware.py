@@ -434,18 +434,22 @@ class HardwareManager:
                     
                     # Feed simulated depth back to Pico
                     with self.lock:
+                        # 1. Update Internal metrics for UI
+                        self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
+                        
+                        # 2. Send 'h' command to the direct HIL Target link
                         if self.hil_ser and self.hil_ser.is_open:
                             try:
                                 self.hil_ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
-                            except Exception:
-                                pass
-                        elif self.ser and self.ser.is_open:
+                            except Exception as e:
+                                self.console_log.append(f"[ERROR] HIL Feed failed (Target): {e}")
+
+                        # 3. ALSO send to primary Surface link (Radio relay to Float)
+                        if self.ser and self.ser.is_open:
                             try:
                                 self.ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
-                            except Exception:
-                                pass
-                            
-                        self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
+                            except Exception as e:
+                                self.console_log.append(f"[ERROR] HIL Feed failed (Surface): {e}")
                     
                     # Log data point for live chart (Log in HIL mode if profiling or in test mode)
                     if is_profiling or is_test_mode:
