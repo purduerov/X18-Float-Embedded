@@ -430,7 +430,9 @@ void float_fsm_update(float_fsm_t *fsm) {
 
     // --- Stall Detection (Early Abort) ---
     // If we are supposed to be moving (diving/rising) but depth hasn't changed...
-    if (!fsm->target_depth_reached && (now - fsm->last_stall_check_time >= STALL_CHECK_DURATION_MS)) {
+    // Guard: do NOT fire during EXITING stage — we're already surfacing, not stuck.
+    if (!fsm->target_depth_reached && fsm->mission_stage != STAGE_EXITING &&
+        (now - fsm->last_stall_check_time >= STALL_CHECK_DURATION_MS)) {
         float depth_change = fabsf(fsm->current_depth - fsm->stall_reference_depth);
         if (depth_change < STALL_DEPTH_THRESHOLD_M) {
             printf("!! [STALL] No depth change detected (%.3fm). Aborting mission...\n", depth_change);
