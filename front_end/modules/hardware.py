@@ -6,6 +6,7 @@ import re
 import os
 import struct
 from datetime import datetime
+from modules.constants import DEFAULT_TEAM_ID
 
 class HardwareManager:
     """Manages the serial connection and state behind the scenes."""
@@ -41,12 +42,16 @@ class HardwareManager:
         
         # HIL Simulation State
         from modules.simulator import BuoyancySimulator
+        # Use defaults for now, will sync with Pico settings on connect/start
         self.simulator = BuoyancySimulator(
             mass_g=3489,
             diameter_in=4.5,
             length_in=12,
             syringe_ml=90,
-            pool_depth_ft=15
+            pool_depth_ft=15,
+            neutral_adc=2048,
+            act_min=126,
+            act_max=3900
         )
         self.hil_enabled = False
         self.hil_start_time = None
@@ -160,90 +165,78 @@ class HardwareManager:
                     line_raw, serial_buffer = serial_buffer.split('\n', 1)
                     line = line_raw.strip()
                     if line:
-                        if line.startswith("[HIL_OUT]"):
-                            self.handle_hil_packet(line)
-                        else:
-                            # Echo other diagnostic printfs from Float to debug log
-                            with self.lock:
-                                self.console_log.append(f"[Float USB] {line}")
-                                if len(self.console_log) > 100:
-                                    self.console_log.pop(0)
+                        self.parse_incoming_line(line, from_usb=True)
             except Exception as e:
                 time.sleep(0.5)
             time.sleep(0.001)
 
     def send_command(self, cmd):
         with self.lock:
+            # 1. Primary path: Surface Station (Radio relay)
             if self.ser and self.ser.is_open:
                 try:
                     self.ser.write(f"{cmd}\n".encode('utf-8'))
                     self.console_log.append(f"[TX] > Sent: {cmd}")
                 except (serial.SerialException, OSError) as e:
-                    self.console_log.append(f"[ERROR] Connection Lost: {e}")
+                    self.console_log.append(f"[ERROR] Surface Link Lost: {e}")
                     self.ser = None
                     self.mission_status = "DISCONNECTED"
-            else:
-                self.console_log.append("[ERROR] Cannot send command: Not connected.")
+            
+            # 2. HIL path: Direct to Float USB (bypass radio)
+            # If HIL is enabled and we have a direct cable to the Pico, 
+            # we should send commands there too. This is much more reliable
+            # for bench testing and bypasses Surface FSM state restrictions.
+            if self.hil_enabled and self.hil_ser and self.hil_ser.is_open:
+                try:
+                    self.hil_ser.write(f"{cmd}\n".encode('utf-8'))
+                    # We don't duplicate the [TX] log if already sent to Surface
+                    if not (self.ser and self.ser.is_open):
+                        self.console_log.append(f"[TX-HIL] > Sent: {cmd}")
+                except Exception as e:
+                    self.console_log.append(f"[ERROR] HIL Link Write Failed: {e}")
+            
+            # Final fallback if no ports open
+            if not (self.ser and self.ser.is_open) and not (self.hil_enabled and self.hil_ser and self.hil_ser.is_open):
+                self.console_log.append("[ERROR] Cannot send command: No active connection.")
+
+    def _threaded_cmd_sequence(self, commands, delay=0.5):
+        """Runs a sequence of commands with a delay in a background thread."""
+        def run():
+            for cmd in commands:
+                self.send_command(cmd)
+                if delay > 0 and cmd != commands[-1]:
+                    time.sleep(delay)
+        threading.Thread(target=run, daemon=True).start()
 
     def update_team_id(self, val):
-        self.send_command(f"c {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"c {val}", "?"])
         
     def update_duration(self, val):
-        self.send_command(f"t {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"t {val}", "?"])
 
     def update_deep_target(self, val):
-        self.send_command(f"d {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"d {val}", "?"])
 
     def update_shallow_target(self, val):
-        self.send_command(f"u {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"u {val}", "?"])
 
     def update_num_profiles(self, val):
-        self.send_command(f"m {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"m {val}", "?"])
         
     def update_pid(self, p, i, d):
-        self.send_command(f"s {p} {i} {d}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"s {p} {i} {d}", "?"])
 
     def update_bounds(self, min_val, max_val):
-        self.send_command(f"b {min_val} {max_val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"b {min_val} {max_val}", "?"])
 
     def update_neutral_adc(self, val):
-        self.send_command(f"n {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"n {val}", "?"])
 
     def update_tolerance(self, val):
-        self.send_command(f"v {val}")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence([f"v {val}", "?"])
 
     def zero_depth(self):
-        self.send_command("z")
-        time.sleep(0.5)
-        self.console_log.append("[SYNC] Auto-Syncing...")
-        self.send_command("?")
+        self._threaded_cmd_sequence(["z", "?"])
 
     def reset_fsm(self):
         self.send_command("r")
@@ -404,6 +397,14 @@ class HardwareManager:
             self.packet_log = []
             self.data_log = []
             if self.hil_enabled:
+                # Sync current settings to simulator baseline
+                try:
+                    n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                    a_min = int(float(self.float_settings.get("ActMin", 126)))
+                    a_max = int(float(self.float_settings.get("ActMax", 3900)))
+                    self.simulator.set_calibration(n_adc, a_min, a_max)
+                except ValueError:
+                    pass
                 self.hil_start_time = None
                 self.simulator.reset()
         self.send_command('p') 
@@ -415,41 +416,21 @@ class HardwareManager:
             if m:
                 target = int(m.group(1))
                 adc = int(m.group(2))
-                state = int(m.group(3))
-                stage = int(m.group(4))
-                depth = float(m.group(5))
+                # state = int(m.group(3))
+                # stage = int(m.group(4))
+                
+                # Check for state 5 (TEST_CALIBRATE) or state 2 (PROFILING) to log data
+                is_test_mode = "State=5" in line
+                is_profiling = "State=2" in line
                 
                 # Update live settings values for metric widgets
-                self.float_settings["ADC"] = str(adc)
-                self.float_settings["TarAct"] = str(target)
-                self.float_settings["LiveDepth"] = f"{depth:.3f}"
+                with self.lock:
+                    self.float_settings["ADC"] = str(adc)
+                    self.float_settings["TarAct"] = str(target)
                 
                 if self.hil_enabled:
-                    neutral_adc = 2048
-                    try:
-                        neutral_adc = int(float(self.float_settings.get("Neutral", 2048)))
-                    except ValueError:
-                        pass
-                        
-                    act_min = 126
-                    try:
-                        act_min = int(float(self.float_settings.get("ActMin", 126)))
-                    except ValueError:
-                        pass
-                        
-                    act_max = 3900
-                    try:
-                        act_max = int(float(self.float_settings.get("ActMax", 3900)))
-                    except ValueError:
-                        pass
-                    
-                    # Run buoyancy physics step
-                    sim_depth = self.simulator.step(
-                        current_adc=adc,
-                        neutral_adc=neutral_adc,
-                        act_min=act_min,
-                        act_max=act_max
-                    )
+                    # Run buoyancy physics step using stored calibration
+                    sim_depth = self.simulator.step(current_adc=adc)
                     
                     # Feed simulated depth back to Pico
                     with self.lock:
@@ -464,43 +445,50 @@ class HardwareManager:
                             except Exception:
                                 pass
                             
-                    self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
+                        self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
                     
-                    # Log data point for live chart
-                    if self.hil_start_time is None:
-                        self.hil_start_time = time.time()
-                    rel_time_s = time.time() - self.hil_start_time
-                    
-                    # Calculate pressure in kPa for MATE 2026 compliance
-                    pressure_kpa = (sim_depth * 1000.0 * 9.80665 + 101325.0) / 1000.0
-                    
-                    try:
-                        co_id = int(float(self.float_settings.get("Co#", DEFAULT_TEAM_ID)))
-                    except ValueError:
-                        co_id = DEFAULT_TEAM_ID
+                    # Log data point for live chart (Log in HIL mode if profiling or in test mode)
+                    if is_profiling or is_test_mode:
+                        if self.hil_start_time is None:
+                            self.hil_start_time = time.time()
+                        rel_time_s = time.time() - self.hil_start_time
                         
-                    raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
-                    
-                    entry = {
-                        "Time (s)": rel_time_s,
-                        "Depth (m)": sim_depth,
-                        "Pressure (kPa)": pressure_kpa,
-                        "Actuator (ADC)": adc,
-                        "Target (ADC)": target
-                    }
-                    with self.lock:
-                        self.data_log.append(entry)
-                        if len(self.data_log) > 1000:
-                            self.data_log.pop(0)
-                        self.packet_log.append(raw_str)
-                        if len(self.packet_log) > 100:
-                            self.packet_log.pop(0)
-        except Exception:
-            pass
+                        # Calculate pressure in kPa for MATE 2026 compliance
+                        # Using 1029.0 kg/m^3 to match Pico's default fluid density
+                        pressure_kpa = (sim_depth * 1029.0 * 9.80665 + 101325.0) / 1000.0
+                        
+                        try:
+                            co_id = int(float(self.float_settings.get("Co#", DEFAULT_TEAM_ID)))
+                        except ValueError:
+                            co_id = DEFAULT_TEAM_ID
+                            
+                        raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
+                        
+                        entry = {
+                            "Time (s)": rel_time_s,
+                            "Depth (m)": sim_depth,
+                            "Pressure (kPa)": pressure_kpa,
+                            "Actuator (ADC)": adc,
+                            "Target (ADC)": target
+                        }
+                        with self.lock:
+                            # Prevent duplicate entries if simulation step is faster than telemetry
+                            if not self.data_log or self.data_log[-1]["Time (s)"] < rel_time_s:
+                                self.data_log.append(entry)
+                                if len(self.data_log) > 2000: # Increase log size for longer test runs
+                                    self.data_log.pop(0)
+                                self.packet_log.append(raw_str)
+                                if len(self.packet_log) > 100:
+                                    self.packet_log.pop(0)
+        except Exception as e:
+            with self.lock:
+                self.console_log.append(f"[ERROR] HIL Packet error: {e}")
 
     def save_profile_data(self):
         """Automatically saves mission telemetry and config to a CSV file."""
-        if not self.data_log:
+        with self.lock:
+            local_data = list(self.data_log)
+        if not local_data:
             return
 
         try:
@@ -529,22 +517,167 @@ class HardwareManager:
                 f.write("# ------------------------------------------\n")
                 
                 # Write CSV Header
-                if any("Pressure (kPa)" in entry for entry in self.data_log):
+                if any("Pressure (kPa)" in entry for entry in local_data):
                     f.write("Time (s),Depth (m),Pressure (kPa),Actuator (ADC),Target (ADC)\n")
                 else:
                     f.write("Time (s),Depth (m),Actuator (ADC),Target (ADC)\n")
                 
                 # Write Data
-                for entry in self.data_log:
+                for entry in local_data:
                     if "Pressure (kPa)" in entry:
                         line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Pressure (kPa)', 0):.2f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
                     else:
                         line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
                     f.write(line)
 
-            self.console_log.append(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
+            with self.lock:
+                self.console_log.append(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
         except Exception as e:
-            self.console_log.append(f"[ERROR] AUTO-SAVE ERROR: {e}")
+            with self.lock:
+                self.console_log.append(f"[ERROR] AUTO-SAVE ERROR: {e}")
+
+    def parse_incoming_line(self, line, from_usb=False):
+        if "HIL_OUT]" in line:
+            parts = line.split("HIL_OUT]", 1)
+            before = parts[0].strip()
+            # If before ends with '[', strip it to clean the line.
+            if before.endswith('['):
+                before = before[:-1].strip()
+            hil_part = "[HIL_OUT]" + parts[1]
+            
+            if before:
+                self.parse_incoming_line(before, from_usb=from_usb)
+                
+            self.handle_hil_packet(hil_part)
+            return
+
+        display_line = f"[Float USB] {line}" if from_usb else line
+        # Capture Surface FSM State for UI status
+        if "[DEBUG] State:" in line:
+            try:
+                state_match = re.search(r"State:\s*(\w+)", line)
+                if state_match:
+                    surface_state = state_match.group(1)
+                    # Update status if we aren't in a more specific profiling state
+                    if self.mission_status in ["IDLE", "WAITING_PROFILE", "DOWNLOADING", "DISCONNECTED"]:
+                        self.mission_status = surface_state
+            except:
+                pass
+
+        # Mission Status Logic
+        if "PRE-DIVE Packet Logged" in line:
+            self.mission_status = "PROFILING (Diving to Deep)"
+            try:
+                self.active_duration = int(self.float_settings.get("Time", 30))
+            except ValueError:
+                self.active_duration = 30
+            self.profile_start_time = None
+        elif "MISSION: Arrived at" in line:
+            stage = "Deep" if "DEEP" in line else "Shallow"
+            self.mission_status = f"PROFILING (Holding {stage})"
+            self.profile_start_time = time.time()
+        elif "Moving to" in line:
+            stage = "Shallow" if "SHALLOW" in line else "Deep"
+            self.mission_status = f"PROFILING (Moving to {stage})"
+            self.profile_start_time = None
+        elif "START DATA DUMP" in line:
+            self.mission_status = "DOWNLOADING DATA"
+            with self.lock:
+                self.data_log = []
+                self.packet_log = []
+            self.first_timestamp = None
+        elif "Download Complete" in line:
+            if self.mission_status != "MISSION COMPLETE":
+                self.mission_status = "MISSION COMPLETE"
+                self.save_profile_data()
+        elif "Profile Done" in line or "Aborting mission" in line or "ABORTING MISSION" in line or "Mission Timeout" in line or "[STALL]" in line:
+            if self.mission_status not in ["MISSION COMPLETE", "MISSION ABORTED"]:
+                self.mission_status = "MISSION COMPLETE" if "Profile Done" in line else "MISSION ABORTED"
+                self.save_profile_data()
+        elif "[SYNC]" in line:
+            matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
+            if matches:
+                for key, value in matches:
+                    if key in self.float_settings:
+                        self.float_settings[key] = value
+                with self.lock:
+                    self.console_log.append(f"[SUCCESS] UI Synced Successfully.")
+
+        # OTA Progress Detection (for smoother UI)
+        if "Progress:" in line:
+            try:
+                parts = line.split("Progress: ")[1].split("/")
+                cur = int(parts[0])
+                total = int(parts[1])
+                self.reflash_progress = int((cur/total) * 100)
+                self.last_acked_bytes = cur
+            except:
+                pass
+
+        if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
+            self.reflash_error = line
+
+        # Telemetry Log Parsing
+        m = re.search(
+            r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
+            line
+        )
+        if m:
+            try:
+                co_id = int(m.group(1))
+                time_ms = int(m.group(2))
+                depth_m = float(m.group(3))
+                pressure_kpa = float(m.group(4))
+                time_s = time_ms / 1000.0
+                raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+                with self.lock:
+                    self.packet_log.append(raw_str)
+                    if len(self.packet_log) > 100:
+                        self.packet_log.pop(0)
+            except Exception:
+                pass
+
+        # CSV Parsing Logic
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) >= 3 and parts[0].isdigit():
+            try:
+                abs_time_ms = int(parts[1])
+                depth_m = float(parts[2])
+
+                if self.first_timestamp is None:
+                    self.first_timestamp = abs_time_ms
+                rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
+
+                entry = {
+                    "Time (s)": rel_time_s,
+                    "Depth (m)": depth_m
+                }
+
+                if len(parts) >= 6:
+                    try:
+                        entry["Pressure (kPa)"] = float(parts[3])
+                        entry["Actuator (ADC)"] = int(parts[4])
+                        entry["Target (ADC)"] = int(parts[5])
+                    except ValueError:
+                        pass
+                else:
+                    if len(parts) >= 4 and parts[3].isdigit():
+                        entry["Actuator (ADC)"] = int(parts[3])
+                    if len(parts) >= 5 and parts[4].isdigit():
+                        entry["Target (ADC)"] = int(parts[4])
+
+                co_id = int(parts[0])
+                pressure_kpa = entry.get("Pressure (kPa)", 0.0)
+                raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+
+                with self.lock:
+                    self.data_log.append(entry)
+                    if raw_str not in self.packet_log:
+                        self.packet_log.append(raw_str)
+                        if len(self.packet_log) > 100:
+                            self.packet_log.pop(0)
+            except (ValueError, IndexError):
+                pass
 
     def serial_listener(self):
         serial_buffer = ""
@@ -564,130 +697,8 @@ class HardwareManager:
                     while '\n' in serial_buffer:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
-
                         if line:
-                            if line.startswith("[HIL_OUT]"):
-                                self.handle_hil_packet(line)
-                                continue
-                                
-                            with self.lock:
-                                self.console_log.append(line)
-                                if len(self.console_log) > 100: 
-                                    self.console_log.pop(0)
-
-                            # Mission Status Logic
-                            if "PRE-DIVE Packet Logged" in line: 
-                                self.mission_status = "PROFILING (Diving to Deep)"
-                                try:
-                                    self.active_duration = int(self.float_settings.get("Time", 30))
-                                except ValueError:
-                                    self.active_duration = 30
-                                self.profile_start_time = None 
-                            elif "MISSION: Arrived at" in line:
-                                stage = "Deep" if "DEEP" in line else "Shallow"
-                                self.mission_status = f"PROFILING (Holding {stage})"
-                                self.profile_start_time = time.time()
-                            elif "Moving to" in line:
-                                stage = "Shallow" if "SHALLOW" in line else "Deep"
-                                self.mission_status = f"PROFILING (Moving to {stage})"
-                                self.profile_start_time = None
-                            elif "START DATA DUMP" in line:
-                                self.mission_status = "DOWNLOADING DATA"
-                                if not self.hil_enabled:
-                                    with self.lock:
-                                        self.data_log = [] 
-                                        self.packet_log = []
-                                self.first_timestamp = None 
-                            elif "Download Complete" in line: 
-                                self.mission_status = "MISSION COMPLETE"
-                                self.save_profile_data()
-                            elif "[SYNC]" in line:
-                                matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
-                                if matches:
-                                    for key, value in matches:
-                                        if key in self.float_settings:
-                                            self.float_settings[key] = value
-                                    with self.lock:
-                                        self.console_log.append(f"[SUCCESS] UI Synced Successfully.")
-
-                            # OTA Progress Detection (for smoother UI)
-                            if "Progress:" in line:
-                                try:
-                                    # Format: "Progress: 123/456"
-                                    parts = line.split("Progress: ")[1].split("/")
-                                    cur = int(parts[0])
-                                    total = int(parts[1])
-                                    self.reflash_progress = int((cur/total) * 100)
-                                    self.last_acked_bytes = cur
-                                except:
-                                    pass
-
-                            if any(x in line for x in ["Link lost", "Stalled", "Aborting"]):
-                                self.reflash_error = line                            # Match live telemetry logs printed by surface unit
-                            # ">> PRE-DIVE Packet Logged: Co# 18 | Time 15000 ms | Depth 2.48 m | Pressure 124.30 kPa"
-                            # ">> Stored Data #1: Co# 18 | Time 16000 ms | Depth 2.48 m | Pressure 124.30 kPa"
-                            if not self.hil_enabled:
-                                m = re.search(
-                                    r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
-                                    line
-                                )
-                                if m:
-                                    try:
-                                        co_id = int(m.group(1))
-                                        time_ms = int(m.group(2))
-                                        depth_m = float(m.group(3))
-                                        pressure_kpa = float(m.group(4))
-                                        time_s = time_ms / 1000.0
-                                        raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
-                                        with self.lock:
-                                            self.packet_log.append(raw_str)
-                                            if len(self.packet_log) > 100:
-                                                self.packet_log.pop(0)
-                                    except Exception:
-                                        pass
-
-                            # CSV Parsing Logic
-                            if not self.hil_enabled:
-                                parts = [p.strip() for p in line.split(',')]
-                                if len(parts) >= 3 and parts[0].isdigit():
-                                    try:
-                                        abs_time_ms = int(parts[1])
-                                        depth_m = float(parts[2])
-
-                                        if self.first_timestamp is None:
-                                            self.first_timestamp = abs_time_ms
-                                        rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
-
-                                        entry = {
-                                            "Time (s)": rel_time_s,
-                                            "Depth (m)": depth_m
-                                        }
-
-                                        if len(parts) >= 6:
-                                            try:
-                                                entry["Pressure (kPa)"] = float(parts[3])
-                                                entry["Actuator (ADC)"] = int(parts[4])
-                                                entry["Target (ADC)"] = int(parts[5])
-                                            except ValueError:
-                                                pass
-                                        else:
-                                            if len(parts) >= 4 and parts[3].isdigit():
-                                                entry["Actuator (ADC)"] = int(parts[3])
-                                            if len(parts) >= 5 and parts[4].isdigit():
-                                                entry["Target (ADC)"] = int(parts[4])
-
-                                        co_id = int(parts[0])
-                                        pressure_kpa = entry.get("Pressure (kPa)", 0.0)
-                                        raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
-
-                                        with self.lock:
-                                            self.data_log.append(entry)
-                                            if raw_str not in self.packet_log:
-                                                self.packet_log.append(raw_str)
-                                                if len(self.packet_log) > 100:
-                                                    self.packet_log.pop(0)
-                                    except (ValueError, IndexError):
-                                        pass
+                            self.parse_incoming_line(line, from_usb=False)
                     else:
                         time.sleep(0.01)
  

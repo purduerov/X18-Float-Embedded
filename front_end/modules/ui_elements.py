@@ -27,8 +27,16 @@ def render_sidebar(hw):
             if st.button("Disconnect", use_container_width=True): hw.disconnect()
                 
         status_txt = ":green[Connected]" if hw.ser and hw.ser.is_open else ":red[Disconnected]"
-        st.write(f"**Status:** {status_txt}")
+        st.write(f"**Surface Link:** {status_txt}")
         
+        # Show Surface FSM State with warning if non-IDLE
+        surface_state = hw.mission_status
+        if surface_state == "WAITING_PROFILE":
+            st.warning("⚠️ Surface is waiting for Float. Radio commands are BLOCKED. Click RESET FSM below to return to IDLE.")
+        elif surface_state == "DOWNLOADING":
+            st.info("ℹ️ Surface is downloading data. Please wait.")
+        st.write(f"**Surface State:** `{surface_state}`")
+
         hw.hil_enabled = st.checkbox(
             "Enable HIL Simulation", 
             value=hw.hil_enabled,
@@ -143,146 +151,158 @@ def render_sidebar(hw):
 
 @st.fragment(run_every=REFRESH_RATE_S)
 def render_ota_section(hw):
-    st.header(":material/publish: OTA Reflash")
-    
-    col_load, col_upload = st.columns(2)
-    with col_load:
-        if st.button("Load Built Float Firmware", icon=":material/folder_open:", use_container_width=True, disabled=hw.reflash_in_progress, key="btn_load_fw"):
-            data, err = hw.load_local_firmware()
-            if err:
-                st.session_state["fw_data"] = None
-                st.session_state["fw_error"] = err
-                st.session_state["fw_info"] = None
-            else:
-                st.session_state["fw_data"] = data
+    with st.container():
+        st.header(":material/publish: OTA Reflash")
+        
+        col_load, col_upload = st.columns(2)
+        with col_load:
+            if st.button("Load Built Float Firmware", icon=":material/folder_open:", use_container_width=True, disabled=hw.reflash_in_progress, key="btn_load_fw"):
+                data, err = hw.load_local_firmware()
+                if err:
+                    st.session_state["fw_data"] = None
+                    st.session_state["fw_error"] = err
+                    st.session_state["fw_info"] = None
+                else:
+                    st.session_state["fw_data"] = data
+                    st.session_state["fw_error"] = None
+                    crc = hw.calculate_crc32(data)
+                    st.session_state["fw_info"] = f"Float Build: {len(data):,} bytes | CRC: 0x{crc:08X}"
+        with col_upload:
+            uploaded_file = st.file_uploader("Or Upload Custom .bin", type=["bin"], label_visibility="collapsed", key="file_uploader_fw")
+            if uploaded_file is not None:
+                st.session_state["fw_data"] = uploaded_file.getvalue()
                 st.session_state["fw_error"] = None
-                crc = hw.calculate_crc32(data)
-                st.session_state["fw_info"] = f"Float Build: {len(data):,} bytes | CRC: 0x{crc:08X}"
-    with col_upload:
-        uploaded_file = st.file_uploader("Or Upload Custom .bin", type=["bin"], label_visibility="collapsed", key="file_uploader_fw")
-        if uploaded_file is not None:
-            st.session_state["fw_data"] = uploaded_file.getvalue()
-            st.session_state["fw_error"] = None
-            crc = hw.calculate_crc32(st.session_state["fw_data"])
-            st.session_state["fw_info"] = f"Uploaded File: {len(st.session_state['fw_data']):,} bytes | CRC: 0x{crc:08X}"
+                crc = hw.calculate_crc32(st.session_state["fw_data"])
+                st.session_state["fw_info"] = f"Uploaded File: {len(st.session_state['fw_data']):,} bytes | CRC: 0x{crc:08X}"
 
-    if "fw_error" in st.session_state and st.session_state["fw_error"]:
-        st.error(st.session_state["fw_error"])
-        
-    if "fw_data" in st.session_state and st.session_state["fw_data"] is not None:
-        st.success(st.session_state["fw_info"])
-        confirm_flash = st.checkbox("Confirm firmware flash to Float", value=False, key="chk_confirm_flash")
-        if st.button("FLASH FIRMWARE", icon=":material/flash_on:", use_container_width=True, type="primary", disabled=(not confirm_flash or hw.reflash_in_progress), key="btn_flash_fw"):
-            hw.reflash_firmware(st.session_state["fw_data"])
-            st.session_state["fw_data"] = None
-            st.session_state["fw_info"] = None
-            st.rerun()
+        if "fw_error" in st.session_state and st.session_state["fw_error"]:
+            st.error(st.session_state["fw_error"])
+            
+        if "fw_data" in st.session_state and st.session_state["fw_data"] is not None:
+            st.success(st.session_state["fw_info"])
+            confirm_flash = st.checkbox("Confirm firmware flash to Float", value=False, key="chk_confirm_flash")
+            if st.button("FLASH FIRMWARE", icon=":material/flash_on:", use_container_width=True, type="primary", disabled=(not confirm_flash or hw.reflash_in_progress), key="btn_flash_fw"):
+                hw.reflash_firmware(st.session_state["fw_data"])
+                st.session_state["fw_data"] = None
+                st.session_state["fw_info"] = None
+                # st.rerun() removed for stability
 
-    if hw.reflash_in_progress:
-        st.progress(hw.reflash_progress / 100.0, text=f"Flashing... {hw.reflash_progress}%")
-        col_warn, col_cancel = st.columns([3, 1])
-        with col_warn:
-            st.warning("Do not disconnect during flash! Click Cancel to abort safely.")
-        with col_cancel:
-            if st.button("Cancel OTA", icon=":material/cancel:", use_container_width=True, type="secondary", key="btn_cancel_ota"):
-                hw.cancel_reflash()
-                st.rerun()
+        if hw.reflash_in_progress:
+            st.progress(hw.reflash_progress / 100.0, text=f"Flashing... {hw.reflash_progress}%")
+            col_warn, col_cancel = st.columns([3, 1])
+            with col_warn:
+                st.warning("Do not disconnect during flash! Click Cancel to abort safely.")
+            with col_cancel:
+                if st.button("Cancel OTA", icon=":material/cancel:", use_container_width=True, type="secondary", key="btn_cancel_ota"):
+                    hw.cancel_reflash()
+                    # st.rerun() removed for stability
 
 @st.fragment(run_every=REFRESH_RATE_S)
-def render_metrics(hw):
-    with hw.lock:
-        data_points = len(hw.data_log)
-        max_depth = 0.0
-        if data_points > 0:
-            # More efficient way to get max depth
-            max_depth = max(p.get("Depth (m)", 0.0) for p in hw.data_log)
-        latest_entry = hw.data_log[-1] if hw.data_log else {}
-
-    time_left_str = "--"
-    if hw.profile_start_time:
-        elapsed = time.time() - hw.profile_start_time
-        remaining = int(hw.active_duration - elapsed)
-        if remaining > 0:
-            time_left_str = f"{remaining}s"
-        else:
-            time_left_str = "DONE"
-            hw.profile_start_time = None
-
-    # First row: Mission Status and Countdown
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Mission State", hw.mission_status)
-    m2.metric(":material/timer: Countdown", time_left_str)
-    m3.metric(":material/height: Max Depth", f"{max_depth:.2f} m")
-    m4.metric(":material/query_stats: Data Points", data_points)
-
-    # Extract live values dynamically
-    live_depth = latest_entry.get("Depth (m)")
-    if live_depth is None:
-        val = hw.float_settings.get("LiveDepth", "--")
-        live_depth_str = f"{val} m" if val != "--" else "--"
-    else:
-        live_depth_str = f"{live_depth:.3f} m"
-        
-    live_adc = latest_entry.get("Actuator (ADC)")
-    if live_adc is None:
-        live_adc_str = hw.float_settings.get("ADC", "--")
-    else:
-        live_adc_str = str(live_adc)
-        
-    target_adc = latest_entry.get("Target (ADC)")
-    if target_adc is None:
-        target_adc_str = hw.float_settings.get("TarAct", "--")
-    else:
-        target_adc_str = str(target_adc)
-
-    pressure = latest_entry.get("Pressure (kPa)")
-    if pressure is None:
-        pressure_str = "--"
-    else:
-        pressure_str = f"{pressure:.2f} kPa"
-
-    st.markdown("")  # Spacing
+def render_dashboard_body(hw):
+    # Top Row: Key Metrics
+    render_metrics(hw)
     st.divider()
-    
-    # Second row: Live telemetry parameters
-    t1, t2, t3, t4 = st.columns(4)
-    t1.metric(":material/height: Live Depth", live_depth_str)
-    t2.metric(":material/precision_manufacturing: Actuator Position", live_adc_str)
-    t3.metric(":material/gps_fixed: Target Position", target_adc_str)
-    t4.metric(":material/compress: Pressure", pressure_str)
 
+    # Middle Row: Chart & Quick Actions
+    render_main_content(hw)
+    st.divider()
 
-@st.fragment(run_every=REFRESH_RATE_S)
-def render_packet_log(hw):
-    with hw.lock:
-        raw_packets = list(hw.packet_log)
-    
-    formatted_packets = []
-    for pkt in reversed(raw_packets):
-        escaped = html.escape(pkt)
-        styled = escaped
-        # Add highlight colors for inline telemetry items
-        styled = styled.replace("Company #", '<span style="color:#00ffcc; font-weight:bold;">Company #</span><span style="color:#ffffff; font-weight:bold;">')
-        styled = styled.replace(", Time:", '</span>, Time:<span style="color:#ffffff;">')
-        styled = styled.replace(", Pressure:", '</span>, Pressure:<span style="color:#ffcc00;">')
-        styled = styled.replace(", Depth:", '</span>, Depth:<span style="color:#39ff14;">')
-        styled += '</span>'
-        formatted_packets.append(f'<div style="margin-bottom: 6px; border-bottom: 1px dashed #142834; padding-bottom: 4px;">► {styled}</div>')
+    # Bottom Row: Serial Console
+    render_console(hw)
+
+def render_metrics(hw):
+    with st.container():
+        with hw.lock:
+            data_points = len(hw.data_log)
+            max_depth = 0.0
+            if data_points > 0:
+                # More efficient way to get max depth
+                max_depth = max(p.get("Depth (m)", 0.0) for p in hw.data_log)
+            latest_entry = hw.data_log[-1] if hw.data_log else {}
+
+        time_left_str = "--"
+        if hw.profile_start_time:
+            elapsed = time.time() - hw.profile_start_time
+            remaining = int(hw.active_duration - elapsed)
+            if remaining > 0:
+                time_left_str = f"{remaining}s"
+            else:
+                time_left_str = "DONE"
+                hw.profile_start_time = None
+
+        # First row: Mission Status and Countdown
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Mission State", hw.mission_status)
+        m2.metric(":material/timer: Countdown", time_left_str)
+        m3.metric(":material/height: Max Depth", f"{max_depth:.2f} m")
+        m4.metric(":material/query_stats: Data Points", data_points)
+
+        # Extract live values dynamically
+        live_depth = latest_entry.get("Depth (m)")
+        if live_depth is None:
+            val = hw.float_settings.get("LiveDepth", "--")
+            live_depth_str = f"{val} m" if val != "--" else "--"
+        else:
+            live_depth_str = f"{live_depth:.3f} m"
+            
+        live_adc = latest_entry.get("Actuator (ADC)")
+        if live_adc is None:
+            live_adc_str = hw.float_settings.get("ADC", "--")
+        else:
+            live_adc_str = str(live_adc)
+            
+        target_adc = latest_entry.get("Target (ADC)")
+        if target_adc is None:
+            target_adc_str = hw.float_settings.get("TarAct", "--")
+        else:
+            target_adc_str = str(target_adc)
+
+        pressure = latest_entry.get("Pressure (kPa)")
+        if pressure is None:
+            pressure_str = "--"
+        else:
+            pressure_str = f"{pressure:.2f} kPa"
+
+        st.markdown("")  # Spacing
+        st.divider()
         
-    log_html = "".join(formatted_packets)
-    container_style = (
-        f'<div style="background-color: #070f1a; color: #00ffcc; font-family: \'Courier New\', Courier, monospace; '
-        f'font-size: 14px; height: 400px; overflow-y: auto; padding: 12px; border: 1px solid #00ccff; border-radius: 5px; '
-        f'line-height: 1.5; box-shadow: inset 0 0 10px rgba(0, 204, 255, 0.2); display: flex; flex-direction: column-reverse;">'
-        f'{log_html}'
-        f'</div>'
-    )
-    st.markdown(container_style, unsafe_allow_html=True)
+        # Second row: Live telemetry parameters
+        t1, t2, t3, t4 = st.columns(4)
+        t1.metric(":material/height: Live Depth", live_depth_str)
+        t2.metric(":material/precision_manufacturing: Actuator Position", live_adc_str)
+        t3.metric(":material/gps_fixed: Target Position", target_adc_str)
+        t4.metric(":material/compress: Pressure", pressure_str)
 
-@st.fragment(run_every=REFRESH_RATE_S)
+
+def render_packet_log(hw):
+    with st.container():
+        with hw.lock:
+            raw_packets = list(hw.packet_log)
+        
+        formatted_packets = []
+        for pkt in reversed(raw_packets):
+            escaped = html.escape(pkt)
+            styled = escaped
+            # Add highlight colors for inline telemetry items
+            styled = styled.replace("Company #", '<span style="color:#00ffcc; font-weight:bold;">Company #</span><span style="color:#ffffff; font-weight:bold;">')
+            styled = styled.replace(", Time:", '</span>, Time:<span style="color:#ffffff;">')
+            styled = styled.replace(", Pressure:", '</span>, Pressure:<span style="color:#ffcc00;">')
+            styled = styled.replace(", Depth:", '</span>, Depth:<span style="color:#39ff14;">')
+            styled += '</span>'
+            formatted_packets.append(f'<div style="margin-bottom: 6px; border-bottom: 1px dashed #142834; padding-bottom: 4px;">► {styled}</div>')
+            
+        log_html = "".join(formatted_packets)
+        container_style = (
+            f'<div style="background-color: #070f1a; color: #00ffcc; font-family: \'Courier New\', Courier, monospace; '
+            f'font-size: 14px; height: 400px; overflow-y: auto; padding: 12px; border: 1px solid #00ccff; border-radius: 5px; '
+            f'line-height: 1.5; box-shadow: inset 0 0 10px rgba(0, 204, 255, 0.2); display: flex; flex-direction: column-reverse;">'
+            f'{log_html}'
+            f'</div>'
+        )
+        st.markdown(container_style, unsafe_allow_html=True)
+
 def render_charts_and_visualizer(hw):
-    chart_container = st.empty()
-    with chart_container.container():
+    with st.container():
         # Display live 2D pool animation
         render_pool_visualizer(hw)
         st.divider()
@@ -301,7 +321,7 @@ def render_charts_and_visualizer(hw):
             
         if "Time (s)" in df.columns and "Depth (m)" in df.columns:
             hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
-            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, render_mode='webgl', height=400)
+            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, height=400)
             fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
             fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
             fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
@@ -318,7 +338,7 @@ def render_charts_and_visualizer(hw):
             if "Actuator (ADC)" in df.columns:
                 with st.expander("View Actuator Position Chart", icon=":material/precision_manufacturing:"):
                     hover_cols_act = [c for c in ["Actuator (ADC)", "Target (ADC)", "Depth (m)"] if c in df.columns]
-                    fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, render_mode='webgl', height=250)
+                    fig2 = px.scatter(df, x="Time (s)", y="Actuator (ADC)", hover_data=hover_cols_act, height=250)
                     fig2.update_traces(mode='lines+markers', line=dict(color='#ffaa00', width=2), marker=dict(size=4, color='#ffaa00'))
                     fig2.update_yaxes(gridcolor='#1e293b', title_text="Actuator Position (ADC)")
                     fig2.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
@@ -393,10 +413,8 @@ def render_main_content(hw):
         
         render_charts_and_visualizer(hw)
 
-@st.fragment(run_every=REFRESH_RATE_S)
 def render_log_view(hw, search_query, log_type_filter):
-    log_container = st.empty()
-    with log_container.container():
+    with st.container():
         with hw.lock:
             raw_logs = list(hw.console_log)
             
@@ -427,9 +445,11 @@ def render_log_view(hw, search_query, log_type_filter):
             if show_line:
                 filtered_lines.append(line)
                 
-        # 3. Render colorized log window (flexbox column-reverse)
+        # 3. Render colorized log window
+        # Note: flex-direction: column-reverse breaks normal copy-paste flow.
+        # Using standard column with autoscroll script instead.
         formatted_lines = []
-        for line in reversed(filtered_lines):
+        for line in filtered_lines:
             if "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
                 color = "#ff4b4b"  # bright red
             elif "🔵" in line or "[TX]" in line or "sent:" in line.lower() or "commanding" in line.lower():
@@ -444,23 +464,31 @@ def render_log_view(hw, search_query, log_type_filter):
                 color = "#a0a5b5"  # default visible grey-blue
                 
             escaped = html.escape(line)
-            formatted_lines.append(f'<div style="color: {color}; margin-bottom: 2px;">{escaped}</div>')
+            formatted_lines.append(f'<div style="color: {color}; margin-bottom: 2px; white-space: pre-wrap; word-break: break-all;">{escaped}</div>')
             
         log_html = "".join(formatted_lines)
         
+        # Unique ID for this log session to prevent script collisions
+        log_id = f"log_container_{len(filtered_lines)}"
+        
         container_style = (
-            f'<div style="background-color: #0e1117; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
+            f'<div id="{log_id}" style="background-color: #0e1117; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
             f'font-size: 13px; height: 300px; overflow-y: auto; padding: 10px; border: 1px solid #333; border-radius: 5px; '
-            f'line-height: 1.4; display: flex; flex-direction: column-reverse;">'
+            f'line-height: 1.4; display: flex; flex-direction: column;">'
             f'{log_html}'
             f'</div>'
+            f'<script>'
+            f'    var el = document.getElementById("{log_id}");'
+            f'    if (el) el.scrollTop = el.scrollHeight;'
+            f'</script>'
         )
         st.markdown(container_style, unsafe_allow_html=True)
         
         # 4. Copy helper: Expandable raw log block
         if filtered_lines:
             with st.expander("📋 Copy Raw Log Text", expanded=False):
-                st.caption("Click the copy button in the top-right corner of the code block below to copy the filtered logs.")
+                st.caption("Standard plain text format for easy copy-pasting.")
+                # Join with standard newlines for plain text copy
                 st.code("\n".join(filtered_lines), language="text")
 
 def render_console(hw):

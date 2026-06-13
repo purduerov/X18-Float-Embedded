@@ -42,7 +42,9 @@ void console_handle_char(char c) {
     if (c == '\n' || c == '\r') {
         if (input_pos > 0) {
             input_line[input_pos] = '\0';
-            printf("\n[SERIAL] Received: %s\n", input_line);
+            if (input_line[0] != 'h' && input_line[0] != 'H') {
+                printf("\n[SERIAL] Received: %s\n", input_line);
+            }
             dispatch_command(input_line);
             input_pos = 0;
         }

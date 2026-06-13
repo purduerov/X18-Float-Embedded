@@ -22,13 +22,6 @@ st.title(f"{PAGE_ICON} MATE Floats 2026: {PAGE_TITLE}")
 # Render Sidebar (Connection & Settings)
 render_sidebar(hw)
 
-# Top Row: Key Metrics (auto-updates via internal fragment)
-render_metrics(hw)
-st.divider()
-
-# Middle Row: Chart & Quick Actions (auto-updates visualizer/plots via internal fragment)
-render_main_content(hw)
-st.divider()
-
-# Bottom Row: Serial Console (auto-updates terminal display via internal fragment)
-render_console(hw)
+# Render Unified Dashboard (auto-updates via internal fragment)
+from modules.ui_elements import render_dashboard_body
+render_dashboard_body(hw)

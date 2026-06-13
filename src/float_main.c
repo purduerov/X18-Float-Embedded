@@ -199,7 +199,24 @@ int main() {
         
         // --- Hard Recovery Check ---
         // If we drift too far, reset back to Transit
-        if (global_fsm.ctrl_state == 2 && fabs(current_depth - nominal_target) > HOVER_RECOVERY_M) {
+        bool hard_drift = false;
+        if (global_fsm.ctrl_state == 2) {
+            if (fabs(current_depth - nominal_target) > HOVER_RECOVERY_M) {
+                hard_drift = true;
+            }
+        } else if (global_fsm.ctrl_state == 1) {
+            if (global_fsm.mission_stage == STAGE_DEEP) {
+                if (current_depth > nominal_target + HOVER_RECOVERY_M) {
+                    hard_drift = true;
+                }
+            } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
+                if (current_depth < nominal_target - HOVER_RECOVERY_M) {
+                    hard_drift = true;
+                }
+            }
+        }
+
+        if (hard_drift) {
             printf("!! Control: Hard drift detected (%.2fm). Re-entering TRANSIT.\n", fabs(current_depth - nominal_target));
             global_fsm.ctrl_state = 0; // CTRL_TRANSIT
         }
