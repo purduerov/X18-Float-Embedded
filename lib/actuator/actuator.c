@@ -45,12 +45,12 @@ void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
 int actuator_get_position(Actuator *act) {
     adc_select_input(act->pos_pin - 26); 
     
-    // 256 samples for stability
+    // 32 samples for stability (reduced from 256 for better loop timing)
     uint32_t sum_samples = 0;
-    for(int i = 0; i < 256; i++) {
+    for(int i = 0; i < 32; i++) {
         sum_samples += adc_read();
     }
-    int raw_pos = (int)(sum_samples / 256);
+    int raw_pos = (int)(sum_samples / 32);
 
     // Apply moving average filter
     act->pos_history[act->filter_idx] = raw_pos;
@@ -191,7 +191,7 @@ void actuator_vref_init(void) {
 
 void actuator_vref_set(double pid_output) {
     uint slice_num = pwm_gpio_to_slice_num(PIN_VREF);
-    double abs_out = abs((int)pid_output);
+    double abs_out = fabs(pid_output);
     
     // Scale PID range to PWM duty cycle
     if (abs_out > ACT_PID_LIMIT) abs_out = ACT_PID_LIMIT;

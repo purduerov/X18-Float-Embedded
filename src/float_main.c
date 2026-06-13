@@ -64,6 +64,11 @@ static void handle_actuator(const char *params) {
 
 static void handle_profile(const char *params) {
     printf(">> [CONSOLE] Starting Profile command via serial...\n");
+    if (global_fsm.state == FLOAT_IDLE) {
+        global_fsm.state = FLOAT_PRE_DIVE;
+    } else {
+        printf(">> [CONSOLE] Ignoring: FSM must be in IDLE to start a profile.\n");
+    }
 }
 
 #ifdef HIL_MODE
@@ -136,7 +141,9 @@ int main() {
         
         // Update velocity (EMA filtered)
         if (prev_state == FLOAT_PROFILING) {
-          float raw_velocity = (depth - global_fsm.last_depth) / 0.1f;
+          float dt = (now - last_depth_pid_time) / 1000.0f;
+          if (dt <= 0.0f) dt = 0.1f; // Prevent div by zero
+          float raw_velocity = (depth - global_fsm.last_depth) / dt;
           global_fsm.filtered_velocity = (VELOCITY_EMA_ALPHA * raw_velocity) + ((1.0f - VELOCITY_EMA_ALPHA) * global_fsm.filtered_velocity);
         } else {
           global_fsm.filtered_velocity = 0.0f;
@@ -147,7 +154,7 @@ int main() {
         consecutive_sensor_failures++;
         
         // TIER 1 RECOVERY: Simple Sensor Reset
-        if (consecutive_sensor_failures == SENSOR_RESET_STRIKES) {
+        if (consecutive_sensor_failures >= SENSOR_RESET_STRIKES) {
           printf("!! [SENSOR] Reading Failed. Attempting Sensor Reset...\n");
           ms5837_begin(&depth_sensor, I2C_PORT, MS5837_UNRECOGNISED);
         }
@@ -218,11 +225,12 @@ int main() {
 
         if (hard_drift) {
             printf("!! Control: Hard drift detected (%.2fm). Re-entering TRANSIT.\n", fabs(current_depth - nominal_target));
-            global_fsm.ctrl_state = 0; // CTRL_TRANSIT
+            global_fsm.ctrl_state = CTRL_TRANSIT;
+            global_fsm.filtered_velocity = 0.0f;
         }
 
         // --- STATE MACHINE UPDATE ---
-        if (global_fsm.ctrl_state == 0) { // CTRL_TRANSIT
+        if (global_fsm.ctrl_state == CTRL_TRANSIT) { // CTRL_TRANSIT
             // 1. Actuate for transit direction
             if (depth_error < 0.0f) {
                 // Too shallow (need to dive)
@@ -246,10 +254,10 @@ int main() {
             
             if (trigger_braking && global_fsm.mission_stage != STAGE_EXITING) {
                 printf(">> Control: Transit -> BRAKING (Vel: %.3f m/s, Err: %.2f m)\n", global_fsm.filtered_velocity, depth_error);
-                global_fsm.ctrl_state = 1; // CTRL_BRAKING
+                global_fsm.ctrl_state = CTRL_BRAKING;
             }
         }
-        else if (global_fsm.ctrl_state == 1) { // CTRL_BRAKING
+        else if (global_fsm.ctrl_state == CTRL_BRAKING) { // CTRL_BRAKING
             // Command active counter-buoyancy
             if (global_fsm.mission_stage == STAGE_DEEP) {
                 // Diving: apply positive buoyancy to slow down
@@ -262,11 +270,11 @@ int main() {
             // Check if vertical speed has dropped near zero inside arrival band
             if (fabs(global_fsm.filtered_velocity) <= 0.02f && fabs(current_depth - nominal_target) <= settings.arrival_band_m) {
                 printf(">> Control: Braking -> HOVER (Target reached and stopped. Depth: %.2f m)\n", current_depth);
-                global_fsm.ctrl_state = 2; // CTRL_HOVER
+                global_fsm.ctrl_state = CTRL_HOVER;
                 global_fsm.last_nudge_time = now;
             }
         }
-        else if (global_fsm.ctrl_state == 2) { // CTRL_HOVER
+        else if (global_fsm.ctrl_state == CTRL_HOVER) { // CTRL_HOVER
             // Check for drifts and apply nudges
             bool too_deep = false;
             bool too_shallow = false;
