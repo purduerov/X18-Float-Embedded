@@ -8,7 +8,7 @@ from modules.constants import *
 
 def render_sidebar(hw):
     with st.sidebar:
-        st.header("Connection", icon=":material/power:")
+        st.header(":material/power: Connection")
         available_ports = hw.get_available_ports()
         if available_ports:
             selected_port_obj = st.selectbox(
@@ -30,7 +30,7 @@ def render_sidebar(hw):
         st.write(f"**Status:** {status_txt}")
         st.divider()
         
-        st.header("Float Settings", icon=":material/settings:")
+        st.header(":material/settings: Float Settings")
         
         if st.button("ZERO DEPTH", icon=":material/straighten:", width="stretch", type="secondary"):
             hw.zero_depth()
@@ -75,7 +75,7 @@ def render_sidebar(hw):
             if st.form_submit_button("UPDATE GAINS", width="stretch"): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
 
         st.divider()
-        st.header("Actuator Control", icon=":material/precision_manufacturing:")
+        st.header(":material/precision_manufacturing: Actuator Control")
 
         # Quick Presets
         c1, c2 = st.columns(2)
@@ -103,7 +103,7 @@ def render_sidebar(hw):
             if st.form_submit_button("SET NEUTRAL ADC", width="stretch"): hw.update_neutral_adc(int(n_adc))
 
         st.divider()
-        st.header("OTA Reflash", icon=":material/publish:")
+        st.header(":material/publish: OTA Reflash")
         
         col_load, col_upload = st.columns(2)
         with col_load:
@@ -196,7 +196,7 @@ def render_main_content(hw):
     left_col, right_col = st.columns(2, gap="large")
     
     with left_col:
-        st.subheader("Left Panel: Text/Data Log", icon=":material/terminal:")
+        st.subheader(":material/terminal: Left Panel: Text/Data Log")
         st.caption("Scrolling telemetry showing raw incoming packet strings (Depth & Pressure)")
         
         render_packet_log(hw)
@@ -217,7 +217,7 @@ def render_main_content(hw):
                 st.button("DOWNLOAD CSV", icon=":material/download:", use_container_width=True, disabled=True, key="btn_download_csv_disabled")
 
     with right_col:
-        st.subheader("Right Panel: Depth vs Time Chart", icon=":material/show_chart:")
+        st.subheader(":material/show_chart: Right Panel: Depth vs Time Chart")
         st.caption("Clean digital line graph of under-ice profile depths (No secondary Y-axis)")
         
         with hw.lock:
@@ -283,7 +283,7 @@ def render_main_content(hw):
             st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
 
 def render_console(hw):
-    st.subheader("System Debug Serial Console", icon=":material/developer_board:")
+    st.subheader(":material/developer_board: System Debug Serial Console")
     with hw.lock:
         raw_logs = list(hw.console_log)
     
