@@ -34,8 +34,8 @@ void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int ne
      * The 'neutral_adc' baseline is handled internally by the PID's integral term,
      * which is seeded at the start of the mission.
      */
-    double error = current_depth - dpid->target_depth;
-    double pid_output = 0;
+    float error = (float)(current_depth - dpid->target_depth);
+    float pid_output = 0;
     
     pid_update(&dpid->pid, error, &pid_output);
     

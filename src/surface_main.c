@@ -1,4 +1,5 @@
 #include "pico/stdlib.h"
+#include "hardware/sync.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

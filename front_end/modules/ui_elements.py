@@ -236,42 +236,6 @@ def render_metrics(hw):
         m3.metric(":material/height: Max Depth", f"{max_depth:.2f} m")
         m4.metric(":material/query_stats: Data Points", data_points)
 
-        # Extract live values dynamically
-        live_depth = latest_entry.get("Depth (m)")
-        if live_depth is None:
-            val = hw.float_settings.get("LiveDepth", "--")
-            live_depth_str = f"{val} m" if val != "--" else "--"
-        else:
-            live_depth_str = f"{live_depth:.3f} m"
-            
-        live_adc = latest_entry.get("Actuator (ADC)")
-        if live_adc is None:
-            live_adc_str = hw.float_settings.get("ADC", "--")
-        else:
-            live_adc_str = str(live_adc)
-            
-        target_adc = latest_entry.get("Target (ADC)")
-        if target_adc is None:
-            target_adc_str = hw.float_settings.get("TarAct", "--")
-        else:
-            target_adc_str = str(target_adc)
-
-        pressure = latest_entry.get("Pressure (kPa)")
-        if pressure is None:
-            pressure_str = "--"
-        else:
-            pressure_str = f"{pressure:.2f} kPa"
-
-        st.markdown("")  # Spacing
-        st.divider()
-        
-        # Second row: Live telemetry parameters
-        t1, t2, t3, t4 = st.columns(4)
-        t1.metric(":material/height: Live Depth", live_depth_str)
-        t2.metric(":material/precision_manufacturing: Actuator Position", live_adc_str)
-        t3.metric(":material/gps_fixed: Target Position", target_adc_str)
-        t4.metric(":material/compress: Pressure", pressure_str)
-
 
 def render_packet_log(hw):
     with st.container():
@@ -358,7 +322,7 @@ def render_charts_and_visualizer(hw):
             st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
             
         st.markdown("### Active Configuration")
-        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+        col_cfg1, col_cfg2, col_cfg3, col_cfg4 = st.columns(4)
         with col_cfg1:
             st.markdown(f"**FW Version:** `v{hw.float_settings.get('FW', '--')}`")
             st.markdown(f"**Company ID:** `{hw.float_settings.get('Co#', '--')}`")
@@ -371,6 +335,10 @@ def render_charts_and_visualizer(hw):
             st.markdown(f"**PID Gains:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
             st.markdown(f"**Bounds:** `{hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}`")
             st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
+        with col_cfg4:
+            st.markdown("**Live Status**")
+            st.markdown(f"**Depth:** `{hw.float_settings.get('LiveDepth', '--')} m`")
+            st.markdown(f"**ADC:** `{hw.float_settings.get('ADC', '--')}`")
 
 def render_main_content(hw):
     st.markdown("""

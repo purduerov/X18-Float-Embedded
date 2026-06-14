@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 void actuator_init(Actuator *act, uint pos_pin, uint ext_pin, uint ret_pin) {
     act->pos_pin = pos_pin;

@@ -380,27 +380,27 @@ void float_fsm_update(float_fsm_t *fsm) {
         
         // Reset sequential packet logging
         if (fsm->mission_stage == STAGE_DEEP) {
-          fsm->sample_index = (fsm->current_profile - 1) * 14;
+          fsm->sample_index = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
         } else if (fsm->mission_stage == STAGE_SHALLOW) {
-          fsm->sample_index = (fsm->current_profile - 1) * 14 + 7;
+          fsm->sample_index = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) + MAX_SAMPLES_PER_STAGE;
         }
       }
     }
 
-    // Sampling Loop (5s interval, hold phase only)
+    // Sampling Loop (Configurable interval, hold phase only)
     if (fsm->target_depth_reached && fsm->profile_start_time > 0) {
       uint32_t elapsed_ms = now - fsm->profile_start_time;
       uint32_t stage_start_idx = 0;
       if (fsm->mission_stage == STAGE_DEEP) {
-        stage_start_idx = (fsm->current_profile - 1) * 14;
+        stage_start_idx = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
       } else if (fsm->mission_stage == STAGE_SHALLOW) {
-        stage_start_idx = (fsm->current_profile - 1) * 14 + 7;
+        stage_start_idx = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) + MAX_SAMPLES_PER_STAGE;
       }
       
       uint32_t stage_sample_idx = fsm->sample_index - stage_start_idx;
-      uint32_t expected_elapsed_ms = stage_sample_idx * 5000;
+      uint32_t expected_elapsed_ms = stage_sample_idx * SAMPLE_INTERVAL_MS;
       
-      if (elapsed_ms >= expected_elapsed_ms && stage_sample_idx < 7 && fsm->sample_index < MAX_RECORDED_SAMPLES) {
+      if (elapsed_ms >= expected_elapsed_ms && stage_sample_idx < MAX_SAMPLES_PER_STAGE && fsm->sample_index < MAX_RECORDED_SAMPLES) {
         recorded_times[fsm->sample_index] = expected_elapsed_ms; 
         recorded_depths[fsm->sample_index] = fsm->current_depth;
         recorded_pressures[fsm->sample_index] = fsm->depth_sensor ? ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f : 101.325f;
@@ -417,8 +417,9 @@ void float_fsm_update(float_fsm_t *fsm) {
           }
         }
         
-        printf(">> Hold Sample %u/7 [%s]: Time %lu s | Depth %.2f m | ADC %u | TargetADC %u\n",
-               stage_sample_idx + 1,
+        printf(">> Hold Sample %u/%u [%s]: Time %lu s | Depth %.2f m | ADC %u | TargetADC %u\n",
+               (unsigned int)(stage_sample_idx + 1),
+               (unsigned int)MAX_SAMPLES_PER_STAGE,
                stage_name, expected_elapsed_ms / 1000,
                recorded_depths[fsm->sample_index], recorded_adcs[fsm->sample_index],
                recorded_target_adcs[fsm->sample_index]);

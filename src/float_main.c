@@ -1,4 +1,5 @@
 #include "hardware/i2c.h"
+#include "hardware/sync.h"
 #include "ms5837.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
@@ -80,17 +81,15 @@ volatile float hil_depth = 0.0f;
 volatile float hil_pressure = 101.325f;
 #endif
 
-static void handle_hil(const char *params) {
 #ifdef HIL_MODE
+static void handle_hil(const char *params) {
     float depth;
     if (sscanf(params, "%f", &depth) == 1) {
         hil_depth = depth;
         hil_pressure = (depth * 1000.0f * 9.80665f + 101325.0f) / 1000.0f;
     }
-#else
-    (void)params;
-#endif
 }
+#endif
 
 static void handle_team(const char *params) {
     int val;
