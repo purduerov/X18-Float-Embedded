@@ -93,8 +93,15 @@ class HardwareManager:
                         self.console_log.pop(0)
 
     def get_available_ports(self):
-        """Returns a list of ListPortInfo objects containing device, description, etc."""
-        return serial.tools.list_ports.comports()
+        """Returns a list of ListPortInfo objects, filtering out Bluetooth serial ports."""
+        all_ports = serial.tools.list_ports.comports()
+        # Filter out "Standard Serial over Bluetooth" which often causes stalls or errors
+        # Check both description and device name for "bluetooth", case-insensitive
+        filtered = [
+            p for p in all_ports 
+            if "bluetooth" not in p.description.lower() and "bluetooth" not in p.device.lower()
+        ]
+        return filtered
 
     def connect(self, port, baud=115200):
         with self.lock:

@@ -17,6 +17,26 @@ hw = get_hardware()
 # -----------------------------------------
 # 2. UI LAYOUT & DASHBOARD
 # -----------------------------------------
+st.markdown("""
+    <style>
+    /* Remove top padding from main content area */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 0rem !important;
+    }
+    /* Make the title header more compact */
+    header {
+        visibility: hidden;
+    }
+    #MainMenu {
+        visibility: hidden;
+    }
+    footer {
+        visibility: hidden;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title(f"{PAGE_ICON} MATE Floats 2026: {PAGE_TITLE}")
 
 # Render Sidebar (Connection & Settings)

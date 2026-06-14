@@ -7,24 +7,51 @@ import time
 from modules.constants import *
 
 def render_sidebar(hw):
+    st.markdown("""
+        <style>
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+            gap: 0.2rem !important;
+            padding-top: 1rem !important;
+        }
+        [data-testid="stSidebar"] .stButton > button {
+            margin-bottom: 0px !important;
+        }
+        [data-testid="stSidebar"] .stDivider {
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
+            margin-top: 0px !important;
+            margin-bottom: 0.2rem !important;
+            padding-top: 0px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     with st.sidebar:
         st.header(":material/power: Connection")
         available_ports = hw.get_available_ports()
-        if available_ports:
+        
+        # Always show a dropdown, but handle the empty case gracefully
+        if not available_ports:
+            st.selectbox("COM Port", ["No Ports Found"], disabled=True, key="empty_port_sel")
+            selected_port = None
+        else:
             selected_port_obj = st.selectbox(
                 "COM Port", 
                 available_ports, 
                 format_func=lambda x: f"{x.device} - {x.description}"
             )
             selected_port = selected_port_obj.device
-        else:
-            selected_port = st.text_input("Manual Port", "COM9")
             
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            if st.button("Connect", use_container_width=True, type="primary"): hw.connect(selected_port)
+            if st.button("Connect", use_container_width=True, type="primary", disabled=(selected_port is None)):
+                hw.connect(selected_port)
         with col2:
             if st.button("Disconnect", use_container_width=True): hw.disconnect()
+        with col3:
+            if st.button("Refresh", icon=":material/refresh:", use_container_width=True, help="Scan for new COM ports"):
+                st.rerun()
                 
         status_txt = ":green[Connected]" if hw.ser and hw.ser.is_open else ":red[Disconnected]"
         st.write(f"**Surface Link:** {status_txt}")
@@ -78,48 +105,69 @@ def render_sidebar(hw):
         
         if st.button("ZERO DEPTH", icon=":material/straighten:", use_container_width=True, type="secondary"):
             hw.zero_depth()
-        st.caption("Sets current pressure as 0.0m depth.")
-
-        if st.button("RESET FSM", icon=":material/warning:", use_container_width=True, type="primary"):
-            hw.reset_fsm()
-        st.caption("Forces the Surface and Float back to IDLE.")
 
         if st.button("TEST / CALIBRATE MODE", icon=":material/biotech:", use_container_width=True, type="secondary"):
             hw.test_mode()
-        st.caption("Continuously stream live depth and ADC.")
 
-        with st.form("team_id_form"):
-            new_id = st.number_input("Team ID", step=1, value=DEFAULT_TEAM_ID)
-            if st.form_submit_button("SET TEAM ID", use_container_width=True): hw.update_team_id(int(new_id))
-                
-        with st.form("duration_form"):
-            new_dur = st.number_input("Duration (Secs)", step=1, value=DEFAULT_DURATION_S)
-            if st.form_submit_button("SET DURATION", use_container_width=True): hw.update_duration(int(new_dur))
-
-        with st.form("deep_depth_form"):
-            new_deep = st.number_input("Deep Target (m)", step=0.1, value=DEFAULT_DEEP_TARGET)
-            if st.form_submit_button("SET DEEP TARGET", use_container_width=True): hw.update_deep_target(float(new_deep))
-
-        with st.form("shallow_depth_form"):
-            new_shallow = st.number_input("Shallow Target (m)", step=0.1, value=DEFAULT_SHALLOW_TARGET, help="Set to 0 to skip shallow stage")
-            if st.form_submit_button("SET SHALLOW TARGET", use_container_width=True): hw.update_shallow_target(float(new_shallow))
-
-        with st.form("num_profiles_form"):
-            new_count = st.number_input("Number of Profiles", step=1, value=DEFAULT_NUM_PROFILES, min_value=1)
-            if st.form_submit_button("SET PROFILE COUNT", use_container_width=True): hw.update_num_profiles(int(new_count))
-
-        with st.form("tolerance_form"):
-            new_tol = st.number_input("Arrival Tolerance (m)", min_value=0.01, max_value=2.0, step=0.01, value=0.1)
-            if st.form_submit_button("SET TOLERANCE", use_container_width=True): hw.update_tolerance(float(new_tol))
-
-        with st.form("pid_form"):
-            p_val = st.number_input("P", step=0.1, value=DEFAULT_P)
-            i_val = st.number_input("I", step=0.1, value=DEFAULT_I)
-            d_val = st.number_input("D", step=0.1, value=DEFAULT_D)
-            if st.form_submit_button("UPDATE GAINS", use_container_width=True): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
+        st.markdown("---")
+        st.write("**Quick Update**")
+        with st.form("unified_settings_form"):
+            param_label = st.selectbox("Parameter", [
+                "Manual Move (ADC)", "Team ID", "Duration (s)", 
+                "Deep Target (m)", "Shallow Target (m)", 
+                "Number of Profiles", "Arrival Tolerance (m)", 
+                "Neutral ADC", "Min ADC Limit", "Max ADC Limit"
+            ])
+            
+            # Map labels to keys to get current values
+            label_to_key = {
+                "Manual Move (ADC)": "ADC",
+                "Team ID": "Co#",
+                "Duration (s)": "Time",
+                "Deep Target (m)": "Deep",
+                "Shallow Target (m)": "Shallow",
+                "Number of Profiles": "N",
+                "Arrival Tolerance (m)": "Tol",
+                "Neutral ADC": "Neutral",
+                "Min ADC Limit": "ActMin",
+                "Max ADC Limit": "ActMax"
+            }
+            key = label_to_key[param_label]
+            curr_val_str = hw.float_settings.get(key, "0")
+            try:
+                curr_val = float(curr_val_str)
+            except (ValueError, TypeError):
+                curr_val = 0.0
+            
+            step = 1.0
+            if "(m)" in param_label: step = 0.1
+            if "Tolerance" in param_label: step = 0.01
+            if "ADC" in param_label: step = 50.0
+            
+            new_val = st.number_input("New Value", value=curr_val, step=step)
+            
+            if st.form_submit_button("SEND UPDATE / MOVE", use_container_width=True):
+                if param_label == "Manual Move (ADC)": hw.move_actuator(int(new_val))
+                elif param_label == "Team ID": hw.update_team_id(int(new_val))
+                elif param_label == "Duration (s)": hw.update_duration(int(new_val))
+                elif param_label == "Deep Target (m)": hw.update_deep_target(float(new_val))
+                elif param_label == "Shallow Target (m)": hw.update_shallow_target(float(new_val))
+                elif param_label == "Number of Profiles": hw.update_num_profiles(int(new_val))
+                elif param_label == "Arrival Tolerance (m)": hw.update_tolerance(float(new_val))
+                elif param_label == "Neutral ADC": hw.update_neutral_adc(int(new_val))
+                elif param_label == "Min ADC Limit":
+                    try:
+                        max_a = int(float(hw.float_settings.get("ActMax", 4095)))
+                    except: max_a = 4095
+                    hw.update_bounds(int(new_val), max_a)
+                elif param_label == "Max ADC Limit":
+                    try:
+                        min_a = int(float(hw.float_settings.get("ActMin", 0)))
+                    except: min_a = 0
+                    hw.update_bounds(min_a, int(new_val))
 
         st.divider()
-        st.header(":material/precision_manufacturing: Actuator Control")
+        st.header(":material/precision_manufacturing: Manual Overrides")
 
         # Quick Presets
         c1, c2 = st.columns(2)
@@ -130,21 +178,12 @@ def render_sidebar(hw):
             if st.button("SURFACE (4095)", icon=":material/arrow_upward:", use_container_width=True):
                 hw.move_actuator(4095)
 
-        with st.form("actuator_form"):
-            act_pos = st.number_input("Target Position (0-4095)", min_value=0, max_value=4095, value=DEFAULT_ACTUATOR_POS, step=100)
-            if st.form_submit_button("MOVE TO CUSTOM", use_container_width=True): 
-                hw.move_actuator(int(act_pos))
-
-        with st.form("bounds_form"):
-            st.write("**Set Limits**")
-            b_min = st.number_input("Min ADC", min_value=0, max_value=4095, value=0)
-            b_max = st.number_input("Max ADC", min_value=0, max_value=4095, value=4095)
-            if st.form_submit_button("UPDATE BOUNDS", use_container_width=True): hw.update_bounds(int(b_min), int(b_max))
-
-        with st.form("neutral_form"):
-            st.write("**Buoyancy Baseline**")
-            n_adc = st.number_input("Neutral ADC", min_value=0, max_value=4095, value=2048, step=50)
-            if st.form_submit_button("SET NEUTRAL ADC", use_container_width=True): hw.update_neutral_adc(int(n_adc))
+        with st.form("pid_form"):
+            st.write("**Buoyancy Controller (PID)**")
+            p_val = st.number_input("P (Lead)", step=0.1, value=DEFAULT_P)
+            i_val = st.number_input("I (Effort)", step=1.0, value=DEFAULT_I)
+            d_val = st.number_input("D (Deadband)", step=0.01, value=DEFAULT_D)
+            if st.form_submit_button("UPDATE GAINS", use_container_width=True): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
 
         st.divider()
         render_ota_section(hw)
@@ -198,43 +237,63 @@ def render_ota_section(hw):
 
 @st.fragment(run_every=REFRESH_RATE_S)
 def render_dashboard_body(hw):
-    # Top Row: Key Metrics
+    # Top Row: Compact Key Metrics
     render_metrics(hw)
-    st.divider()
+    
+    # Action Bar: Directly under Active Config
+    with st.container():
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.button("BEGIN PROFILE", icon=":material/play_arrow:", use_container_width=True, type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
+        with c2:
+            st.button("SYNC FROM FLOAT", icon=":material/sync:", use_container_width=True, key="btn_sync_settings", on_click=lambda: hw.send_command('?'))
+        with c3:
+            with hw.lock:
+                local_data = list(hw.data_log)
+            df_csv = pd.DataFrame(local_data).to_csv(index=False).encode('utf-8') if local_data else b""
+            st.download_button("DOWNLOAD CSV", icon=":material/download:", data=df_csv, file_name="mate_profile.csv", mime="text/csv", use_container_width=True, key="btn_download_csv", disabled=not local_data)
+        with c4:
+            # Placeholder or additional quick action (e.g. RESET)
+            if st.button("RESET FSM", icon=":material/warning:", use_container_width=True, key="btn_reset_bar", on_click=lambda: hw.reset_fsm()):
+                pass
 
-    # Middle Row: Chart & Quick Actions
-    render_main_content(hw)
-    st.divider()
+    # Main Content Area with Tabs
+    tab_mission, tab_logs = st.tabs([
+        ":material/dashboard: Mission Dashboard", 
+        ":material/list: System Logs"
+    ])
+    
+    with tab_mission:
+        # Two distinct halves
+        left_col, right_col = st.columns([1, 2], gap="medium")
+        
+        with left_col:
+            st.subheader("Telemetry Feed")
+            render_packet_log(hw)
 
-    # Bottom Row: Serial Console
-    render_console(hw)
+        with right_col:
+            st.subheader("Depth vs Time")
+            render_charts_and_visualizer(hw)
+
+    with tab_logs:
+        render_console(hw)
 
 def render_metrics(hw):
     with st.container():
-        with hw.lock:
-            data_points = len(hw.data_log)
-            max_depth = 0.0
-            if data_points > 0:
-                # More efficient way to get max depth
-                max_depth = max(p.get("Depth (m)", 0.0) for p in hw.data_log)
-            latest_entry = hw.data_log[-1] if hw.data_log else {}
-
-        time_left_str = "--"
-        if hw.profile_start_time:
-            elapsed = time.time() - hw.profile_start_time
-            remaining = int(hw.active_duration - elapsed)
-            if remaining > 0:
-                time_left_str = f"{remaining}s"
-            else:
-                time_left_str = "DONE"
-                hw.profile_start_time = None
-
-        # First row: Mission Status and Countdown
+        # Replace metrics with compact configuration summary
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Mission State", hw.mission_status)
-        m2.metric(":material/timer: Countdown", time_left_str)
-        m3.metric(":material/height: Max Depth", f"{max_depth:.2f} m")
-        m4.metric(":material/query_stats: Data Points", data_points)
+        with m1:
+            st.markdown(f"**State:** `{hw.mission_status}`")
+            st.markdown(f"**FW:** `v{hw.float_settings.get('FW', '--')}` | **ID:** `{hw.float_settings.get('Co#', '--')}`")
+        with m2:
+            st.markdown(f"**Target:** `{hw.float_settings.get('Deep', '--')}m` / `{hw.float_settings.get('Shallow', '--')}m`")
+            st.markdown(f"**PID:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
+        with m3:
+            st.markdown(f"**ADC:** `{hw.float_settings.get('ActMin', '--')}-{hw.float_settings.get('ActMax', '--')}`")
+            st.markdown(f"**Neutral:** `{hw.float_settings.get('Neutral', '--')}`")
+        with m4:
+            st.markdown(f"**Live:** `{hw.float_settings.get('LiveDepth', '--')}m`")
+            st.markdown(f"**Pos:** `{hw.float_settings.get('ADC', '--')} ADC`")
 
 
 def render_packet_log(hw):
@@ -266,9 +325,10 @@ def render_packet_log(hw):
 
 def render_charts_and_visualizer(hw):
     with st.container():
-        # Display live 2D pool animation
-        render_pool_visualizer(hw)
-        st.divider()
+        # Display live 2D pool animation ONLY in HIL mode
+        if hw.hil_enabled:
+            render_pool_visualizer(hw)
+            st.divider()
         
         with hw.lock:
             local_data = list(hw.data_log)
@@ -284,7 +344,7 @@ def render_charts_and_visualizer(hw):
             
         if "Time (s)" in df.columns and "Depth (m)" in df.columns:
             hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
-            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, height=400)
+            fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, height=350)
             fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
             fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
             fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
@@ -316,29 +376,8 @@ def render_charts_and_visualizer(hw):
             
             if not local_data:
                 st.caption("ℹ️ Waiting for profile telemetry... Start a profile to see real-time data points.")
-            else:
-                st.caption("📊 Live telemetry active.")
         else:
             st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
-            
-        st.markdown("### Active Configuration")
-        col_cfg1, col_cfg2, col_cfg3, col_cfg4 = st.columns(4)
-        with col_cfg1:
-            st.markdown(f"**FW Version:** `v{hw.float_settings.get('FW', '--')}`")
-            st.markdown(f"**Company ID:** `{hw.float_settings.get('Co#', '--')}`")
-            st.markdown(f"**Profiles (N):** `{hw.float_settings.get('N', '--')}`")
-        with col_cfg2:
-            st.markdown(f"**Deep Target:** `{hw.float_settings.get('Deep', '--')} m`")
-            st.markdown(f"**Shallow Target:** `{hw.float_settings.get('Shallow', '--')} m`")
-            st.markdown(f"**Hold Duration:** `{hw.float_settings.get('Time', '--')} s`")
-        with col_cfg3:
-            st.markdown(f"**PID Gains:** `{hw.float_settings.get('P', '--')}/{hw.float_settings.get('I', '--')}/{hw.float_settings.get('D', '--')}`")
-            st.markdown(f"**Bounds:** `{hw.float_settings.get('ActMin', '--')} - {hw.float_settings.get('ActMax', '--')}`")
-            st.markdown(f"**Neutral ADC:** `{hw.float_settings.get('Neutral', '--')}`")
-        with col_cfg4:
-            st.markdown("**Live Status**")
-            st.markdown(f"**Depth:** `{hw.float_settings.get('LiveDepth', '--')} m`")
-            st.markdown(f"**ADC:** `{hw.float_settings.get('ADC', '--')}`")
 
 def render_main_content(hw):
     st.markdown("""
