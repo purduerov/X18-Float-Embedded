@@ -82,6 +82,10 @@ bool reflash_target_process_packet(RadioLibSX127x_t *lora, uint8_t *packet, size
     
     if (msg_type == REFLASH_MSG_START && len >= sizeof(reflash_start_msg_t)) {
         reflash_start_msg_t *start = (reflash_start_msg_t *)packet;
+        if (start->total_size > SLOT_SIZE) {
+            printf("[OTA] ERROR: Start Msg size %lu exceeds slot size %lu!\n", start->total_size, (uint32_t)SLOT_SIZE);
+            return false;
+        }
         total_size = start->total_size;
         expected_master_crc = start->master_crc;
         bytes_received = 0;
