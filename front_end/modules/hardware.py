@@ -70,6 +70,7 @@ class HardwareManager:
         self.hil_ser = None
         self.hil_thread = None
         self.hil_port = None
+        self.hil_running = False
         
         self.running = True
         
@@ -168,6 +169,7 @@ class HardwareManager:
                 
                 self._safe_log(f"[SYSTEM] HIL Link connected to {port} at {baud} baud.")
                 
+                self.hil_running = True
                 # Start HIL background listening thread
                 self.hil_thread = threading.Thread(target=self.hil_serial_listener, daemon=True)
                 self.hil_thread.start()
@@ -178,6 +180,7 @@ class HardwareManager:
 
     def disconnect_hil(self):
         with self.lock:
+            self.hil_running = False
             if self.hil_ser:
                 try:
                     self.hil_ser.close()
@@ -189,7 +192,7 @@ class HardwareManager:
 
     def hil_serial_listener(self):
         serial_buffer = ""
-        while self.running:
+        while self.running and self.hil_running:
             data = None
             try:
                 with self.lock:
@@ -204,7 +207,10 @@ class HardwareManager:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
                         if line:
-                            self.parse_incoming_line(line, from_usb=True)
+                            try:
+                                self.parse_incoming_line(line, from_usb=True)
+                            except Exception as pe:
+                                self._safe_log(f"[WARN] Error parsing HIL serial line: {pe}")
                 else:
                     time.sleep(0.02)
             except Exception as e:
@@ -449,36 +455,34 @@ class HardwareManager:
     def handle_hil_packet(self, line):
         # Format: [HIL_OUT] Target=%d ADC=%d State=%d Stage=%d Depth=%.3f
         try:
-            m = re.search(r"Target=(-?\d+)\s+ADC=(\d+)\s+State=(\d+)\s+Stage=(\d+)\s+Depth=([\d\.-]+)", line)
-            if m:
-                target = int(m.group(1))
-                adc = int(m.group(2))
-                state = int(m.group(3))
-                stage = int(m.group(4))
-                
-                # Check for state 5 (TEST_CALIBRATE) or state 2 (PROFILING) to log data
-                is_test_mode = "State=5" in line
-                is_profiling = "State=2" in line
-                
-                # Update live settings values for metric widgets
-                with self.lock:
+            with self.lock:
+                m = re.search(r"Target=(-?\d+)\s+ADC=(\d+)\s+State=(\d+)\s+Stage=(\d+)\s+Depth=([\d\.-]+)", line)
+                if m:
+                    target = int(m.group(1))
+                    adc = int(m.group(2))
+                    state = int(m.group(3))
+                    stage = int(m.group(4))
+                    
+                    # Check for state 5 (TEST_CALIBRATE) or state 2 (PROFILING) to log data
+                    is_test_mode = "State=5" in line
+                    is_profiling = "State=2" in line
+                    
+                    # Update live settings values for metric widgets
                     self.float_settings["ADC"] = str(adc)
                     self.float_settings["TarAct"] = str(target)
                     self.float_settings["State"] = str(state)
                     self.float_settings["Stage"] = str(stage)
-                
-                if self.hil_enabled:
-                    # Run buoyancy physics step using stored calibration
-                    sim_depth = self.simulator.step(current_adc=adc)
                     
-                    # Update Internal metrics for UI
-                    with self.lock:
+                    if self.hil_enabled:
+                        # Run buoyancy physics step using stored calibration
+                        sim_depth = self.simulator.step(current_adc=adc)
+                        
+                        # Update Internal metrics for UI
                         self.float_settings["LiveDepth"] = f"{sim_depth:.3f}"
-                    
-                    # ONLY feed depth back if the Float is in a state expecting HIL input
-                    # (PROFILING=2 or TEST_CALIBRATE=5)
-                    if is_profiling or is_test_mode:
-                        with self.lock:
+                        
+                        # ONLY feed depth back if the Float is in a state expecting HIL input
+                        # (PROFILING=2 or TEST_CALIBRATE=5)
+                        if is_profiling or is_test_mode:
                             # 1. Send 'h' command to the direct HIL Target link
                             if self.hil_ser and self.hil_ser.is_open:
                                 try:
@@ -492,33 +496,32 @@ class HardwareManager:
                                     self.ser.write(f"h {sim_depth:.3f}\n".encode('utf-8'))
                                 except Exception as e:
                                     self._safe_log(f"[ERROR] HIL Feed failed (Surface): {e}")
-                    
-                    # Log data point for live chart (Log in HIL mode if profiling or in test mode)
-                    if is_profiling or is_test_mode:
-                        if self.hil_start_time is None:
-                            self.hil_start_time = time.time()
-                        rel_time_s = time.time() - self.hil_start_time
                         
-                        # Calculate pressure in kPa for MATE 2026 compliance
-                        # Using 1029.0 kg/m^3 to match Pico's default fluid density
-                        pressure_kpa = (sim_depth * 1029.0 * 9.80665 + 101325.0) / 1000.0
-                        
-                        try:
-                            co_id = int(float(self.float_settings.get("Co#", DEFAULT_TEAM_ID)))
-                        except ValueError:
-                            co_id = DEFAULT_TEAM_ID
+                        # Log data point for live chart (Log in HIL mode if profiling or in test mode)
+                        if is_profiling or is_test_mode:
+                            if self.hil_start_time is None:
+                                self.hil_start_time = time.time()
+                            rel_time_s = time.time() - self.hil_start_time
                             
-                        raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
-                        
-                        entry = {
-                            "Time (s)": rel_time_s,
-                            "Depth (m)": sim_depth,
-                            "Pressure (kPa)": pressure_kpa,
-                            "Actuator (ADC)": adc,
-                            "Target (ADC)": target,
-                            "State": state
-                        }
-                        with self.lock:
+                            # Calculate pressure in kPa for MATE 2026 compliance
+                            # Using 1029.0 kg/m^3 to match Pico's default fluid density
+                            pressure_kpa = (sim_depth * 1029.0 * 9.80665 + 101325.0) / 1000.0
+                            
+                            try:
+                                co_id = int(float(self.float_settings.get("Co#", DEFAULT_TEAM_ID)))
+                            except ValueError:
+                                co_id = DEFAULT_TEAM_ID
+                                
+                            raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
+                            
+                            entry = {
+                                "Time (s)": rel_time_s,
+                                "Depth (m)": sim_depth,
+                                "Pressure (kPa)": pressure_kpa,
+                                "Actuator (ADC)": adc,
+                                "Target (ADC)": target,
+                                "State": state
+                            }
                             # Prevent duplicate entries if simulation step is faster than telemetry
                             if not self.data_log or self.data_log[-1]["Time (s)"] < rel_time_s:
                                 self.data_log.append(entry)
@@ -663,10 +666,16 @@ class HardwareManager:
         elif "[SYNC]" in line:
             matches = re.findall(r'([A-Za-z0-9#]+)=([-]?[\d\.]+)', line)
             if matches:
-                for key, value in matches:
-                    if key in self.float_settings:
-                        self.float_settings[key] = value
+                with self.lock:
+                    for key, value in matches:
+                        if key in self.float_settings:
+                            self.float_settings[key] = value
                 self._safe_log("[SUCCESS] UI Synced Successfully.")
+        elif "Progress:" in line:
+            m = re.search(r"Progress:\s*(\d+)/(\d+)", line)
+            if m:
+                with self.lock:
+                    self.last_acked_bytes = int(m.group(1))
 
         # Telemetry Log Parsing
         m = re.search(
@@ -695,9 +704,11 @@ class HardwareManager:
                 abs_time_ms = int(parts[1])
                 depth_m = float(parts[2])
 
-                if self.first_timestamp is None:
-                    self.first_timestamp = abs_time_ms
-                rel_time_s = (abs_time_ms - self.first_timestamp) / 1000.0
+                with self.lock:
+                    if self.first_timestamp is None:
+                        self.first_timestamp = abs_time_ms
+                    first_ts = self.first_timestamp
+                rel_time_s = (abs_time_ms - first_ts) / 1000.0
 
                 entry = {
                     "Time (s)": rel_time_s,
@@ -768,8 +779,11 @@ class HardwareManager:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
                         if line:
-                            # Use unified iterative parser
-                            self.parse_incoming_line(line, from_usb=False)
+                            try:
+                                # Use unified iterative parser
+                                self.parse_incoming_line(line, from_usb=False)
+                            except Exception as pe:
+                                self._safe_log(f"[WARN] Error parsing serial line: {pe}")
                 else:
                     time.sleep(0.02)  # Sleep 20ms if no data to save CPU and reduce lock contention
             except (serial.SerialException, OSError, Exception) as e:
