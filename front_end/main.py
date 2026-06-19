@@ -39,9 +39,12 @@ st.markdown("""
 
 st.title(f"{PAGE_ICON} MATE Floats 2026: {PAGE_TITLE}")
 
-# Render Sidebar (Connection & Settings)
-render_sidebar(hw)
+# Render Sidebar (Connection & Settings) and get selected view
+view = render_sidebar(hw)
 
-# Render Unified Dashboard (auto-updates via internal fragment)
-from modules.ui_elements import render_dashboard_body
-render_dashboard_body(hw)
+# Render selected view
+if view == "Mission Dashboard":
+    from modules.ui_elements import render_mission_dashboard_fragment
+    render_mission_dashboard_fragment(hw)
+elif view == "System Debug Logs":
+    render_console(hw)
