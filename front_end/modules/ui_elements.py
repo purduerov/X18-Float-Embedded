@@ -233,7 +233,7 @@ def render_sidebar(hw):
 
 def render_ota_section(hw):
     with st.container():
-        st.header(":material/publish: OTA Reflash")
+        st.write("**Direct Flash Upload (.bin)**")
         
         col_load, col_upload = st.columns(2)
         with col_load:
