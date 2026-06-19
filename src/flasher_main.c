@@ -83,6 +83,9 @@ int main() {
     watchdog_enable(5000, 1);
 
     uint8_t rx_buffer[512];
+    uint8_t page_buffer[512];
+    uint32_t page_buffer_idx = 0;
+    uint32_t current_flash_addr = SLOT_1_OFFSET;
     uint32_t total_size = 0;
     uint32_t expected_master_crc = 0;
     uint32_t bytes_received = 0;
@@ -100,10 +103,16 @@ int main() {
             
             if (msg_type == REFLASH_MSG_START) {
                 reflash_start_msg_t *start = (reflash_start_msg_t *)rx_buffer;
+                if (start->total_size > SLOT_SIZE) {
+                    printf("ERROR: Start Msg size %lu exceeds slot size %lu!\n", start->total_size, (uint32_t)SLOT_SIZE);
+                    continue;
+                }
                 total_size = start->total_size;
                 expected_master_crc = start->master_crc;
                 bytes_received = 0;
                 next_seq = 0;
+                page_buffer_idx = 0;
+                current_flash_addr = SLOT_1_OFFSET;
                 
                 printf("Start Msg: Size %u, CRC 0x%08X. Erasing Slot 1...\n", total_size, expected_master_crc);
                 flash_range_erase(SLOT_1_OFFSET, SLOT_SIZE);
@@ -117,8 +126,21 @@ int main() {
                     // Verify packet CRC
                     uint32_t pkt_crc = crc32_hardware(data_pkt->data, REFLASH_CHUNK_SIZE, 0xFFFFFFFF);
                     if (pkt_crc == data_pkt->crc) {
-                        uint32_t flash_addr = SLOT_1_OFFSET + (next_seq * REFLASH_CHUNK_SIZE);
-                        flash_range_program(flash_addr, data_pkt->data, REFLASH_CHUNK_SIZE);
+                        // Buffer the incoming chunk (Chunk size is 220)
+                        memcpy(&page_buffer[page_buffer_idx], data_pkt->data, REFLASH_CHUNK_SIZE);
+                        page_buffer_idx += REFLASH_CHUNK_SIZE;
+
+                        // Write as many full 256-byte pages as we have collected
+                        while (page_buffer_idx >= 256) {
+                            flash_range_program(current_flash_addr, page_buffer, 256);
+                            current_flash_addr += 256;
+                            page_buffer_idx -= 256;
+                            
+                            // Shift leftovers to the front
+                            if (page_buffer_idx > 0) {
+                                memmove(page_buffer, &page_buffer[256], page_buffer_idx);
+                            }
+                        }
                         
                         send_ack(next_seq);
                         next_seq++;
@@ -127,6 +149,15 @@ int main() {
 
                         // Check if complete
                         if (bytes_received >= total_size) {
+                            // Ensure any remaining buffered data is flushed (should be padded to 220 by Host)
+                            if (page_buffer_idx > 0) {
+                                // Pad the rest of the 256-byte page with 0xFF
+                                memset(&page_buffer[page_buffer_idx], 0xFF, 256 - page_buffer_idx);
+                                flash_range_program(current_flash_addr, page_buffer, 256);
+                                current_flash_addr += 256;
+                                page_buffer_idx = 0;
+                            }
+
                             printf("All data received. Verifying master CRC...\n");
                             uint32_t actual_crc = crc32_hardware((const uint8_t *)(XIP_BASE + SLOT_1_OFFSET), total_size, 0xFFFFFFFF);
                             if (actual_crc == expected_master_crc) {
