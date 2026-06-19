@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import html
-import streamlit.components.v1 as components
 import time
 from modules.constants import *
 
@@ -409,37 +408,7 @@ def render_charts(hw):
         else:
             st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
 
-def render_main_content(hw):
-    st.markdown("""
-    <style>
-    div[data-testid="stButton"] button, 
-    div[data-testid="stDownloadButton"] button {
-        white-space: nowrap !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
-    # Two distinct halves
-    left_col, right_col = st.columns(2, gap="large")
-    
-    with left_col:
-        st.subheader(":material/terminal: Left Panel: Text/Data Log")
-        st.caption("Scrolling telemetry showing raw incoming packet strings (Depth & Pressure)")
-        
-        render_packet_log(hw)
-        
-        st.markdown("### Action Controls")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.button("BEGIN PROFILE", icon=":material/play_arrow:", width="stretch", type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
-        with c2:
-            st.button("SYNC FROM FLOAT", icon=":material/sync:", width="stretch", key="btn_sync_settings", on_click=lambda: hw.send_command('?'))
-
-    with right_col:
-        st.subheader(":material/show_chart: Right Panel: Depth vs Time Chart")
-        st.caption("Clean digital line graph of under-ice profile depths (No secondary Y-axis)")
-        
-        render_charts_and_visualizer(hw)
 
 @st.fragment(run_every=2.0)
 def render_log_view(hw, search_query, log_type_filter):

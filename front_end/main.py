@@ -1,6 +1,6 @@
 import streamlit as st
 from modules.hardware import HardwareManager
-from modules.ui_elements import render_sidebar, render_metrics, render_main_content, render_console
+from modules.ui_elements import render_sidebar, render_console
 from modules.constants import PAGE_TITLE, PAGE_ICON, REFRESH_RATE_S
 
 # -----------------------------------------
