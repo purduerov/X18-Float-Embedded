@@ -235,26 +235,17 @@ def render_ota_section(hw):
     with st.container():
         st.write("**Direct Flash Upload (.bin)**")
         
-        col_load, col_upload = st.columns(2)
-        with col_load:
-            if st.button("Load Built Float Firmware", icon=":material/folder_open:", width="stretch", disabled=hw.reflash_in_progress, key="btn_load_fw"):
-                data, err = hw.load_local_firmware()
-                if err:
-                    st.session_state["fw_data"] = None
-                    st.session_state["fw_error"] = err
-                    st.session_state["fw_info"] = None
-                else:
-                    st.session_state["fw_data"] = data
-                    st.session_state["fw_error"] = None
-                    crc = hw.calculate_crc32(data)
-                    st.session_state["fw_info"] = f"Float Build: {len(data):,} bytes | CRC: 0x{crc:08X}"
-        with col_upload:
-            uploaded_file = st.file_uploader("Or Upload Custom .bin", type=["bin"], label_visibility="collapsed", key="file_uploader_fw")
-            if uploaded_file is not None:
-                st.session_state["fw_data"] = uploaded_file.getvalue()
+        if st.button("Load Built Float Firmware", icon=":material/folder_open:", width="stretch", disabled=hw.reflash_in_progress, key="btn_load_fw"):
+            data, err = hw.load_local_firmware()
+            if err:
+                st.session_state["fw_data"] = None
+                st.session_state["fw_error"] = err
+                st.session_state["fw_info"] = None
+            else:
+                st.session_state["fw_data"] = data
                 st.session_state["fw_error"] = None
-                crc = hw.calculate_crc32(st.session_state["fw_data"])
-                st.session_state["fw_info"] = f"Uploaded File: {len(st.session_state['fw_data']):,} bytes | CRC: 0x{crc:08X}"
+                crc = hw.calculate_crc32(data)
+                st.session_state["fw_info"] = f"Float Build: {len(data):,} bytes | CRC: 0x{crc:08X}"
 
         if "fw_error" in st.session_state and st.session_state["fw_error"]:
             st.error(st.session_state["fw_error"])
