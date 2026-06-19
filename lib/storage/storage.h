@@ -5,7 +5,7 @@
 
 // Bump magic number whenever struct layout changes to force a clean factory reset on flash.
 // Last bumped: added __attribute__((packed)) to eliminate padding.
-#define SETTINGS_MAGIC 0x20261338
+#define SETTINGS_MAGIC 0x20261339
 
 typedef struct __attribute__((packed)) {
     float kp;

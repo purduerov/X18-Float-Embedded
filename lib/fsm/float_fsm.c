@@ -289,9 +289,9 @@ void float_fsm_update(float_fsm_t *fsm) {
   // Debug Printing
   if (now - fsm->last_debug_print >= 2000) {
     if (!reflash_target_is_in_progress()) {
-      printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u | Depth: %.3f m\n",
-             FloatStateNames[fsm->state], fsm->currently_transmitting,
-             fsm->current_actuator_pos, fsm->current_depth);
+      // printf("[DEBUG] State: %s | Transmitting: %d | ADC: %u | Depth: %.3f m\n",
+      //        FloatStateNames[fsm->state], fsm->currently_transmitting,
+      //        fsm->current_actuator_pos, fsm->current_depth);
     }
     fsm->last_debug_print = now;
   }
@@ -360,9 +360,9 @@ void float_fsm_update(float_fsm_t *fsm) {
           
           if (fsm->current_profile > 0) {
             if (fsm->mission_stage == STAGE_DEEP) {
-              fsm->sample_index = (fsm->current_profile - 1) * 14;
+              fsm->sample_index = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
             } else if (fsm->mission_stage == STAGE_SHALLOW) {
-              fsm->sample_index = (fsm->current_profile - 1) * 14 + 7;
+              fsm->sample_index = (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) + MAX_SAMPLES_PER_STAGE;
             }
           }
         }
@@ -459,10 +459,13 @@ void float_fsm_update(float_fsm_t *fsm) {
       bool stage_complete =
           (fsm->target_depth_reached &&
            (elapsed >= (uint32_t)settings.profile_duration_s * 1000));
+      uint32_t safety_timeout_s = (fsm->mission_stage == STAGE_DEEP) ?
+                                  DEEP_PROFILING_SAFETY_TIMEOUT_S :
+                                  SHALLOW_PROFILING_SAFETY_TIMEOUT_S;
       bool safety_timeout =
           (!fsm->target_depth_reached &&
            (stage_elapsed >= (uint32_t)(settings.profile_duration_s +
-                                  PROFILING_SAFETY_TIMEOUT_S) *
+                                  safety_timeout_s) *
                            1000));
 
             if (stage_complete) {

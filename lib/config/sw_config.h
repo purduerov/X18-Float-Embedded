@@ -31,16 +31,17 @@
 #define DEPTH_PID_LOOP_MS 100
 #define SURFACE_DEBUG_INTERVAL_MS 2000
 #define ARRIVAL_BAND_M 0.33f
-#define PROFILING_SAFETY_TIMEOUT_S 60
+#define DEEP_PROFILING_SAFETY_TIMEOUT_S 120
+#define SHALLOW_PROFILING_SAFETY_TIMEOUT_S 60
 #define INTEGRAL_GATE_M 0.5f
 
 // --- STALL DETECTION (Early Abort) ---
 #define STALL_CHECK_DURATION_MS 15000
 #define STALL_DEPTH_THRESHOLD_M 0.01f
 
-#define DEFAULT_PID_P 8.00f  // Increased for earlier braking (lead time)
-#define DEFAULT_PID_I 800.0f // Increased for stronger braking effort
-#define DEFAULT_PID_D 0.20f  // Increased to widen hover deadband
+#define DEFAULT_PID_P 120.0f // Moderate proportional gain to overcome motor/syringe friction
+#define DEFAULT_PID_I 0.5f   // Gentle integral accumulation for buoyancy centering
+#define DEFAULT_PID_D 25.0f  // Balanced derivative gain to damp overshoot and oscillation
 
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
@@ -51,16 +52,22 @@
 #define HOVER_ASYMM_SHALLOW_DOWN                                               \
   0.42f // Drift shallow limit before nudging down
 #define NUDGE_STEP_ADC 100
-#define NUDGE_WAIT_MS  8000U  // ms — use this instead of casting NUDGE_WAIT_S to uint32_t
-#define NUDGE_WAIT_S   8.00f  // kept for documentation; use NUDGE_WAIT_MS in comparisons
-#define HOVER_RECOVERY_M 0.80f // Increased from 0.50f to prevent premature TRANSIT fallback
+#define NUDGE_WAIT_MS                                                          \
+  8000U // ms — use this instead of casting NUDGE_WAIT_S to uint32_t
+#define NUDGE_WAIT_S                                                           \
+  8.00f // kept for documentation; use NUDGE_WAIT_MS in comparisons
+#define HOVER_RECOVERY_M                                                       \
+  0.80f // Increased from 0.50f to prevent premature TRANSIT fallback
 
 // --- Mission & Control Named Thresholds (avoids magic numbers in logic) ---
-#define SHALLOW_BIASED_TARGET_M   0.55f  // Effective target for shallow hold to avoid surfacing
-#define SURFACE_DETECTION_M       0.05f  // Depth at which we consider the float surfaced
-#define ADAPTIVE_HOLD_THRESHOLD_M 0.15f  // Max depth error to accumulate adaptive neutral ADC
-#define NEUTRAL_ADC_MIN_VALID     1300U  // Sanity bounds for learned neutral ADC
-#define NEUTRAL_ADC_MAX_VALID     2500U
+#define SHALLOW_BIASED_TARGET_M                                                \
+  0.55f // Effective target for shallow hold to avoid surfacing
+#define SURFACE_DETECTION_M                                                    \
+  0.05f // Depth at which we consider the float surfaced
+#define ADAPTIVE_HOLD_THRESHOLD_M                                              \
+  0.15f // Max depth error to accumulate adaptive neutral ADC
+#define NEUTRAL_ADC_MIN_VALID 1300U // Sanity bounds for learned neutral ADC
+#define NEUTRAL_ADC_MAX_VALID 2500U
 
 // ==========================================
 // 2. MISSION & SENSOR FAIL-SAFES
@@ -71,8 +78,9 @@
 #define SENSOR_ABORT_STRIKES 50
 
 #define SAMPLE_INTERVAL_MS 1000
-#define MAX_SAMPLES_PER_STAGE 50 
-#define MAX_RECORDED_SAMPLES (MAX_SAMPLES_PER_STAGE * 2 * 3) // Enough for 3 profiles with 2 stages each
+#define MAX_SAMPLES_PER_STAGE 50
+#define MAX_RECORDED_SAMPLES                                                   \
+  (MAX_SAMPLES_PER_STAGE * 2 * 3) // Enough for 3 profiles with 2 stages each
 
 #define RADIO_DONE_BROADCAST_MS 3000
 #define RADIO_DATA_RETRANSMIT_MS 2000

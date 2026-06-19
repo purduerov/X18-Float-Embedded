@@ -7,8 +7,8 @@ void depth_pid_init(DepthPID *dpid, double kp, double ki, double kd, double dt, 
     pid_init(&dpid->pid, kp, ki, kd, dt, (double)pos_min, (double)pos_max);
     
     // Restrict integral term specifically to the neutral buoyancy envelope to prevent windup
-    dpid->pid.integral_min = 1300.0;
-    dpid->pid.integral_max = 2500.0;
+    dpid->pid.integral_min = (double)NEUTRAL_ADC_MIN_VALID;
+    dpid->pid.integral_max = (double)NEUTRAL_ADC_MAX_VALID;
     
     // Enable Integral Gating to prevent windup during the descent.
     dpid->pid.integral_gate = (double)INTEGRAL_GATE_M;

@@ -67,7 +67,7 @@ static void storage_load(void) {
         current_settings.company_number = 18;
         current_settings.profile_duration_s = 30; // MATE req: 30s
         current_settings.depth_offset = 0.0f; // Must be explicitly zeroed before dive
-        current_settings.act_min = 120; // Safe mechanical limit
+        current_settings.act_min = 200; // Safe mechanical limit (prevent stalls at 186-189)
         current_settings.act_max = 3900; // Safe mechanical limit
         current_settings.neutral_buoyancy_adc = DEFAULT_NEUTRAL_ADC;
         current_settings.arrival_band_m = ARRIVAL_BAND_M;

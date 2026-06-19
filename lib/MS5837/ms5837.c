@@ -5,8 +5,8 @@
 #include <stdio.h> // Required for debug prints
 
 #ifdef HIL_MODE
-volatile float hil_depth = 0.0f;
-volatile float hil_pressure = 101.325f;
+extern volatile float hil_depth;
+extern volatile float hil_pressure;
 #endif
 
 // These constants define the commands sent over I2C to control the sensor.
