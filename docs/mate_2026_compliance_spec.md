@@ -84,4 +84,5 @@ This document maps the **MATE 2026 EXPLORER Class** competition rules for Task 4
 
 * **MATE Requirement:** Sufficient safety buffer to prevent premature aborts on slow transits.
 * **Firmware Constant (`lib/config/sw_config.h`):**
-  * `PROFILING_SAFETY_TIMEOUT_S` is set to **60 seconds** to allow slow buoyancy engine transit times.
+  * `DEEP_PROFILING_SAFETY_TIMEOUT_S` is set to **120 seconds** to allow slow buoyancy engine transit times to deep targets.
+  * `SHALLOW_PROFILING_SAFETY_TIMEOUT_S` is set to **60 seconds** for shallow targets.
