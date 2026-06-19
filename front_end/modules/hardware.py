@@ -10,7 +10,19 @@ from modules.constants import DEFAULT_TEAM_ID
 
 class HardwareManager:
     """Manages the serial connection and state behind the scenes."""
+    _instances = []
+
     def __init__(self):
+        # Stop any previous instances to avoid duplicate thread conflicts
+        for inst in list(HardwareManager._instances):
+            try:
+                inst.running = False
+                inst.disconnect()
+            except:
+                pass
+        HardwareManager._instances.clear()
+        HardwareManager._instances.append(self)
+
         self.ser = None
         self.data_log = []
         self.console_log = []
@@ -178,33 +190,25 @@ class HardwareManager:
     def hil_serial_listener(self):
         serial_buffer = ""
         while self.running:
-            active_ser = None
-            with self.lock:
-                if self.hil_ser and self.hil_ser.is_open:
-                    active_ser = self.hil_ser
-            
-            if not active_ser:
-                time.sleep(0.1)
-                continue
-                
+            data = None
             try:
-                data = b''
-                # Read all available bytes to avoid blocking
-                in_waiting = active_ser.in_waiting
-                if in_waiting > 0:
-                    data = active_ser.read(in_waiting)
-                    
+                with self.lock:
+                    if self.hil_ser and self.hil_ser.is_open:
+                        in_waiting = self.hil_ser.in_waiting
+                        if in_waiting > 0:
+                            data = self.hil_ser.read(in_waiting)
+                
                 if data:
                     serial_buffer += data.decode('utf-8', errors='ignore')
-                    
-                while '\n' in serial_buffer:
-                    line_raw, serial_buffer = serial_buffer.split('\n', 1)
-                    line = line_raw.strip()
-                    if line:
-                        self.parse_incoming_line(line, from_usb=True)
+                    while '\n' in serial_buffer:
+                        line_raw, serial_buffer = serial_buffer.split('\n', 1)
+                        line = line_raw.strip()
+                        if line:
+                            self.parse_incoming_line(line, from_usb=True)
+                else:
+                    time.sleep(0.02)
             except Exception as e:
                 time.sleep(0.5)
-            time.sleep(0.001)
 
     def send_command(self, cmd):
         with self.lock:
@@ -449,8 +453,8 @@ class HardwareManager:
             if m:
                 target = int(m.group(1))
                 adc = int(m.group(2))
-                # state = int(m.group(3))
-                # stage = int(m.group(4))
+                state = int(m.group(3))
+                stage = int(m.group(4))
                 
                 # Check for state 5 (TEST_CALIBRATE) or state 2 (PROFILING) to log data
                 is_test_mode = "State=5" in line
@@ -460,6 +464,8 @@ class HardwareManager:
                 with self.lock:
                     self.float_settings["ADC"] = str(adc)
                     self.float_settings["TarAct"] = str(target)
+                    self.float_settings["State"] = str(state)
+                    self.float_settings["Stage"] = str(stage)
                 
                 if self.hil_enabled:
                     # Run buoyancy physics step using stored calibration
@@ -509,7 +515,8 @@ class HardwareManager:
                             "Depth (m)": sim_depth,
                             "Pressure (kPa)": pressure_kpa,
                             "Actuator (ADC)": adc,
-                            "Target (ADC)": target
+                            "Target (ADC)": target,
+                            "State": state
                         }
                         with self.lock:
                             # Prevent duplicate entries if simulation step is faster than telemetry
@@ -555,19 +562,39 @@ class HardwareManager:
                 f.write(f"# Depth Offset: {self.float_settings.get('Off', '--')} m\n")
                 f.write("# ------------------------------------------\n")
                 
+                # Check columns present in the dataset
+                has_pressure = any("Pressure (kPa)" in entry for entry in local_data)
+                has_state = any("State" in entry for entry in local_data)
+                has_actuator = any("Actuator (ADC)" in entry for entry in local_data)
+                has_target = any("Target (ADC)" in entry for entry in local_data)
+
                 # Write CSV Header
-                if any("Pressure (kPa)" in entry for entry in local_data):
-                    f.write("Time (s),Depth (m),Pressure (kPa),Actuator (ADC),Target (ADC)\n")
-                else:
-                    f.write("Time (s),Depth (m),Actuator (ADC),Target (ADC)\n")
+                header_cols = ["Time (s)", "Depth (m)"]
+                if has_pressure:
+                    header_cols.append("Pressure (kPa)")
+                if has_actuator:
+                    header_cols.append("Actuator (ADC)")
+                if has_target:
+                    header_cols.append("Target (ADC)")
+                if has_state:
+                    header_cols.append("State")
+                f.write(",".join(header_cols) + "\n")
                 
                 # Write Data
                 for entry in local_data:
-                    if "Pressure (kPa)" in entry:
-                        line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Pressure (kPa)', 0):.2f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
-                    else:
-                        line = f"{entry.get('Time (s)', 0):.2f},{entry.get('Depth (m)', 0):.3f},{entry.get('Actuator (ADC)', 0)},{entry.get('Target (ADC)', 0)}\n"
-                    f.write(line)
+                    row_cols = [
+                        f"{entry.get('Time (s)', 0):.2f}",
+                        f"{entry.get('Depth (m)', 0):.3f}"
+                    ]
+                    if has_pressure:
+                        row_cols.append(f"{entry.get('Pressure (kPa)', 0):.2f}")
+                    if has_actuator:
+                        row_cols.append(f"{entry.get('Actuator (ADC)', 0)}")
+                    if has_target:
+                        row_cols.append(f"{entry.get('Target (ADC)', 0)}")
+                    if has_state:
+                        row_cols.append(f"{entry.get('State', 0)}")
+                    f.write(",".join(row_cols) + "\n")
 
             self._safe_log(f"[SYSTEM] AUTO-SAVE: Saved profile to {os.path.basename(filename)}")
         except Exception as e:
@@ -629,7 +656,8 @@ class HardwareManager:
             with self.lock:
                 if self.mission_status not in ["MISSION COMPLETE", "MISSION ABORTED"]:
                     self.mission_status = "MISSION COMPLETE" if "Profile Done" in line else "MISSION ABORTED"
-                    should_save = True
+                    if self.hil_enabled:
+                        should_save = True
             if should_save:
                 self.save_profile_data()
         elif "[SYNC]" in line:
@@ -695,6 +723,8 @@ class HardwareManager:
 
                 with self.lock:
                     self.data_log.append(entry)
+                    if len(self.data_log) > 2000:
+                        self.data_log.pop(0)
                     if raw_str not in self.packet_log:
                         self.packet_log.append(raw_str)
                         if len(self.packet_log) > 100:
@@ -724,34 +754,30 @@ class HardwareManager:
     def serial_listener(self):
         serial_buffer = ""
         while self.running:
-            if self.ser and self.ser.is_open:
-                try:
-                    # Read all available bytes to prevent readline() from splitting lines
-                    data = b''
-                    with self.lock:
-                        if self.ser and self.ser.is_open:
-                            in_waiting = self.ser.in_waiting
-                            if in_waiting > 0:
-                                data = self.ser.read(in_waiting)
-                    if data:
-                        serial_buffer += data.decode('utf-8', errors='ignore')
-
+            data = None
+            try:
+                with self.lock:
+                    if self.ser and self.ser.is_open:
+                        in_waiting = self.ser.in_waiting
+                        if in_waiting > 0:
+                            data = self.ser.read(in_waiting)
+                
+                if data:
+                    serial_buffer += data.decode('utf-8', errors='ignore')
                     while '\n' in serial_buffer:
                         line_raw, serial_buffer = serial_buffer.split('\n', 1)
                         line = line_raw.strip()
                         if line:
                             # Use unified iterative parser
                             self.parse_incoming_line(line, from_usb=False)
-                    else:
-                        time.sleep(0.01)
- 
-                except (serial.SerialException, OSError, Exception) as e:
-                    with self.lock:
-                        if self.ser:
-                            try: self.ser.close()
-                            except: pass
-                            self.ser = None
-                            self.mission_status = "DISCONNECTED"
-                            self._safe_log(f"[ERROR] Serial error: {e}")
-            else:
+                else:
+                    time.sleep(0.02)  # Sleep 20ms if no data to save CPU and reduce lock contention
+            except (serial.SerialException, OSError, Exception) as e:
+                with self.lock:
+                    if self.ser:
+                        try: self.ser.close()
+                        except: pass
+                        self.ser = None
+                        self.mission_status = "DISCONNECTED"
+                        self._safe_log(f"[ERROR] Serial error: {e}")
                 time.sleep(0.1)

@@ -9,7 +9,7 @@ class BuoyancySimulator:
     """
     def __init__(self, mass_g=3489, diameter_in=4.5, length_in=12, additional_volume_in3=19.311, syringe_ml=90, pool_depth_ft=15,
                  neutral_adc=2048, act_min=126, act_max=3900,
-                 temp_c=20.0, enable_noise=True, sensor_noise_std=0.002, c_added_mass=0.33,
+                 temp_c=20.0, enable_noise=True, sensor_noise_std=0.0005, c_added_mass=0.33,
                  beta_p=3.3e-6, alpha_v=6.9e-5, t0_ref=20.0):
         # Physical constants
         self.g = 9.80665  # m/s^2
