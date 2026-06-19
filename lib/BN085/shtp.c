@@ -491,18 +491,21 @@ static void processAdvertisement(shtp_t *pShtp, uint8_t *payload, uint16_t paylo
                 wake = true;
                 break;
             case TAG_APP_NAME:
-                strcpy(appName, (const char *)val);
+                strncpy(appName, (const char *)val, SHTP_APP_NAME_LEN - 1);
+                appName[SHTP_APP_NAME_LEN - 1] = '\0';
                 setAppName(pShtp, guid, appName);
             
                 break;
             case TAG_CHANNEL_NAME:
-                strcpy(chanName, (const char *)val);
-                addChannel(pShtp, chanNo, guid, (const char *)val, wake);
+                strncpy(chanName, (const char *)val, SHTP_APP_NAME_LEN - 1);
+                chanName[SHTP_APP_NAME_LEN - 1] = '\0';
+                addChannel(pShtp, chanNo, guid, chanName, wake);
 
                 // Store channel metadata
                 if (chanNo < SH2_MAX_CHANS) {
                     pShtp->chan[chanNo].guid = guid;
-                    strcpy(pShtp->chan[chanNo].chanName, chanName);
+                    strncpy(pShtp->chan[chanNo].chanName, chanName, SHTP_APP_NAME_LEN - 1);
+                    pShtp->chan[chanNo].chanName[SHTP_APP_NAME_LEN - 1] = '\0';
                     pShtp->chan[chanNo].wake = wake;
                 }
                 break;
