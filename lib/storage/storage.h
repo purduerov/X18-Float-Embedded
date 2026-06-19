@@ -22,6 +22,8 @@ typedef struct __attribute__((packed)) {
     uint16_t neutral_buoyancy_adc;
     float arrival_band_m;
     uint32_t magic_number; 
+    uint32_t sequence_number; // Added for ping-pong wear leveling and safety
+    uint32_t crc;             // Added for settings integrity validation
 } float_settings_t;
 
 // Function prototypes for accessing and modifying settings
