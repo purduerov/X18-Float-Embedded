@@ -23,6 +23,9 @@ typedef struct {
 
 // Read patch data from Flash (Slot 1)
 static int __not_in_flash_func(bootloader_read_patch)(const struct bspatch_stream* stream, void* buffer, int length) {
+    if (length < 0) {
+        return -1;
+    }
     patch_stream_state_t* state = (patch_stream_state_t*)stream->opaque;
     if (state->current_addr + length > state->max_addr) {
         return -1; // EOF or overflow
@@ -73,7 +76,7 @@ void apply_update() {
     if (sz_buf[7] & 0x80) y = -y;
     newsize = y;
 
-    if (newsize <= 0 || newsize > 1024 * 1024) { // Max 1MB app
+    if (newsize <= 0 || newsize > (1024 * 1024 - APP_OFFSET)) { // Max size is Slot 0 capacity (1MB - APP_OFFSET)
         printf("[BOOTLOADER] Invalid new size: %lld. Aborting.\n", newsize);
         return;
     }
