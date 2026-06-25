@@ -20,4 +20,7 @@ void radio_start_transmit(const uint8_t *data, size_t len);
 void radio_finish_transmit(void);
 int16_t radio_read_data(uint8_t *buffer, size_t len);
 
+float radio_get_rssi(void);
+float radio_get_snr(void);
+
 #endif // RADIO_SETUP_H
