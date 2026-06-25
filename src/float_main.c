@@ -349,35 +349,24 @@ int main() {
         }
 
         // Dynamically update PID gains and soft limits from current settings
+        float neutral_val = (float)settings.neutral_buoyancy_adc;
         depth_pid.pid.kp = settings.kp;
         depth_pid.pid.ki = settings.ki;
         depth_pid.pid.kd = settings.kd;
         depth_pid.pos_min = (int)settings.act_min;
         depth_pid.pos_max = (int)settings.act_max;
-        depth_pid.pid.output_min = (float)settings.act_min;
-        depth_pid.pid.output_max = (float)settings.act_max;
-
-        // Dynamically center the integral contribution limits around the
-        // current neutral buoyancy ADC to prevent integrator windup while fully
-        // supporting any custom/learned neutral point.
-        float neutral_val = (float)settings.neutral_buoyancy_adc;
-        depth_pid.pid.integral_min =
-            fmaxf((float)settings.act_min, neutral_val - 600.0f);
-        depth_pid.pid.integral_max =
-            fminf((float)settings.act_max, neutral_val + 600.0f);
+        depth_pid.pid.output_min = (float)settings.act_min - neutral_val;
+        depth_pid.pid.output_max = (float)settings.act_max - neutral_val;
+        depth_pid.pid.integral_min = -600.0f;
+        depth_pid.pid.integral_max = 600.0f;
 
         // Reset the PID filters and integral accumulator on fresh entry to
         // profiling
         if (prev_state != FLOAT_PROFILING) {
-          printf(">> Control: Entering PROFILING mode. Seeding PID with "
-                 "baseline Neutral ADC: %d\n",
+          printf(">> Control: Entering PROFILING mode. Neutral ADC feedforward: %d\n",
                  settings.neutral_buoyancy_adc);
           double initial_error = current_depth - (double)effective_target;
           depth_pid_reset(&depth_pid, initial_error);
-          // Seed the integral term directly with our neutral buoyancy point
-          // guess
-          pid_set_integral(&depth_pid.pid,
-                           (float)settings.neutral_buoyancy_adc);
         }
 
         // Set the active target depth inside the controller structure
