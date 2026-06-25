@@ -48,3 +48,6 @@ if view == "Mission Dashboard":
     render_mission_dashboard_fragment(hw)
 elif view == "System Debug Logs":
     render_console(hw)
+elif view == "Buoyancy Calculator & Simulator Config":
+    from modules.ui_elements import render_buoyancy_calculator
+    render_buoyancy_calculator(hw)

@@ -190,6 +190,28 @@ class HardwareManager:
                 self.hil_port = None
                 self._safe_log("[SYSTEM] HIL Link disconnected.")
 
+    def update_simulator_physical_params(self, mass_g, diameter_in, length_in, additional_volume_in3, syringe_ml, temp_c, realistic_physics):
+        with self.lock:
+            self.simulator.mass = mass_g / 1000.0
+            self.simulator.diameter = diameter_in * 0.0254
+            self.simulator.length = length_in * 0.0254
+            self.simulator.additional_volume_in3 = additional_volume_in3
+            self.simulator.syringe_volume = syringe_ml / 1e6
+            self.simulator.temp_c = temp_c
+            self.simulator.realistic_physics = realistic_physics
+            
+            # Recalculate baseline volume
+            if not realistic_physics:
+                try:
+                    n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                    a_min = int(float(self.float_settings.get("ActMin", 126)))
+                    a_max = int(float(self.float_settings.get("ActMax", 3900)))
+                    self.simulator.set_calibration(n_adc, a_min, a_max)
+                except (ValueError, AttributeError):
+                    pass
+            self.simulator.reset()
+            self._safe_log(f"[SYSTEM] HIL Simulator updated: Mass={mass_g}g, Dia={diameter_in}\", Len={length_in}\", AddVol={additional_volume_in3}in³, Syringe={syringe_ml}mL, Temp={temp_c}°C, Realistic={realistic_physics}")
+
     def hil_serial_listener(self):
         serial_buffer = ""
         while self.running and self.hil_running:

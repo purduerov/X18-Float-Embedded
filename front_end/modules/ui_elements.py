@@ -28,7 +28,11 @@ def render_sidebar(hw):
     """, unsafe_allow_html=True)
     with st.sidebar:
         st.header(":material/navigation: Navigation")
-        view = st.radio("View", ["Mission Dashboard", "System Debug Logs"], label_visibility="collapsed")
+        view = st.radio(
+            "View", 
+            ["Mission Dashboard", "System Debug Logs", "Buoyancy Calculator & Simulator Config"], 
+            label_visibility="collapsed"
+        )
         st.divider()
         st.header(":material/power: Connection")
         available_ports = hw.get_available_ports()
@@ -499,6 +503,161 @@ def render_console(hw):
         
     # Render dynamic log view fragment
     render_log_view(hw, search_query, log_type_filter)
+
+def render_buoyancy_calculator(hw):
+    import math
+    st.subheader("⚖️ Buoyancy Calculator & HIL Simulator Configurator")
+    st.markdown("""
+        This tool helps calculate the target physical weight (ballast) required for the float to achieve neutral buoyancy at the midpoint of the actuator's range. It also configures the pool physics parameters for the **Hardware-in-the-Loop (HIL) Simulator**.
+    """)
+    
+    # Pre-populate settings from the simulator instance
+    sim = hw.simulator
+    
+    col1, col2 = st.columns([1, 1], gap="large")
+    
+    with col1:
+        st.markdown("### 🛠️ Physical Parameters")
+        
+        # Dimensions
+        c_dia = st.number_input("Cylinder Outer Diameter (inches)", min_value=1.0, max_value=12.0, value=float(round(sim.diameter / 0.0254, 3)), step=0.1, format="%.3f")
+        c_len = st.number_input("Cylinder Length (inches)", min_value=1.0, max_value=36.0, value=float(round(sim.length / 0.0254, 3)), step=0.5, format="%.3f")
+        c_add = st.number_input("Additional Volume (in³) *[e.g., end caps, mounts]*", min_value=0.0, max_value=200.0, value=float(sim.additional_volume_in3), step=0.5, format="%.3f")
+        c_syr = st.number_input("Maximum Syringe Volume (mL)", min_value=10.0, max_value=500.0, value=float(round(sim.syringe_volume * 1e6, 3)), step=5.0, format="%.1f")
+        
+        st.divider()
+        st.markdown("### 🌡️ Environment & State")
+        c_temp = st.slider("Water Temperature (°C)", min_value=0.0, max_value=40.0, value=float(sim.temp_c), step=0.5)
+        
+        # Mass
+        c_mass = st.number_input("Actual Float Mass / Weight (grams)", min_value=100.0, max_value=10000.0, value=float(round(sim.mass * 1000.0, 1)), step=1.0, format="%.1f")
+        
+        st.divider()
+        st.markdown("### 🎛️ Actuator Limits & Calibration")
+        c_min_adc = st.number_input("Actuator Min ADC (Retracted)", min_value=0, max_value=4095, value=int(sim.act_min), step=10)
+        c_max_adc = st.number_input("Actuator Max ADC (Extended)", min_value=0, max_value=4095, value=int(sim.act_max), step=10)
+        c_neu_adc = st.number_input("Calibrated Neutral ADC (Settings)", min_value=0, max_value=4095, value=int(sim.neutral_adc), step=10)
+        
+        # Mode
+        c_real = st.toggle("Enable Realistic Physical Simulation", value=bool(sim.realistic_physics), help="If enabled, the simulator uses the fixed physical volume computed from dimensions. If disabled, it adapts the volume to match the calibrated Neutral ADC.")
+
+    # Calculations
+    # 1. Pure water density UNESCO EOS-80
+    T = c_temp
+    rho_w = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T**2 + 
+             1.001685e-4 * T**3 - 1.120083e-6 * T**4 + 6.536332e-9 * T**5)
+    
+    # 2. Volumes
+    dia_m = c_dia * 0.0254
+    len_m = c_len * 0.0254
+    v_cylinder_m3 = math.pi * ((dia_m / 2.0) ** 2) * len_m
+    v_cylinder_ml = v_cylinder_m3 * 1e6
+    
+    v_add_ml = c_add * 16.387064
+    v_add_m3 = v_add_ml / 1e6
+    
+    v_hull_ml = v_cylinder_ml + v_add_ml
+    v_hull_m3 = v_hull_ml / 1e6
+    
+    v_syringe_max_ml = c_syr
+    v_syringe_max_m3 = v_syringe_max_ml / 1e6
+    
+    # 3. Targets (rho_w is kg/m^3, so multiply by volume in m^3 to get kg, then 1000 for g)
+    m_midpoint = rho_w * (v_hull_m3 + 0.5 * v_syringe_max_m3) * 1000.0
+    m_min = rho_w * v_hull_m3 * 1000.0
+    m_max = rho_w * (v_hull_m3 + v_syringe_max_m3) * 1000.0
+    
+    with col2:
+        st.markdown("### 📊 Calculated Buoyancy Analysis")
+        
+        # Density card
+        st.info(f"**Water Density at {c_temp:.1f}°C:** `{rho_w:.4f} kg/m³` (or `{rho_w/1000.0:.6f} g/mL`)")
+        
+        # Volumes breakdown
+        st.markdown("#### 📏 Volume Breakdown")
+        vol_df = pd.DataFrame({
+            "Component": ["Main Cylinder Hull", "Additional External Hull", "Total Dry Hull Volume", "Syringe Range"],
+            "Volume (mL)": [round(v_cylinder_ml, 1), round(v_add_ml, 1), round(v_hull_ml, 1), f"0.0 to {v_syringe_max_ml:.1f} mL"]
+        })
+        st.table(vol_df)
+        
+        # Ballast Target Weights
+        st.markdown("#### 🎯 Target Ballast Weights for Pool (Fresh Water)")
+        
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
+        with metric_col1:
+            st.metric(
+                label="Min Weight (Retracted, 0 mL)",
+                value=f"{m_min:.1f} g",
+                help="If the float is lighter than this, it will permanently float and can never dive."
+            )
+        with metric_col2:
+            st.metric(
+                label="Midpoint Target (50%, 45/90 mL)",
+                value=f"{m_midpoint:.1f} g",
+                help="RECOMMENDED WEIGHT. Achieves neutral buoyancy when the syringe is exactly in the middle of its stroke."
+            )
+        with metric_col3:
+            st.metric(
+                label="Max Weight (Extended, 90 mL)",
+                value=f"{m_max:.1f} g",
+                help="If the float is heavier than this, it will permanently sink and can never rise."
+            )
+            
+        st.divider()
+        st.markdown("### 🔍 Current Float Status")
+        
+        # Analyze current mass
+        if c_mass > m_max:
+            deficit = c_mass - m_max
+            st.error(f"❌ **TOO HEAVY:** The float is `{c_mass:.1f} g` but max buoyancy limit is `{m_max:.1f} g`. "
+                     f"It will sink to the bottom and will NOT be able to ascend even with the syringe fully extended. "
+                     f"**Action:** Remove at least `{deficit:.1f} grams` of weight / ballast.")
+        elif c_mass < m_min:
+            surplus = m_min - c_mass
+            st.error(f"❌ **TOO LIGHT:** The float is `{c_mass:.1f} g` but minimum diving limit is `{m_min:.1f} g`. "
+                     f"It will remain floating on the surface and will NOT be able to dive even with the syringe fully retracted. "
+                     f"**Action:** Add at least `{surplus:.1f} grams` of weight / ballast.")
+        else:
+            # Valid range!
+            st.success("✔️ **VALID OPERATIONAL RANGE:** The float is inside the operational buoyancy bounds. It can actively dive and ascend.")
+            
+            # Calculate target syringe volume for hover
+            req_syr_vol_m3 = (c_mass / 1000.0) / rho_w - v_hull_m3
+            req_syr_vol_ml = req_syr_vol_m3 * 1e6
+            req_ratio = req_syr_vol_ml / v_syringe_max_ml
+            
+            expected_adc = c_min_adc + req_ratio * (c_max_adc - c_min_adc)
+            expected_adc = max(c_min_adc, min(c_max_adc, int(expected_adc)))
+            
+            st.write(f"**Required Syringe Volume to Hover:** `{req_syr_vol_ml:.2f} mL` "
+                     f"({req_ratio*100.0:.1f}% extension)")
+            st.write(f"**Expected Neutral Buoyancy ADC:** `{expected_adc}`")
+            
+            # Calibration mismatch warning
+            adc_diff = abs(c_neu_adc - expected_adc)
+            if adc_diff > 200:
+                st.warning(f"⚠️ **Calibration Mismatch:** Your current settings expect neutral buoyancy at ADC `{c_neu_adc}`, "
+                           f"but physics indicates it will actually hover around ADC `{expected_adc}` (difference of {adc_diff} counts). "
+                           f"If you use Realistic Simulation, the float will drift until the Adaptive Learning updates the neutral point. "
+                           f"**Recommendation:** Update the 'Neutral' setting on the Pico to `{expected_adc}`.")
+                           
+        st.divider()
+        if st.button("💾 Apply Configuration to HIL Simulator", type="primary", use_container_width=True):
+            hw.update_simulator_physical_params(
+                mass_g=c_mass,
+                diameter_in=c_dia,
+                length_in=c_len,
+                additional_volume_in3=c_add,
+                syringe_ml=c_syr,
+                temp_c=c_temp,
+                realistic_physics=c_real
+            )
+            # Sync min/max/neutral to simulator's internal calibration as well
+            hw.simulator.set_calibration(c_neu_adc, c_min_adc, c_max_adc)
+            st.success("Successfully synchronized and reset HIL Simulator with new physics parameters!")
+            time.sleep(1.0)
+            st.rerun()
 
 
 
