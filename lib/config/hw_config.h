@@ -14,31 +14,35 @@
 #define I2C_BAUDRATE (10 * 1000) // 10 kHz for extreme noise immunity
 
 // --- Actuator Pins ---
-#define PIN_POT 26
-#define PIN_EXT 12
-#define PIN_RET 13
-#define PIN_VREF 27
+#define PIN_POT 26  // A0
+#define PIN_EXT 12  // D12
+#define PIN_RET 13  // D13
+#define PIN_VREF 27 // A1
 
 // --- Radio (LoRa SPI) Pins ---
-#define PIN_SPI_MOSI 19
-#define PIN_SPI_SCK 18
 
 #ifdef TARGET_SURFACE
+#define PIN_SPI_SCK 18
+#define PIN_SPI_MOSI 19
 #define PIN_SPI_MISO 16
 #define PIN_CS 17  // pin 19 on breadboard on radio side
 #define PIN_RST 20 // pin 26 on breadboard on radio side
 #define PIN_IRQ 2  // pin 4 on non radio side
+#define PIN_EN 8   // pin 11 on non radio side
 #else
-#define PIN_SPI_MISO 20
+#define PIN_SPI_SCK 14
+#define PIN_SPI_MOSI 15
+#define PIN_SPI_MISO 8
 #define PIN_CS 24
-#define PIN_RST 25
-#define PIN_IRQ 9
+#define PIN_RST 25 // D25
+#define PIN_IRQ 9           // D9
+#define PIN_EN 6            // pin 11 on non radio side
+
 #endif
-#define PIN_EN 8 // pin 11 on non radio side
 
 // --- Status LED ---
-#define PIN_NEOPIXEL 16
-
+#define PIN_NEOPIXEL 21
+#define PIN_NEOPIXEL_PWR 20
 // ==========================================
 // 2. RADIO HARDWARE PARAMS
 // ==========================================

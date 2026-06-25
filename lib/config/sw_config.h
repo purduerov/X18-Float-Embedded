@@ -39,9 +39,12 @@
 #define STALL_CHECK_DURATION_MS 15000
 #define STALL_DEPTH_THRESHOLD_M 0.01f
 
-#define DEFAULT_PID_P 120.0f // Moderate proportional gain to overcome motor/syringe friction
-#define DEFAULT_PID_I 0.5f   // Gentle integral accumulation for buoyancy centering
-#define DEFAULT_PID_D 25.0f  // Balanced derivative gain to damp overshoot and oscillation
+#define DEFAULT_PID_P                                                          \
+  120.0f // Moderate proportional gain to overcome motor/syringe friction
+#define DEFAULT_PID_I                                                          \
+  0.5f // Gentle integral accumulation for buoyancy centering
+#define DEFAULT_PID_D                                                          \
+  25.0f // Balanced derivative gain to damp overshoot and oscillation
 
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
@@ -89,7 +92,7 @@
 // ==========================================
 // 3. SYSTEM SETTINGS
 // ==========================================
-#define FLOAT_ENABLE_USB_WAIT 0
+#define FLOAT_ENABLE_USB_WAIT 1
 #define SURFACE_ENABLE_USB_WAIT 1
 
 // ==========================================
