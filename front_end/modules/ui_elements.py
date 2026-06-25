@@ -517,13 +517,20 @@ def render_buoyancy_calculator(hw):
     col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("### 🛠️ Physical Parameters")
+        st.markdown("### 🛠️ Physical Parameters (Fixed)")
         
-        # Dimensions
-        c_dia = st.number_input("Cylinder Outer Diameter (inches)", min_value=1.0, max_value=12.0, value=float(round(sim.diameter / 0.0254, 3)), step=0.1, format="%.3f")
-        c_len = st.number_input("Cylinder Length (inches)", min_value=1.0, max_value=36.0, value=float(round(sim.length / 0.0254, 3)), step=0.5, format="%.3f")
-        c_add = st.number_input("Additional Volume (in³) *[e.g., end caps, mounts]*", min_value=0.0, max_value=200.0, value=float(sim.additional_volume_in3), step=0.5, format="%.3f")
-        c_syr = st.number_input("Maximum Syringe Volume (mL)", min_value=10.0, max_value=500.0, value=float(round(sim.syringe_volume * 1e6, 3)), step=5.0, format="%.1f")
+        # Fixed physical specifications of the MATE float
+        c_dia = 4.5
+        c_len = 12.0
+        c_add = 19.311
+        c_syr = 90.0
+
+        st.markdown(f"""
+        *   **Cylinder Outer Diameter:** `{c_dia:.1f} inches`
+        *   **Cylinder Length:** `{c_len:.1f} inches`
+        *   **Additional Hull Volume:** `{c_add:.3f} in³` *(end caps, sensor housings, etc.)*
+        *   **Maximum Syringe Volume:** `{c_syr:.1f} mL`
+        """)
         
         st.divider()
         st.markdown("### 🌡️ Environment & State")
@@ -577,7 +584,7 @@ def render_buoyancy_calculator(hw):
         st.markdown("#### 📏 Volume Breakdown")
         vol_df = pd.DataFrame({
             "Component": ["Main Cylinder Hull", "Additional External Hull", "Total Dry Hull Volume", "Syringe Range"],
-            "Volume (mL)": [round(v_cylinder_ml, 1), round(v_add_ml, 1), round(v_hull_ml, 1), f"0.0 to {v_syringe_max_ml:.1f} mL"]
+            "Volume (mL)": [f"{v_cylinder_ml:.1f}", f"{v_add_ml:.1f}", f"{v_hull_ml:.1f}", f"0.0 to {v_syringe_max_ml:.1f}"]
         })
         st.table(vol_df)
         
