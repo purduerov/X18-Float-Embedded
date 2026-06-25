@@ -972,7 +972,7 @@ def render_pid_analyzer(hw):
             title="Depth Response Profile",
             xaxis_title="Time (s)",
             yaxis_title="Depth (m)",
-            yaxis_reverse=True,  # Downward is positive depth
+            yaxis=dict(autorange="reversed"),  # Downward is positive depth
             template="plotly_dark",
             margin=dict(l=20, r=20, t=40, b=20),
             height=300
