@@ -927,7 +927,94 @@ def render_pid_analyzer(hw):
             metrics["shallow_jitter"] = 0.0
 
     # -----------------------------------------------------
-    # PID Diagnoses & Recommendations
+    # Read and Compile All Past Profiles (Context database)
+    # -----------------------------------------------------
+    history = []
+    for f_name in csv_files:
+        f_path = os.path.join(profiles_dir, f_name)
+        try:
+            # Parse comments
+            h_p = h_i = h_d = None
+            h_deep = 2.5
+            h_tol = 0.15
+            h_dur = 30.0
+            with open(f_path, 'r') as fh:
+                for line in fh:
+                    if not line.startswith('#'):
+                        break
+                    m_p = re.search(r"PID:\s*P=([\d\.-]+),\s*I=([\d\.-]+),\s*D=([\d\.-]+)", line)
+                    if m_p:
+                        h_p = float(m_p.group(1))
+                        h_i = float(m_p.group(2))
+                        h_d = float(m_p.group(3))
+                    m_dp = re.search(r"Deep Target:\s*([\d\.-]+)", line)
+                    if m_dp:
+                        h_deep = float(m_dp.group(1))
+                    m_tl = re.search(r"Arrival Tolerance:\s*([\d\.-]+)", line)
+                    if m_tl:
+                        h_tol = float(m_tl.group(1))
+                    m_dr = re.search(r"Hold Duration:\s*([\d\.-]+)", line)
+                    if m_dr:
+                        h_dur = float(m_dr.group(1))
+                        
+            if h_p is None:
+                continue
+                
+            h_df = pd.read_csv(f_path, comment='#')
+            if h_df.empty or len(h_df) < 20:
+                continue
+                
+            # Filter to state 2
+            if "State" in h_df.columns:
+                h_df_prof = h_df[h_df["State"] == 2]
+                if h_df_prof.empty: h_df_prof = h_df
+            else:
+                h_df_prof = h_df
+                
+            h_t0 = h_df_prof["Time (s)"].iloc[0]
+            h_time = h_df_prof["Time (s)"] - h_t0
+            h_depth = h_df_prof["Depth (m)"]
+            h_act = h_df_prof.get("Actuator (ADC)", pd.Series(dtype=float))
+            
+            # Find arrival
+            h_arr_idx = None
+            for idx, d_val in enumerate(h_depth):
+                if abs(d_val - h_deep) <= h_tol:
+                    h_arr_idx = idx
+                    break
+                    
+            if h_arr_idx is not None:
+                h_arr_t = h_time.iloc[h_arr_idx]
+                h_hold_end = h_arr_t + h_dur
+                h_hold_df = h_df_prof[(h_time >= h_arr_t) & (h_time <= h_hold_end)]
+                if not h_hold_df.empty:
+                    hh_depth = h_hold_df["Depth (m)"]
+                    hh_act = h_hold_df["Actuator (ADC)"] if "Actuator (ADC)" in h_hold_df.columns else pd.Series([0])
+                    
+                    h_overshoot = max(0.0, max(h_depth.iloc[:h_hold_df.index[-1] + 1 - h_df_prof.index[0]]) - h_deep)
+                    h_sse = abs(hh_depth - h_deep).mean()
+                    h_crossings = 0
+                    for k in range(len(hh_depth) - 1):
+                        if (hh_depth.iloc[k] - h_deep < 0 and hh_depth.iloc[k+1] - h_deep >= 0) or \
+                           (hh_depth.iloc[k] - h_deep > 0 and hh_depth.iloc[k+1] - h_deep <= 0):
+                            h_crossings += 1
+                    h_jitter = abs(hh_act.diff()).sum() / h_dur if h_dur > 0 else 0.0
+                    
+                    history.append({
+                        "file": f_name,
+                        "P": h_p, "I": h_i, "D": h_d,
+                        "arrived": True,
+                        "rise_time": h_arr_t,
+                        "overshoot": h_overshoot,
+                        "sse": h_sse,
+                        "oscillations": h_crossings,
+                        "jitter": h_jitter
+                    })
+        except:
+            pass
+
+    # -----------------------------------------------------
+    # PID Diagnoses & Recommendations (Adaptive Context-Aware Tuner)
     # -----------------------------------------------------
     diagnoses = []
     
@@ -935,36 +1022,75 @@ def render_pid_analyzer(hw):
     suggest_i = p_i
     suggest_d = p_d
     
-    # 1. Evaluate P (Rise Time & Overshoot)
+    # 1. Search for best historical profile in database
+    best_run = None
+    best_score = float('inf')
+    for h in history:
+        if not h["arrived"]:
+            continue
+        # Penalty score favoring rise time ~25s, overshoot < 0.4m, sse < 0.2m, jitter < 15.0
+        score = (
+            (h["rise_time"] - 25.0)**2 / 100.0 +
+            (h["overshoot"] / 0.2)**2 +
+            (h["sse"] / 0.1)**2 +
+            (h["jitter"] / 10.0)**2
+        )
+        if score < best_score:
+            best_score = score
+            best_run = h
+
+    # 2. Heuristic and physical relationship predictor
+    # P tuning: Based on square-law correlation between P and rise time: rise_time = C / sqrt(P)
     if metrics["deep_rise_time"] is None:
         diagnoses.append("⚠️ **Slow Dive Response:** Float never reached the deep target tolerance band. Proportional gain is likely too low to overcome drag/buoyancy.")
-        suggest_p = p_p * 1.3  # Increase P
-    elif metrics["deep_rise_time"] > 45.0:
-        diagnoses.append(f"⚠️ **Sluggish Dive:** Took {metrics['deep_rise_time']:.1f}s to reach target. Increase P to rise/fall faster.")
-        suggest_p = p_p * 1.2
-        
-    if metrics.get("deep_overshoot", 0.0) > (t_deep * 0.15) or metrics.get("deep_oscillations", 0) > 3:
-        diagnoses.append(f"⚠️ **Unstable Oscillation / Overshoot:** Overshoot of {metrics.get('deep_overshoot', 0.0):.2f}m detected with {metrics.get('deep_oscillations', 0)} target crossings. Proportional gain P is too aggressive, or D is too weak.")
-        suggest_p = p_p * 0.8  # Decrease P
-        suggest_d = max(p_d, 10.0) + 15.0  # Add damping
-        
-    # 2. Evaluate I (Steady State Error)
-    if metrics.get("deep_sse", 0.0) > 0.05:
-        diagnoses.append(f"⚠️ **High Steady-State Error:** Holds with an average offset of {metrics.get('deep_sse', 0.0):.2f}m during deep hover. Integral gain is insufficient to resolve ballast offsets.")
-        suggest_i = max(p_i, 0.1) + 0.15  # Add integral
-        
-    # 3. Evaluate D (High Frequency Actuator Jitter)
-    if metrics.get("deep_jitter", 0.0) > 200.0:
-        diagnoses.append(f"⚠️ **Actuator Jitter / Hunting:** High frequency motor movement detected during hold ({metrics.get('deep_jitter', 0.0):.1f} counts/s). Derivative gain D is likely too high, amplifying noise, or position deadzone is too narrow.")
-        suggest_d = p_d * 0.7  # Reduce D
-        
-    # Cap values to sensible floats
-    suggest_p = round(max(0.0, min(300.0, suggest_p)), 2)
+        if best_run:
+            suggest_p = best_run["P"]
+            diagnoses.append(f"💡 **Context Recommendation:** Anchoring to best successful run ({best_run['file']}) P value: `{suggest_p:.2f}`.")
+        else:
+            suggest_p = p_p * 1.5
+    else:
+        curr_rt = metrics["deep_rise_time"]
+        if curr_rt > 35.0:
+            est_p = p_p * ((curr_rt / 25.0) ** 2)
+            suggest_p = max(p_p * 1.1, min(p_p * 1.5, est_p))
+            diagnoses.append(f"⚠️ **Sluggish Response:** Took {curr_rt:.1f}s to reach target. Physical modeling predicts a P of `{suggest_p:.2f}` is needed for a 25s rise time.")
+        elif curr_rt < 20.0:
+            est_p = p_p * ((curr_rt / 25.0) ** 2)
+            suggest_p = min(p_p * 0.9, max(p_p * 0.5, est_p))
+            diagnoses.append(f"⚠️ **Over-aggressive Response:** Reached target extremely quickly ({curr_rt:.1f}s). Physical modeling predicts reducing P to `{suggest_p:.2f}` to prevent potential overshoot.")
+
+    # D tuning (damping): Adjust based on overshoot & oscillations.
+    curr_os = metrics.get("deep_overshoot", 0.0)
+    curr_osc = metrics.get("deep_oscillations", 0)
+    curr_jit = metrics.get("deep_jitter", 0.0)
+    
+    if curr_os > 0.4 or curr_osc > 2:
+        diagnoses.append(f"⚠️ **Overshoot/Oscillation:** Overshoot of {curr_os:.2f}m and {curr_osc} target crossings. Increasing derivative gain D to damp oscillations.")
+        suggest_d = p_d + 20.0 * (curr_os + 0.1)
+        if curr_os > 0.6:
+            suggest_p = suggest_p * 0.85
+
+    # Actuator hunting protection (jitter)
+    if curr_jit > 15.0:
+        suggest_d = p_d * max(0.5, min(0.9, 15.0 / curr_jit))
+        diagnoses.append(f"⚠️ **Actuator Hunting/Motor Stress:** High jitter of {curr_jit:.1f} counts/s. Reducing D to `{suggest_d:.2f}` to suppress high-frequency noise amplification.")
+
+    # I tuning (Buoyancy correction): Adjust based on SSE
+    curr_sse = metrics.get("deep_sse", 0.0)
+    if curr_sse > 0.05:
+        suggest_i = p_i + 1.2 * curr_sse
+        diagnoses.append(f"⚠️ **Buoyancy Offset (Steady-State Error):** Hovering with a {curr_sse:.2f}m offset. Increasing integral gain I to `{suggest_i:.2f}` to center the float.")
+
+    # 3. Apply bounding box limits
+    suggest_p = round(max(5.0, min(300.0, suggest_p)), 2)
     suggest_i = round(max(0.0, min(10.0, suggest_i)), 2)
-    suggest_d = round(max(0.0, min(100.0, suggest_d)), 2)
+    suggest_d = round(max(0.0, min(150.0, suggest_d)), 2)
     
     if not diagnoses:
-        diagnoses.append("✨ **EXCELLENT PID PERFORMANCE:** No significant sluggishness, overshoot, steady-state error, or actuator jitter detected. The current gains are optimal!")
+        if best_run:
+            diagnoses.append(f"🏆 **EXCELLENT PID PERFORMANCE:** No issues detected. Current gains match optimal historical behavior found in `{best_run['file']}` (P={best_run['P']}, I={best_run['I']}, D={best_run['D']}).")
+        else:
+            diagnoses.append("✨ **EXCELLENT PID PERFORMANCE:** No significant sluggishness, overshoot, steady-state error, or actuator jitter detected. The current gains are optimal!")
 
     # -----------------------------------------------------
     # Render Plots
@@ -1075,6 +1201,15 @@ def render_pid_analyzer(hw):
         st.table(rec_df)
         
     with suggest_col2:
+        if best_run:
+            st.success(
+                f"🏆 **Optimal Historical Match Found:** `{best_run['file']}`\n\n"
+                f"*   **Optimal PID:** `P={best_run['P']:.2f} | I={best_run['I']:.2f} | D={best_run['D']:.2f}`\n"
+                f"*   **Optimal Metrics:** Rise Time: `{best_run['rise_time']:.1f}s` | Overshoot: `{best_run['overshoot']:.2f}m` | SSE: `{best_run['sse']:.2f}m` | Jitter: `{best_run['jitter']:.1f} c/s`"
+            )
+        else:
+            st.info("ℹ️ **No Historical Reference:** No successful prior profile runs found yet to anchor comparisons.")
+
         st.markdown("#### Apply Recommendations")
         st.write("Clicking the button below will send the suggested PID parameters directly to the connected float unit (over USB/Serial).")
         
