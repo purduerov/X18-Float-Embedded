@@ -113,7 +113,9 @@ int16_t RadioLib_SX127x_Begin(RadioLibSX127x_t* chip, uint8_t syncWord, uint16_t
     RadioLib_Module_Init(chip->mod);
     
     // 2. Check SPI connection
-    uint8_t version = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_VERSION);
+    uint8_t version =
+        RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_VERSION);
+    printf("%02x\n", version);
     if (version == 0x00 || version == 0xFF) return -2; // RADIOLIB_ERR_CHIP_NOT_FOUND
 
     // 3. FORCE SLEEP MODE (Required to switch to LoRa)
@@ -336,4 +338,29 @@ int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t* chip) {
     // Clear IRQ flags and return to standby
     RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
     return setMode(chip, RADIOLIB_SX127X_STANDBY);
+}
+
+float RadioLib_SX127x_GetSNR(RadioLibSX127x_t *chip) {
+  // Read raw SNR register value as a signed 8-bit integer
+  int8_t rawSnr = (int8_t)RadioLib_Module_SPIreadRegister(
+      chip->mod, RADIOLIB_SX127X_REG_PKT_SNR_VALUE);
+  return ((float)rawSnr / 4.0f);
+}
+
+float RadioLib_SX127x_GetRSSI(RadioLibSX127x_t *chip) {
+  // Read raw RSSI register value
+  uint8_t rawRssi = RadioLib_Module_SPIreadRegister(
+      chip->mod, RADIOLIB_SX127X_REG_PKT_RSSI_VALUE);
+  float snr = RadioLib_SX127x_GetSNR(chip);
+
+  // Determine the base offset based on operating frequency
+  int16_t base = (chip->frequency >= 779.0f) ? -157 : -164;
+  float rssi = (float)base + (float)rawRssi;
+
+  // If the signal is below the noise floor, factor in the SNR
+  if (snr < 0.0f) {
+    rssi += snr;
+  }
+
+  return rssi;
 }

@@ -74,4 +74,7 @@ int16_t RadioLib_SX127x_StartTransmit(RadioLibSX127x_t *chip, const uint8_t *dat
 
 // Cleans up after the TX interrupt fires
 int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t *chip);
+
+float RadioLib_SX127x_GetSNR(RadioLibSX127x_t *chip);
+float RadioLib_SX127x_GetRSSI(RadioLibSX127x_t *chip);
 #endif
