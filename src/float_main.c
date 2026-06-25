@@ -290,10 +290,12 @@ int main() {
     // --- 2. Outer Depth Loop (10Hz) ---
     if (now - last_depth_pid_time >= DEPTH_PID_LOOP_MS) {
       double current_depth = 10000.0f; // Default to error indicator
+      bool sensor_valid = false;
 
       // --- SENSOR READ & RECOVERY ---
       if (ms5837_read(&depth_sensor)) {
         consecutive_sensor_failures = 0;
+        sensor_valid = true;
 #ifdef HIL_MODE
         float depth = ms5837_get_depth(&depth_sensor);
 #else
@@ -334,17 +336,14 @@ int main() {
         }
       }
 
-      if (global_fsm.state == FLOAT_PROFILING) {
+      if (global_fsm.state == FLOAT_PROFILING && sensor_valid) {
         float effective_target = 0.0f;
 
         // Determine targets based on mission stage
         if (global_fsm.mission_stage == STAGE_DEEP) {
           effective_target = settings.deep_target_m;
         } else if (global_fsm.mission_stage == STAGE_SHALLOW) {
-          effective_target =
-              settings.shallow_target_m +
-              (settings.arrival_band_m /
-               2.0f); // Center of the allowed band to prevent breaching surface
+          effective_target = settings.shallow_target_m;
         } else if (global_fsm.mission_stage == STAGE_EXITING) {
           effective_target = -0.5f; // Pull all the way up
         }
@@ -373,7 +372,8 @@ int main() {
           printf(">> Control: Entering PROFILING mode. Seeding PID with "
                  "baseline Neutral ADC: %d\n",
                  settings.neutral_buoyancy_adc);
-          depth_pid_reset(&depth_pid);
+          double initial_error = current_depth - (double)effective_target;
+          depth_pid_reset(&depth_pid, initial_error);
           // Seed the integral term directly with our neutral buoyancy point
           // guess
           pid_set_integral(&depth_pid.pid,
@@ -406,7 +406,7 @@ int main() {
 #endif
       }
       prev_state = global_fsm.state;
-      last_depth_pid_time = now;
+      last_depth_pid_time += DEPTH_PID_LOOP_MS;
     }
 
     // --- 3. Inner Actuator Control Loop ---
@@ -425,7 +425,7 @@ int main() {
           global_fsm.manual_move_pending = false;
         }
       }
-      last_act_loop_time = now;
+      last_act_loop_time += ACT_LOOP_MS;
     }
 
     global_fsm.current_actuator_pos = act.cached_pos;

@@ -63,9 +63,9 @@ void pid_update(PIDController *pid, float error, float *output) {
     *output = raw_output;
 }
 
-void pid_reset(PIDController *pid) {
+void pid_reset(PIDController *pid, float current_error) {
     pid->integral = 0.0f;
-    pid->prev_error = 0.0f;
+    pid->prev_error = current_error;
     pid->prev_D = 0.0f;
 }
 

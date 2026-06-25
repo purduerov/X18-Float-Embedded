@@ -112,7 +112,7 @@ int main() {
     // 2. Control Logic
     if (in_deadzone) {
       actuator_set_move_pins(&act, 0);
-      pid_reset(&pid);
+      pid_reset(&pid, error);
       set_vref_voltage(0); // Drop current limit to minimum holding torque
 
       if (!is_waiting) {

@@ -22,8 +22,8 @@ void depth_pid_set_target(DepthPID *dpid, double target_depth) {
     dpid->target_depth = target_depth;
 }
 
-void depth_pid_reset(DepthPID *dpid) {
-    pid_reset(&dpid->pid);
+void depth_pid_reset(DepthPID *dpid, double current_error) {
+    pid_reset(&dpid->pid, (float)current_error);
 }
 
 void depth_pid_calculate_target_pos(DepthPID *dpid, double current_depth, int neutral_adc, int *target_actuator_pos) {

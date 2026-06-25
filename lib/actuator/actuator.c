@@ -118,7 +118,7 @@ void actuator_tick(Actuator *act) {
             act->stalled = false;
             act->last_pos_time = t_now; 
             act->last_pos = current_pos;
-            pid_reset(&act->pid);
+            pid_reset(&act->pid, error);
         } else {
             actuator_set_move_pins(act, 0);
             actuator_vref_set(0);
@@ -130,7 +130,7 @@ void actuator_tick(Actuator *act) {
     if (act->hard_locked || act->stalled || act->in_deadzone) {
         actuator_set_move_pins(act, 0);
         actuator_vref_set(0);
-        pid_reset(&act->pid);
+        pid_reset(&act->pid, error);
         
         // Reset move timer if in deadzone so next move starts fresh
         if (act->in_deadzone) {
@@ -154,7 +154,7 @@ void actuator_tick(Actuator *act) {
     if (t_now - act->last_pos_time > ACT_STALL_MS) {
         actuator_set_move_pins(act, 0);
         actuator_vref_set(0);
-        pid_reset(&act->pid);
+        pid_reset(&act->pid, error);
         if (act->retry_count < ACT_MAX_RETRIES) {
             act->stalled = true;
             act->retry_count++;
@@ -169,7 +169,7 @@ void actuator_tick(Actuator *act) {
         printf("!! [ACTUATOR] MOVE TIMEOUT at %d.\n", current_pos);
         actuator_set_move_pins(act, 0);
         actuator_vref_set(0);
-        pid_reset(&act->pid);
+        pid_reset(&act->pid, error);
         act->timeout = true;
         return;
     }
