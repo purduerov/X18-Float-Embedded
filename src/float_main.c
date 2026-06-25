@@ -243,6 +243,16 @@ static const console_command_t cmd_table[] = {
 };
 
 int main() {
+  // 1. Initialize Serial
+  stdio_init_all();
+  stdio_set_translate_crlf(&stdio_usb, false);
+  sleep_ms(2000);
+  printf("\n\n[SYSTEM] --- X18 STARTUP DIAGNOSTIC ---\n");
+  if (PIN_RST != RADIOLIB_NC) {
+    gpio_init(PIN_RST);
+    gpio_set_dir(PIN_RST, GPIO_OUT);
+    gpio_put(PIN_RST, 0);
+  }
   // system_init handles everything including stdio_init_all
   if (!system_init(onInterrupt, &depth_sensor)) {
     while (true)
@@ -250,7 +260,7 @@ int main() {
   }
 
   // --- Initialize Status LED ---
-  neopixel_init(PIN_NEOPIXEL);
+  neopixel_init(PIN_NEOPIXEL, PIN_NEOPIXEL_PWR);
 
   // --- Initialize High Level Objects ---
   Actuator act;
