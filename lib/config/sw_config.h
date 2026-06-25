@@ -5,7 +5,7 @@
 // 1. ACTUATOR & PID PARAMETERS
 // ==========================================
 #define DEFAULT_ACTUATOR_POS 4095
-#define DEFAULT_NEUTRAL_ADC 2048
+#define DEFAULT_NEUTRAL_ADC 1850
 #define ACT_POS_TOL 20
 #define ACT_ADC_MAX 4095
 #define ACT_MOVE_TIMEOUT_MS 12000

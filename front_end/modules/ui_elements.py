@@ -327,7 +327,7 @@ def render_metrics(hw):
         # HIL assumed mass display
         if hw.hil_enabled:
             try:
-                n_adc = int(float(settings.get('Neutral', 2048)))
+                n_adc = int(float(settings.get('Neutral', 1850)))
                 a_min = int(float(settings.get('ActMin', 126)))
                 a_max = int(float(settings.get('ActMax', 3900)))
                 

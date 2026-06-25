@@ -61,7 +61,7 @@ class HardwareManager:
             length_in=12,
             syringe_ml=90,
             pool_depth_ft=15,
-            neutral_adc=2048,
+            neutral_adc=1850,
             act_min=126,
             act_max=3900
         )
@@ -195,7 +195,7 @@ class HardwareManager:
         with self.lock:
             # Sync settings from float configuration to configure neutral ADC calibration first
             try:
-                n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                n_adc = int(float(self.float_settings.get("Neutral", 1850)))
                 a_min = int(float(self.float_settings.get("ActMin", 126)))
                 a_max = int(float(self.float_settings.get("ActMax", 3900)))
                 self.simulator.set_calibration(n_adc, a_min, a_max)
@@ -489,7 +489,7 @@ class HardwareManager:
             if self.hil_enabled:
                 # Sync current settings to simulator baseline
                 try:
-                    n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                    n_adc = int(float(self.float_settings.get("Neutral", 1850)))
                     a_min = int(float(self.float_settings.get("ActMin", 126)))
                     a_max = int(float(self.float_settings.get("ActMax", 3900)))
                     self.simulator.set_calibration(n_adc, a_min, a_max)
@@ -720,7 +720,7 @@ class HardwareManager:
                     
                     # Keep simulator calibration and mass calculation in sync
                     try:
-                        n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                        n_adc = int(float(self.float_settings.get("Neutral", 1850)))
                         a_min = int(float(self.float_settings.get("ActMin", 126)))
                         a_max = int(float(self.float_settings.get("ActMax", 3900)))
                         self.simulator.set_calibration(n_adc, a_min, a_max)
