@@ -91,14 +91,9 @@ void float_fsm_process_event(float_fsm_t *fsm) {
       fsm->last_stall_check_time = fsm->profile_start_time;
       fsm->stall_reference_depth = fsm->current_depth;
 
-      // Initialize Adaptive Neutral Learning & Control State
+      // Initialize Adaptive Neutral Learning
       fsm->hover_accumulated_adc = 0;
       fsm->hover_sample_count = 0;
-      fsm->ctrl_state = 0; // CTRL_TRANSIT
-      fsm->filtered_velocity = 0.0f;
-      fsm->last_depth = fsm->current_depth;
-      fsm->last_nudge_time = fsm->profile_start_time;
-      fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
     }
     radio_start_receive();
   } else {
@@ -518,7 +513,6 @@ void float_fsm_update(float_fsm_t *fsm) {
               fsm->mission_stage = STAGE_EXITING;
               fsm->target_depth_reached = false;
               fsm->actuator_target = settings.act_max;
-              fsm->ctrl_state = 0;
               fsm->last_stall_check_time = now;
               fsm->stall_reference_depth = fsm->current_depth;
               fsm->profile_start_time = now;
@@ -529,8 +523,6 @@ void float_fsm_update(float_fsm_t *fsm) {
               fsm->target_depth_reached = false;
               fsm->profile_start_time = now;
               fsm->stage_start_time = now;
-              fsm->ctrl_state = 0;
-              fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
               fsm->last_stall_check_time = now;
               fsm->stall_reference_depth = fsm->current_depth;
             }
@@ -541,8 +533,6 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->target_depth_reached = false;
             fsm->profile_start_time = now;
             fsm->stage_start_time = now;
-            fsm->ctrl_state = 0;
-            fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
           }
@@ -554,7 +544,6 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->mission_stage = STAGE_EXITING;
             fsm->target_depth_reached = false;
             fsm->actuator_target = settings.act_max;
-            fsm->ctrl_state = 0;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
             fsm->profile_start_time = now;
@@ -565,8 +554,6 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->target_depth_reached = false;
             fsm->profile_start_time = now;
             fsm->stage_start_time = now;
-            fsm->ctrl_state = 0;
-            fsm->active_neutral_adc = settings.neutral_buoyancy_adc;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
           }
@@ -587,7 +574,6 @@ void float_fsm_update(float_fsm_t *fsm) {
           fsm->mission_stage = STAGE_EXITING;
           fsm->target_depth_reached = false;
           fsm->actuator_target = settings.act_max;
-          fsm->ctrl_state = 0;
           fsm->last_stall_check_time = now;
           fsm->stall_reference_depth = fsm->current_depth;
           fsm->profile_start_time = now;

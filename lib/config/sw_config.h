@@ -31,8 +31,8 @@
 #define DEPTH_PID_LOOP_MS 100
 #define SURFACE_DEBUG_INTERVAL_MS 2000
 #define ARRIVAL_BAND_M 0.33f
-#define DEEP_PROFILING_SAFETY_TIMEOUT_S 120
-#define SHALLOW_PROFILING_SAFETY_TIMEOUT_S 60
+#define DEEP_PROFILING_SAFETY_TIMEOUT_S 1000
+#define SHALLOW_PROFILING_SAFETY_TIMEOUT_S 1000
 #define INTEGRAL_GATE_M 0.5f
 
 // --- STALL DETECTION (Early Abort) ---
@@ -49,18 +49,7 @@
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
 
-// --- Hybrid Buoyancy Control Constants ---
-#define VELOCITY_EMA_ALPHA 0.30f
-#define HOVER_ASYMM_SHALLOW_UP 0.65f // Drift deep limit before nudging up
-#define HOVER_ASYMM_SHALLOW_DOWN                                               \
-  0.42f // Drift shallow limit before nudging down
-#define NUDGE_STEP_ADC 100
-#define NUDGE_WAIT_MS                                                          \
-  8000U // ms — use this instead of casting NUDGE_WAIT_S to uint32_t
-#define NUDGE_WAIT_S                                                           \
-  8.00f // kept for documentation; use NUDGE_WAIT_MS in comparisons
-#define HOVER_RECOVERY_M                                                       \
-  0.80f // Increased from 0.50f to prevent premature TRANSIT fallback
+
 
 // --- Mission & Control Named Thresholds (avoids magic numbers in logic) ---
 #define SHALLOW_BIASED_TARGET_M                                                \

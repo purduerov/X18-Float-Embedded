@@ -301,19 +301,6 @@ int main() {
 #endif
         current_depth = (double)depth;
 
-        // Update velocity (EMA filtered)
-        if (prev_state == FLOAT_PROFILING) {
-          float dt = (now - last_depth_pid_time) / 1000.0f;
-          if (dt <= 0.0f)
-            dt = 0.1f; // Prevent div by zero
-          float raw_velocity = (depth - global_fsm.last_depth) / dt;
-          global_fsm.filtered_velocity =
-              (VELOCITY_EMA_ALPHA * raw_velocity) +
-              ((1.0f - VELOCITY_EMA_ALPHA) * global_fsm.filtered_velocity);
-        } else {
-          global_fsm.filtered_velocity = 0.0f;
-        }
-        global_fsm.last_depth = depth;
         global_fsm.current_depth = depth; // Sync for FSM use
       } else {
         consecutive_sensor_failures++;
