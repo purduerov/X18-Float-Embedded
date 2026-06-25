@@ -682,14 +682,14 @@ def render_pid_analyzer(hw):
         The analyzer will diagnose response characteristics and suggest new **P, I, and D** values to optimize control.
     """)
     
-    profiles_dir = "front_end/profiles"
+    profiles_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), "profiles"))
     if not os.path.exists(profiles_dir):
-        st.info("No profiles folder found.")
+        st.info(f"No profiles folder found at: {profiles_dir}")
         return
         
     csv_files = sorted([f for f in os.listdir(profiles_dir) if f.endswith('.csv') and f.startswith('profile_')], reverse=True)
     if not csv_files:
-        st.warning("No recorded profile CSV files found in front_end/profiles/.")
+        st.warning(f"No recorded profile CSV files found in: {profiles_dir}")
         return
         
     # Dropdown to select profile
