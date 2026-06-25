@@ -191,6 +191,7 @@ class HardwareManager:
                 self._safe_log("[SYSTEM] HIL Link disconnected.")
 
     def update_simulator_physical_params(self, mass_g, diameter_in, length_in, additional_volume_in3, syringe_ml, temp_c, realistic_physics):
+        import math
         with self.lock:
             self.simulator.mass = mass_g / 1000.0
             self.simulator.diameter = diameter_in * 0.0254
@@ -211,6 +212,21 @@ class HardwareManager:
                     pass
             self.simulator.reset()
             self._safe_log(f"[SYSTEM] HIL Simulator updated: Mass={mass_g}g, Dia={diameter_in}\", Len={length_in}\", AddVol={additional_volume_in3}in³, Syringe={syringe_ml}mL, Temp={temp_c}°C, Realistic={realistic_physics}")
+            
+            # Calculate and log midpoint target weight
+            rho_w = (999.842594 + 6.793952e-2 * temp_c - 9.095290e-3 * temp_c**2 + 
+                     1.001685e-4 * temp_c**3 - 1.120083e-6 * temp_c**4 + 6.536332e-9 * temp_c**5)
+            dia_m = diameter_in * 0.0254
+            len_m = length_in * 0.0254
+            v_cylinder_m3 = math.pi * ((dia_m / 2.0) ** 2) * len_m
+            v_add_m3 = (additional_volume_in3 * 16.387064) / 1e6
+            v_hull_m3 = v_cylinder_m3 + v_add_m3
+            v_syr_mid_m3 = (syringe_ml / 2.0) / 1e6
+            m_recommended = rho_w * (v_hull_m3 + v_syr_mid_m3) * 1000.0
+            
+            self._safe_log(f"[PHYSICS] Ballast calculation for target pool temp {temp_c}°C:")
+            self._safe_log(f"  -> Recommended Float Mass (midpoint neutral): {m_recommended:.1f} grams")
+            self._safe_log(f"  -> Current simulated mass: {mass_g:.1f} grams (mismatch: {mass_g - m_recommended:+.1f} grams)")
 
     def hil_serial_listener(self):
         serial_buffer = ""

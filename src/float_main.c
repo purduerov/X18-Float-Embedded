@@ -269,6 +269,22 @@ int main() {
   float_settings_t settings;
   storage_get_settings(&settings);
 
+  // Calculate recommended ballast weight for 50% syringe neutral position
+  float c_dia = 4.5f;
+  float c_len = 12.0f;
+  float c_add = 19.311f;
+  float c_syr = 90.0f;
+  float dia_m = c_dia * 0.0254f;
+  float len_m = c_len * 0.0254f;
+  float v_cylinder_m3 = 3.14159265f * (dia_m / 2.0f) * (dia_m / 2.0f) * len_m;
+  float v_cylinder_ml = v_cylinder_m3 * 1e6f;
+  float v_add_ml = c_add * 16.387064f;
+  float v_hull_ml = v_cylinder_ml + v_add_ml;
+  float rho_water = 0.9982f; // g/mL at 20C
+  float recommended_mass_g = rho_water * (v_hull_ml + (c_syr / 2.0f));
+  printf("[PHYSICS] Fixed Hull Volume: %.1f mL\n", v_hull_ml);
+  printf("[PHYSICS] Target Midpoint Mass (neutral at 50%% syringe): %.1f g\n", recommended_mass_g);
+
   console_init(cmd_table, sizeof(cmd_table) / sizeof(console_command_t));
   float_fsm_init(&global_fsm, &depth_sensor);
   double dt_seconds = (double)DEPTH_PID_LOOP_MS / 1000.0;
