@@ -708,6 +708,14 @@ def render_pid_analyzer(hw):
         "D": 25.0
     }
     
+    def safe_float(val_str, default_val):
+        if not val_str:
+            return default_val
+        try:
+            return float(val_str)
+        except ValueError:
+            return default_val
+
     try:
         with open(filepath, 'r') as f:
             for line in f:
@@ -716,23 +724,23 @@ def render_pid_analyzer(hw):
                         meta["timestamp"] = line.split("Timestamp:")[1].strip()
                     elif "Deep Target:" in line:
                         val = re.search(r"Deep Target:\s*([\d\.-]+)", line)
-                        if val: meta["deep_target"] = float(val.group(1))
+                        if val: meta["deep_target"] = safe_float(val.group(1), meta["deep_target"])
                     elif "Shallow Target:" in line:
                         val = re.search(r"Shallow Target:\s*([\d\.-]+)", line)
-                        if val: meta["shallow_target"] = float(val.group(1))
+                        if val: meta["shallow_target"] = safe_float(val.group(1), meta["shallow_target"])
                     elif "Arrival Tolerance:" in line:
                         val = re.search(r"Arrival Tolerance:\s*([\d\.-]+)", line)
-                        if val: meta["tolerance"] = float(val.group(1))
+                        if val: meta["tolerance"] = safe_float(val.group(1), meta["tolerance"])
                     elif "Hold Duration:" in line:
                         val = re.search(r"Hold Duration:\s*([\d\.-]+)", line)
-                        if val: meta["duration"] = float(val.group(1))
+                        if val: meta["duration"] = safe_float(val.group(1), meta["duration"])
                     elif "PID:" in line:
                         p_val = re.search(r"P=\s*([\d\.-]+)", line)
                         i_val = re.search(r"I=\s*([\d\.-]+)", line)
                         d_val = re.search(r"D=\s*([\d\.-]+)", line)
-                        if p_val: meta["P"] = float(p_val.group(1))
-                        if i_val: meta["I"] = float(i_val.group(1))
-                        if d_val: meta["D"] = float(d_val.group(1))
+                        if p_val: meta["P"] = safe_float(p_val.group(1), meta["P"])
+                        if i_val: meta["I"] = safe_float(i_val.group(1), meta["I"])
+                        if d_val: meta["D"] = safe_float(d_val.group(1), meta["D"])
     except Exception as e:
         st.error(f"Error reading file headers: {e}")
         
