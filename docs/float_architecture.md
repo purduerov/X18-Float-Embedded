@@ -73,7 +73,7 @@ stateDiagram-v2
 
 ## 3. NeoPixel Status LED
 
-The float uses an on-board NeoPixel (GPIO 16) to provide immediate visual feedback of its internal state. This is driven by the RP2040's hardware PIO (Programmable I/O) to ensure timing does not interfere with time-critical PID control.
+The float uses an on-board NeoPixel (GPIO 21) to provide immediate visual feedback of its internal state. This is driven by the RP2040's hardware PIO (Programmable I/O) to ensure timing does not interfere with time-critical PID control.
 
 | State | Color | Description |
 | :--- | :--- | :--- |

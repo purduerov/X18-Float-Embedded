@@ -23,7 +23,17 @@ The system is optimized for the Adafruit Feather RP2040 form factor, but applies
 | **Actuator EXT**| 12 | 12 | H-Bridge: Extension |
 | **Actuator RET**| 13 | 13 | H-Bridge: Retraction |
 | **VREF PWM**   | 27 | A1 | Actuator Speed Control (PWM) |
-| **Status LED**  | 16 | NEO | On-board NeoPixel (WS2812B) |
+| **Status LED**  | 21 | NEO | On-board NeoPixel (WS2812B) |
+| **NeoPixel PWR**| 20 | NEO_PWR | Power control for NeoPixel |
+| **D13 LED**     | 13 | LED | Red Status LED |
+
+### On-board LEDs and Layout
+
+Above the pin labels for D24 and D25 is the status NeoPixel LED. It is connected to GPIO21. In CircuitPython, the NeoPixel is available at board.NEOPIXEL and the library for it is available in the bundle. In Arduino, it is accessible at PIN_NEOPIXEL. The NeoPixel is powered by the 3.3V power supply but that hasn't shown to make a big difference in brightness or color. In CircuitPython, the LED is used to indicate the runtime status.
+
+Additionally, there is a NeoPixel power pin on GPIO20. It needs to be set High for the NeoPixel to be powered. This pin is available as board.NEOPIXEL_POWER in CircuitPython and NEOPIXEL_POWER in Arduino.
+
+Above the USB C connector is the D13 LED. This little red LED is controllable in CircuitPython code using board.LED, and in Arduino as PIN_LED.
 
 ---
 
