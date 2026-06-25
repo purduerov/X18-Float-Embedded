@@ -411,6 +411,7 @@ int main() {
         printf(">> [STORAGE] Profile completed. Saving learned settings to "
                "Flash...\n");
         storage_save();
+        handle_sync(NULL);
 #ifdef HIL_MODE
         printf(">> HIL Mode: Auto-returning to FLOAT_IDLE.\n");
         global_fsm.state = FLOAT_IDLE;

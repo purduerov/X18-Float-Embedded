@@ -677,12 +677,12 @@ class HardwareManager:
                 except ValueError:
                     self.active_duration = 30
                 self.profile_start_time = None
-        elif "MISSION: Arrived at" in line:
+        elif "MISSION: Arrived at" in line and ("DEEP" in line or "SHALLOW" in line):
             stage = "Deep" if "DEEP" in line else "Shallow"
             with self.lock:
                 self.mission_status = f"PROFILING (Holding {stage})"
                 self.profile_start_time = time.time()
-        elif "Moving to" in line:
+        elif "Moving to" in line and ("DEEP" in line or "SHALLOW" in line):
             stage = "Shallow" if "SHALLOW" in line else "Deep"
             with self.lock:
                 self.mission_status = f"PROFILING (Moving to {stage})"
