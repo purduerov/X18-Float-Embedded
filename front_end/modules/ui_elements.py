@@ -1100,7 +1100,7 @@ def render_pid_analyzer(hw):
         st.write("Clicking the button below will send the suggested PID parameters directly to the connected float unit (over USB/Serial).")
         
         # Enable button only if connected
-        is_conn = hw.ser and hw.ser.is_open
+        is_conn = (hw.ser and hw.ser.is_open) or (hw.hil_enabled and hw.hil_ser and hw.hil_ser.is_open)
         btn_txt = "💾 Apply Suggested PID to Active Float" if is_conn else "🔌 Connect to Float to Apply PID"
         
         if st.button(btn_txt, type="primary", disabled=not is_conn, use_container_width=True):
