@@ -324,6 +324,34 @@ def render_metrics(hw):
             st.markdown(f"**Live:** `{settings.get('LiveDepth', '--')}m`")
             st.markdown(f"**Pos:** `{settings.get('ADC', '--')} ADC`")
 
+        # HIL assumed mass display
+        if hw.hil_enabled:
+            try:
+                n_adc = int(float(settings.get('Neutral', 2048)))
+                a_min = int(float(settings.get('ActMin', 126)))
+                a_max = int(float(settings.get('ActMax', 3900)))
+                
+                # Fetch actual mass from the simulator directly
+                hil_mass_g = hw.simulator.mass * 1000.0
+                is_real = hw.simulator.realistic_physics
+                mode_str = "Realistic Fixed-Volume" if is_real else "Calibration-Aligned"
+                
+                # Calculate recommended physical midpoint weight
+                temp = hw.simulator.temp_c
+                rho_w = (999.842594 + 6.793952e-2 * temp - 9.095290e-3 * temp**2 + 
+                         1.001685e-4 * temp**3 - 1.120083e-6 * temp**4 + 6.536332e-9 * temp**5) / 1000.0  # g/mL
+                v_hull = 3443.9  # mL
+                m_recommended = rho_w * (v_hull + 45.0)  # midpoint neutral weight recommendation
+                
+                st.info(
+                    f"🤖 **HIL Simulation Active** | Mode: `{mode_str}` | Water Temp: `{temp:.1f}°C` |\n"
+                    f"Assumed Mass: `{hil_mass_g:.1f} g` "
+                    f"({'derived from Neutral ADC ' + str(n_adc) if is_real else 'user-specified'}) | "
+                    f"Ideal Ballast Weight (Midpoint Neutral): `{m_recommended:.1f} g`"
+                )
+            except Exception:
+                pass
+
 
 def render_packet_log(hw):
     with st.container():
@@ -536,17 +564,14 @@ def render_buoyancy_calculator(hw):
         st.markdown("### 🌡️ Environment & State")
         c_temp = st.slider("Water Temperature (°C)", min_value=0.0, max_value=40.0, value=float(sim.temp_c), step=0.5)
         
-        # Mass
-        c_mass = st.number_input("Actual Float Mass / Weight (grams)", min_value=100.0, max_value=10000.0, value=float(round(sim.mass * 1000.0, 1)), step=1.0, format="%.1f")
+        # Mode
+        c_real = st.toggle("Enable Realistic Physical Simulation", value=bool(sim.realistic_physics), help="If enabled, the simulator uses the fixed physical volume computed from dimensions. If disabled, it adapts the volume to match the calibrated Neutral ADC.")
         
         st.divider()
         st.markdown("### 🎛️ Actuator Limits & Calibration")
         c_min_adc = st.number_input("Actuator Min ADC (Retracted)", min_value=0, max_value=4095, value=int(sim.act_min), step=10)
         c_max_adc = st.number_input("Actuator Max ADC (Extended)", min_value=0, max_value=4095, value=int(sim.act_max), step=10)
         c_neu_adc = st.number_input("Calibrated Neutral ADC (Settings)", min_value=0, max_value=4095, value=int(sim.neutral_adc), step=10)
-        
-        # Mode
-        c_real = st.toggle("Enable Realistic Physical Simulation", value=bool(sim.realistic_physics), help="If enabled, the simulator uses the fixed physical volume computed from dimensions. If disabled, it adapts the volume to match the calibrated Neutral ADC.")
 
     # Calculations
     # 1. Pure water density UNESCO EOS-80
@@ -573,6 +598,20 @@ def render_buoyancy_calculator(hw):
     m_midpoint = rho_w * (v_hull_m3 + 0.5 * v_syringe_max_m3) * 1000.0
     m_min = rho_w * v_hull_m3 * 1000.0
     m_max = rho_w * (v_hull_m3 + v_syringe_max_m3) * 1000.0
+
+    with col1:
+        st.divider()
+        st.markdown("### ⚖️ Float Weight")
+        if c_real:
+            adc_range = max(c_max_adc - c_min_adc, 1)
+            neutral_ratio = (c_neu_adc - c_min_adc) / adc_range
+            v_syringe_neutral_m3 = (neutral_ratio * c_syr) / 1e6
+            derived_mass_g = rho_w * (v_hull_m3 + v_syringe_neutral_m3) * 1000.0
+            
+            st.info(f"ℹ️ **Auto-Deriving Mass:** Weight is derived from Calibrated Neutral ADC `{c_neu_adc}` so that neutral buoyancy is achieved at this position.")
+            c_mass = st.number_input("Actual Float Mass / Weight (grams)", min_value=100.0, max_value=10000.0, value=float(round(derived_mass_g, 1)), step=1.0, format="%.1f", disabled=True, help="In realistic simulation mode, the weight is mathematically derived from the neutral ADC setting.")
+        else:
+            c_mass = st.number_input("Actual Float Mass / Weight (grams)", min_value=100.0, max_value=10000.0, value=float(round(sim.mass * 1000.0, 1)), step=1.0, format="%.1f")
     
     with col2:
         st.markdown("### 📊 Calculated Buoyancy Analysis")

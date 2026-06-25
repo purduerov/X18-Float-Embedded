@@ -717,6 +717,15 @@ class HardwareManager:
                     for key, value in matches:
                         if key in self.float_settings:
                             self.float_settings[key] = value
+                    
+                    # Keep simulator calibration and mass calculation in sync
+                    try:
+                        n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                        a_min = int(float(self.float_settings.get("ActMin", 126)))
+                        a_max = int(float(self.float_settings.get("ActMax", 3900)))
+                        self.simulator.set_calibration(n_adc, a_min, a_max)
+                    except (ValueError, AttributeError):
+                        pass
                 self._safe_log("[SUCCESS] UI Synced Successfully.")
         elif "Progress:" in line:
             m = re.search(r"Progress:\s*(\d+)/(\d+)", line)
