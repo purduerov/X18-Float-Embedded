@@ -193,6 +193,15 @@ class HardwareManager:
     def update_simulator_physical_params(self, mass_g, diameter_in, length_in, additional_volume_in3, syringe_ml, temp_c, realistic_physics):
         import math
         with self.lock:
+            # Sync settings from float configuration to configure neutral ADC calibration first
+            try:
+                n_adc = int(float(self.float_settings.get("Neutral", 2048)))
+                a_min = int(float(self.float_settings.get("ActMin", 126)))
+                a_max = int(float(self.float_settings.get("ActMax", 3900)))
+                self.simulator.set_calibration(n_adc, a_min, a_max)
+            except (ValueError, AttributeError):
+                pass
+
             self.simulator.mass = mass_g / 1000.0
             self.simulator.diameter = diameter_in * 0.0254
             self.simulator.length = length_in * 0.0254
@@ -201,17 +210,17 @@ class HardwareManager:
             self.simulator.temp_c = temp_c
             self.simulator.realistic_physics = realistic_physics
             
-            # Recalculate baseline volume
-            if not realistic_physics:
-                try:
-                    n_adc = int(float(self.float_settings.get("Neutral", 2048)))
-                    a_min = int(float(self.float_settings.get("ActMin", 126)))
-                    a_max = int(float(self.float_settings.get("ActMax", 3900)))
-                    self.simulator.set_calibration(n_adc, a_min, a_max)
-                except (ValueError, AttributeError):
-                    pass
+            # Recalculate baseline. In realistic mode, this automatically computes the correct
+            # mass so the float is neutrally buoyant at the calibrated neutral_adc.
             self.simulator.reset()
-            self._safe_log(f"[SYSTEM] HIL Simulator updated: Mass={mass_g}g, Dia={diameter_in}\", Len={length_in}\", AddVol={additional_volume_in3}in³, Syringe={syringe_ml}mL, Temp={temp_c}°C, Realistic={realistic_physics}")
+            
+            final_mass_g = self.simulator.mass * 1000.0
+            
+            self._safe_log(f"[SYSTEM] HIL Simulator updated: Dia={diameter_in}\", Len={length_in}\", AddVol={additional_volume_in3}in³, Syringe={syringe_ml}mL, Temp={temp_c}°C, Realistic={realistic_physics}")
+            if realistic_physics:
+                self._safe_log(f"  -> [PHYSICS] Auto-calculated neutral mass: {final_mass_g:.1f}g (derived from calibrated Neutral ADC {self.simulator.neutral_adc})")
+            else:
+                self._safe_log(f"  -> [CALIBRATION] Using user-defined mass: {final_mass_g:.1f}g")
             
             # Calculate and log midpoint target weight
             rho_w = (999.842594 + 6.793952e-2 * temp_c - 9.095290e-3 * temp_c**2 + 
@@ -226,7 +235,7 @@ class HardwareManager:
             
             self._safe_log(f"[PHYSICS] Ballast calculation for target pool temp {temp_c}°C:")
             self._safe_log(f"  -> Recommended Float Mass (midpoint neutral): {m_recommended:.1f} grams")
-            self._safe_log(f"  -> Current simulated mass: {mass_g:.1f} grams (mismatch: {mass_g - m_recommended:+.1f} grams)")
+            self._safe_log(f"  -> Mismatch from recommended midpoint: {final_mass_g - m_recommended:+.1f} grams")
 
     def hil_serial_listener(self):
         serial_buffer = ""
