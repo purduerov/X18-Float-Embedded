@@ -30,7 +30,7 @@ def render_sidebar(hw):
         st.header(":material/navigation: Navigation")
         view = st.radio(
             "View", 
-            ["Mission Dashboard", "System Debug Logs", "Buoyancy Calculator & Simulator Config"], 
+            ["Mission Dashboard", "System Debug Logs", "Buoyancy Calculator & Simulator Config", "PID Tuner & Profile Analyzer"], 
             label_visibility="collapsed"
         )
         st.divider()
@@ -663,6 +663,402 @@ def render_buoyancy_calculator(hw):
             # Sync min/max/neutral to simulator's internal calibration as well
             hw.simulator.set_calibration(c_neu_adc, c_min_adc, c_max_adc)
             st.success("Successfully synchronized and reset HIL Simulator with new physics parameters!")
+            time.sleep(1.0)
+            st.rerun()
+
+def render_pid_analyzer(hw):
+    import os
+    import re
+    import math
+    import pandas as pd
+    import streamlit as st
+    import plotly.express as px
+    import plotly.graph_objects as go
+    import time
+    
+    st.subheader("🎯 PID Tuner & Profile Data Analyzer")
+    st.markdown("""
+        Analyze recorded mission profiles to evaluate depth-holding performance, overshoot, rise time, and motor jitter. 
+        The analyzer will diagnose response characteristics and suggest new **P, I, and D** values to optimize control.
+    """)
+    
+    profiles_dir = "front_end/profiles"
+    if not os.path.exists(profiles_dir):
+        st.info("No profiles folder found.")
+        return
+        
+    csv_files = sorted([f for f in os.listdir(profiles_dir) if f.endswith('.csv') and f.startswith('profile_')], reverse=True)
+    if not csv_files:
+        st.warning("No recorded profile CSV files found in front_end/profiles/.")
+        return
+        
+    # Dropdown to select profile
+    selected_file = st.selectbox("📂 Select Profile Run to Analyze", csv_files)
+    filepath = os.path.join(profiles_dir, selected_file)
+    
+    # Read metadata from comments
+    meta = {
+        "timestamp": "--",
+        "deep_target": 2.5,
+        "shallow_target": 0.4,
+        "tolerance": 0.15,
+        "duration": 30.0,
+        "P": 120.0,
+        "I": 0.5,
+        "D": 25.0
+    }
+    
+    try:
+        with open(filepath, 'r') as f:
+            for line in f:
+                if line.startswith("#"):
+                    if "Timestamp:" in line:
+                        meta["timestamp"] = line.split("Timestamp:")[1].strip()
+                    elif "Deep Target:" in line:
+                        val = re.search(r"Deep Target:\s*([\d\.-]+)", line)
+                        if val: meta["deep_target"] = float(val.group(1))
+                    elif "Shallow Target:" in line:
+                        val = re.search(r"Shallow Target:\s*([\d\.-]+)", line)
+                        if val: meta["shallow_target"] = float(val.group(1))
+                    elif "Arrival Tolerance:" in line:
+                        val = re.search(r"Arrival Tolerance:\s*([\d\.-]+)", line)
+                        if val: meta["tolerance"] = float(val.group(1))
+                    elif "Hold Duration:" in line:
+                        val = re.search(r"Hold Duration:\s*([\d\.-]+)", line)
+                        if val: meta["duration"] = float(val.group(1))
+                    elif "PID:" in line:
+                        p_val = re.search(r"P=\s*([\d\.-]+)", line)
+                        i_val = re.search(r"I=\s*([\d\.-]+)", line)
+                        d_val = re.search(r"D=\s*([\d\.-]+)", line)
+                        if p_val: meta["P"] = float(p_val.group(1))
+                        if i_val: meta["I"] = float(i_val.group(1))
+                        if d_val: meta["D"] = float(d_val.group(1))
+    except Exception as e:
+        st.error(f"Error reading file headers: {e}")
+        
+    col_info, col_plots = st.columns([1, 2], gap="large")
+    
+    with col_info:
+        st.markdown("### 📋 Profile Parameters")
+        st.write(f"**Run Timestamp:** `{meta['timestamp']}`")
+        
+        # Inputs to override in case metadata comments are missing/incorrect
+        st.markdown("##### Override Parameters (if missing/incorrect)")
+        p_p = st.number_input("Current P Gain", value=float(meta["P"]), step=5.0)
+        p_i = st.number_input("Current I Gain", value=float(meta["I"]), step=0.1)
+        p_d = st.number_input("Current D Gain", value=float(meta["D"]), step=5.0)
+        
+        t_deep = st.number_input("Target Deep Depth (m)", value=float(meta["deep_target"]), step=0.1)
+        t_shallow = st.number_input("Target Shallow Depth (m)", value=float(meta["shallow_target"]), step=0.1)
+        t_duration = st.number_input("Target Hold Duration (s)", value=float(meta["duration"]), step=5.0)
+        t_tol = st.number_input("Arrival Tolerance Band (m)", value=float(meta["tolerance"]), step=0.01)
+
+    # Load data
+    try:
+        df = pd.read_csv(filepath, comment='#')
+    except Exception as e:
+        st.error(f"Error loading CSV data: {e}")
+        return
+        
+    # Check columns
+    required_cols = ["Time (s)", "Depth (m)", "Actuator (ADC)", "Target (ADC)"]
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"CSV is missing required columns. Found: {list(df.columns)}")
+        return
+        
+    # Filter to Profiling State (State 2) if present
+    if "State" in df.columns:
+        df_prof = df[df["State"] == 2]
+        if df_prof.empty:
+            df_prof = df  # Fallback
+    else:
+        df_prof = df
+        
+    if df_prof.empty:
+        st.warning("Selected file contains no profile data rows.")
+        return
+        
+    # Normalize Time to start at 0
+    t0 = df_prof["Time (s)"].iloc[0]
+    time_series = df_prof["Time (s)"] - t0
+    depth_series = df_prof["Depth (m)"]
+    act_series = df_prof["Actuator (ADC)"]
+    tgt_series = df_prof["Target (ADC)"]
+    
+    # -----------------------------------------------------
+    # Segment Analysis
+    # -----------------------------------------------------
+    metrics = {}
+    
+    # --- DEEP STAGE ANALYSIS ---
+    # Find first arrival at deep target
+    arrive_deep_idx = None
+    for idx, d in enumerate(depth_series):
+        if abs(d - t_deep) <= t_tol:
+            arrive_deep_idx = idx
+            break
+            
+    if arrive_deep_idx is not None:
+        t_arrive_deep = time_series.iloc[arrive_deep_idx]
+        metrics["deep_rise_time"] = t_arrive_deep
+        
+        # Analyze Hold Phase: t_arrive_deep to t_arrive_deep + t_duration
+        hold_end_time = t_arrive_deep + t_duration
+        hold_df = df_prof[(time_series >= t_arrive_deep) & (time_series <= hold_end_time)]
+        
+        if not hold_df.empty:
+            h_depth = hold_df["Depth (m)"]
+            h_act = hold_df["Actuator (ADC)"]
+            
+            # Overshoot: max depth during approach/hold
+            pre_hold_and_hold = depth_series.iloc[:hold_df.index[-1] + 1 - df_prof.index[0]]
+            metrics["deep_overshoot"] = max(0.0, max(pre_hold_and_hold) - t_deep)
+            
+            # Steady State Error (Average Absolute Error)
+            metrics["deep_sse"] = abs(h_depth - t_deep).mean()
+            
+            # Crossings (Oscillations)
+            crossings = 0
+            for i in range(len(h_depth) - 1):
+                d1 = h_depth.iloc[i] - t_deep
+                d2 = h_depth.iloc[i+1] - t_deep
+                if (d1 < 0 and d2 >= 0) or (d1 > 0 and d2 <= 0):
+                    crossings += 1
+            metrics["deep_oscillations"] = crossings
+            
+            # Actuator Jitter (consecutive absolute deltas)
+            jitter_sum = abs(h_act.diff()).sum()
+            metrics["deep_jitter"] = jitter_sum / t_duration  # counts/sec
+        else:
+            metrics["deep_overshoot"] = 0.0
+            metrics["deep_sse"] = 0.0
+            metrics["deep_oscillations"] = 0
+            metrics["deep_jitter"] = 0.0
+    else:
+        # Never arrived
+        metrics["deep_rise_time"] = None
+        metrics["deep_overshoot"] = max(0.0, max(depth_series) - t_deep)
+        metrics["deep_sse"] = abs(depth_series - t_deep).mean()
+        metrics["deep_oscillations"] = 0
+        metrics["deep_jitter"] = 0.0
+        
+    # --- SHALLOW STAGE ANALYSIS ---
+    # Shallow segment starts after the deep hold phase is complete
+    t_shallow_start = (metrics["deep_rise_time"] + t_duration) if metrics["deep_rise_time"] is not None else 60.0
+    shallow_df = df_prof[time_series >= t_shallow_start]
+    
+    if t_shallow > 0.05 and not shallow_df.empty:
+        s_time = time_series[time_series >= t_shallow_start] - t_shallow_start
+        s_depth = depth_series[time_series >= t_shallow_start]
+        s_act = act_series[time_series >= t_shallow_start]
+        
+        arrive_shal_idx = None
+        for i, d in enumerate(s_depth):
+            if abs(d - t_shallow) <= t_tol:
+                arrive_shal_idx = i
+                break
+                
+        if arrive_shal_idx is not None:
+            t_arrive_shal = s_time.iloc[arrive_shal_idx]
+            metrics["shallow_fall_time"] = t_arrive_shal
+            
+            s_hold_end_time = t_arrive_shal + t_duration
+            s_hold_df = shallow_df[(s_time >= t_arrive_shal) & (s_time <= s_hold_end_time)]
+            
+            if not s_hold_df.empty:
+                sh_depth = s_hold_df["Depth (m)"]
+                sh_act = s_hold_df["Actuator (ADC)"]
+                
+                # Overshoot: minimum depth (since approaching from below/deep)
+                sh_pre_hold = s_depth.iloc[:s_hold_df.index[-1] - shallow_df.index[0] + 1]
+                metrics["shallow_overshoot"] = max(0.0, t_shallow - min(sh_pre_hold))
+                
+                # SSE
+                metrics["shallow_sse"] = abs(sh_depth - t_shallow).mean()
+                
+                # Crossings
+                crossings = 0
+                for i in range(len(sh_depth) - 1):
+                    d1 = sh_depth.iloc[i] - t_shallow
+                    d2 = sh_depth.iloc[i+1] - t_shallow
+                    if (d1 < 0 and d2 >= 0) or (d1 > 0 and d2 <= 0):
+                        crossings += 1
+                    metrics["shallow_oscillations"] = crossings
+                
+                # Jitter
+                s_jitter_sum = abs(sh_act.diff()).sum()
+                metrics["shallow_jitter"] = s_jitter_sum / t_duration
+            else:
+                metrics["shallow_overshoot"] = 0.0
+                metrics["shallow_sse"] = 0.0
+                metrics["shallow_oscillations"] = 0
+                metrics["shallow_jitter"] = 0.0
+        else:
+            metrics["shallow_fall_time"] = None
+            metrics["shallow_overshoot"] = max(0.0, t_shallow - min(s_depth))
+            metrics["shallow_sse"] = abs(s_depth - t_shallow).mean()
+            metrics["shallow_oscillations"] = 0
+            metrics["shallow_jitter"] = 0.0
+
+    # -----------------------------------------------------
+    # PID Diagnoses & Recommendations
+    # -----------------------------------------------------
+    diagnoses = []
+    
+    suggest_p = p_p
+    suggest_i = p_i
+    suggest_d = p_d
+    
+    # 1. Evaluate P (Rise Time & Overshoot)
+    if metrics["deep_rise_time"] is None:
+        diagnoses.append("⚠️ **Slow Dive Response:** Float never reached the deep target tolerance band. Proportional gain is likely too low to overcome drag/buoyancy.")
+        suggest_p = p_p * 1.3  # Increase P
+    elif metrics["deep_rise_time"] > 45.0:
+        diagnoses.append(f"⚠️ **Sluggish Dive:** Took {metrics['deep_rise_time']:.1f}s to reach target. Increase P to rise/fall faster.")
+        suggest_p = p_p * 1.2
+        
+    if metrics.get("deep_overshoot", 0.0) > (t_deep * 0.15) or metrics.get("deep_oscillations", 0) > 3:
+        diagnoses.append(f"⚠️ **Unstable Oscillation / Overshoot:** Overshoot of {metrics.get('deep_overshoot', 0.0):.2f}m detected with {metrics.get('deep_oscillations', 0)} target crossings. Proportional gain P is too aggressive, or D is too weak.")
+        suggest_p = p_p * 0.8  # Decrease P
+        suggest_d = max(p_d, 10.0) + 15.0  # Add damping
+        
+    # 2. Evaluate I (Steady State Error)
+    if metrics.get("deep_sse", 0.0) > 0.05:
+        diagnoses.append(f"⚠️ **High Steady-State Error:** Holds with an average offset of {metrics.get('deep_sse', 0.0):.2f}m during deep hover. Integral gain is insufficient to resolve ballast offsets.")
+        suggest_i = max(p_i, 0.1) + 0.15  # Add integral
+        
+    # 3. Evaluate D (High Frequency Actuator Jitter)
+    if metrics.get("deep_jitter", 0.0) > 200.0:
+        diagnoses.append(f"⚠️ **Actuator Jitter / Hunting:** High frequency motor movement detected during hold ({metrics.get('deep_jitter', 0.0):.1f} counts/s). Derivative gain D is likely too high, amplifying noise, or position deadzone is too narrow.")
+        suggest_d = p_d * 0.7  # Reduce D
+        
+    # Cap values to sensible floats
+    suggest_p = round(max(0.0, min(300.0, suggest_p)), 2)
+    suggest_i = round(max(0.0, min(10.0, suggest_i)), 2)
+    suggest_d = round(max(0.0, min(100.0, suggest_d)), 2)
+    
+    if not diagnoses:
+        diagnoses.append("✨ **EXCELLENT PID PERFORMANCE:** No significant sluggishness, overshoot, steady-state error, or actuator jitter detected. The current gains are optimal!")
+
+    # -----------------------------------------------------
+    # Render Plots
+    # -----------------------------------------------------
+    with col_plots:
+        st.markdown("### 📈 Response Analysis Charts")
+        
+        # Depth Plot with targets
+        fig_depth = go.Figure()
+        fig_depth.add_trace(go.Scatter(x=time_series, y=depth_series, name="Actual Depth (m)", line=dict(color="#00ffcc", width=2)))
+        
+        # Add target lines
+        fig_depth.add_hline(y=t_deep, line_dash="dash", line_color="#ff3366", annotation_text=f"Deep Target ({t_deep:.1f}m)")
+        fig_depth.add_hline(y=t_deep + t_tol, line_dash="dot", line_color="#ff6666", line_width=1)
+        fig_depth.add_hline(y=t_deep - t_tol, line_dash="dot", line_color="#ff6666", line_width=1)
+        
+        if t_shallow > 0.05:
+            fig_depth.add_hline(y=t_shallow, line_dash="dash", line_color="#ffcc00", annotation_text=f"Shallow Target ({t_shallow:.1f}m)")
+            fig_depth.add_hline(y=t_shallow + t_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
+            fig_depth.add_hline(y=t_shallow - t_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
+            
+        fig_depth.update_layout(
+            title="Depth Response Profile",
+            xaxis_title="Time (s)",
+            yaxis_title="Depth (m)",
+            yaxis_reverse=True,  # Downward is positive depth
+            template="plotly_dark",
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=300
+        )
+        st.plotly_chart(fig_depth, use_container_width=True)
+        
+        # Actuator Effort Plot
+        fig_act = go.Figure()
+        fig_act.add_trace(go.Scatter(x=time_series, y=act_series, name="Actuator Position (ADC)", line=dict(color="#3399ff", width=2)))
+        fig_act.add_trace(go.Scatter(x=time_series, y=tgt_series, name="Target Position (ADC)", line=dict(color="#9933ff", dash="dash")))
+        fig_act.update_layout(
+            title="Actuator Response Effort",
+            xaxis_title="Time (s)",
+            yaxis_title="Actuator Pos (ADC)",
+            template="plotly_dark",
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=250
+        )
+        st.plotly_chart(fig_act, use_container_width=True)
+
+    # -----------------------------------------------------
+    # Render Summary and Tuning Metrics
+    # -----------------------------------------------------
+    st.divider()
+    metric_cols = st.columns(5)
+    with metric_cols[0]:
+        st.metric(
+            "Deep Rise Time", 
+            f"{metrics['deep_rise_time']:.1f} s" if metrics["deep_rise_time"] is not None else "N/A",
+            help="Time to first reach target band."
+        )
+    with metric_cols[1]:
+        st.metric(
+            "Deep Overshoot", 
+            f"{metrics.get('deep_overshoot', 0.0):.2f} m",
+            help="Maximum depth reached beyond target."
+        )
+    with metric_cols[2]:
+        st.metric(
+            "Deep Hold SSE", 
+            f"{metrics.get('deep_sse', 0.0):.3f} m",
+            help="Average absolute error during the hold duration."
+        )
+    with metric_cols[3]:
+        st.metric(
+            "Target Crossings", 
+            f"{metrics.get('deep_oscillations', 0)} times",
+            help="Oscillations around the target after arrival."
+        )
+    with metric_cols[4]:
+        st.metric(
+            "Actuator Jitter", 
+            f"{metrics.get('deep_jitter', 0.0):.1f} c/s",
+            help="Average actuator movement per second during hold (indicates hunting)."
+        )
+
+    # -----------------------------------------------------
+    # Diagnoses and Tuning Box
+    # -----------------------------------------------------
+    st.divider()
+    st.markdown("### 🩺 Diagnoses & Suggestions")
+    
+    for d in diagnoses:
+        st.markdown(d)
+        
+    st.divider()
+    st.markdown("### 🎛️ Suggested PID Adjustments")
+    
+    suggest_col1, suggest_col2 = st.columns(2)
+    with suggest_col1:
+        st.markdown("#### Recommendations Table")
+        rec_df = pd.DataFrame({
+            "Parameter": ["Proportional Gain (P)", "Integral Gain (I)", "Derivative Gain (D)"],
+            "Current Value": [f"{p_p:.2f}", f"{p_i:.2f}", f"{p_d:.2f}"],
+            "Suggested Value": [f"{suggest_p:.2f}", f"{suggest_i:.2f}", f"{suggest_d:.2f}"],
+            "Adjustment": [
+                f"{'+' if suggest_p >= p_p else ''}{suggest_p - p_p:.2f}",
+                f"{'+' if suggest_i >= p_i else ''}{suggest_i - p_i:.2f}",
+                f"{'+' if suggest_d >= p_d else ''}{suggest_d - p_d:.2f}"
+            ]
+        })
+        st.table(rec_df)
+        
+    with suggest_col2:
+        st.markdown("#### Apply Recommendations")
+        st.write("Clicking the button below will send the suggested PID parameters directly to the connected float unit (over USB/Serial).")
+        
+        # Enable button only if connected
+        is_conn = hw.ser and hw.ser.is_open
+        btn_txt = "💾 Apply Suggested PID to Active Float" if is_conn else "🔌 Connect to Float to Apply PID"
+        
+        if st.button(btn_txt, type="primary", disabled=not is_conn, use_container_width=True):
+            hw.update_pid(suggest_p, suggest_i, suggest_d)
+            st.success(f"Successfully sent new PID values to float: P={suggest_p}, I={suggest_i}, D={suggest_d}")
             time.sleep(1.0)
             st.rerun()
 

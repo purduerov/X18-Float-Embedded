@@ -51,3 +51,6 @@ elif view == "System Debug Logs":
 elif view == "Buoyancy Calculator & Simulator Config":
     from modules.ui_elements import render_buoyancy_calculator
     render_buoyancy_calculator(hw)
+elif view == "PID Tuner & Profile Analyzer":
+    from modules.ui_elements import render_pid_analyzer
+    render_pid_analyzer(hw)
