@@ -55,54 +55,29 @@ class BuoyancySimulator:
         self.velocity = 0.0
         self.last_update_time = time.time()
         
-        if self.realistic_physics:
-            # Physical fixed volume mode: Dry hull volume is a constant physical property
-            v_cylinder = math.pi * ((self.diameter / 2.0) ** 2) * self.length
-            v_additional = self.additional_volume_in3 * 1.6387064e-5  # in^3 to m^3
-            self.v_hull_zero = v_cylinder + v_additional
-            
-            # Derives and sets self.mass so neutral buoyancy is achieved at calibrated neutral_adc
-            rho_surface = self.get_water_density(0.0)
-            adc_range = max(self.act_max - self.act_min, 1)
-            neutral_ratio = (self.neutral_adc - self.act_min) / adc_range
-            v_syringe_neutral = neutral_ratio * self.syringe_volume
-            self.mass = rho_surface * (self.v_hull_zero + v_syringe_neutral)
-        else:
-            # Traditional calibration-aligned mode: derive volume to force neutral buoyancy at neutral_adc
-            rho_surface = self.get_water_density(0.0)
-            v_neutral = self.mass / rho_surface
-            
-            adc_range = max(self.act_max - self.act_min, 1)
-            neutral_ratio = (self.neutral_adc - self.act_min) / adc_range
-            
-            # Syringe displacement relative to neutral position
-            v_syringe_neutral = neutral_ratio * self.syringe_volume
-            self.v_hull_zero = v_neutral - v_syringe_neutral
+        # Hardcode parameters per user request to keep sim and float in sync
+        self.neutral_adc = 1850
+        self.mass = 3.47876  # 3478.8 grams
+        self.act_min = 126
+        self.act_max = 3900
+        self.realistic_physics = True
+        
+        v_cylinder = math.pi * ((self.diameter / 2.0) ** 2) * self.length
+        v_additional = self.additional_volume_in3 * 1.6387064e-5  # in^3 to m^3
+        self.v_hull_zero = v_cylinder + v_additional
         
     def set_calibration(self, neutral_adc, act_min, act_max):
         """Updates calibration constants and recalculates hull baseline."""
-        self.neutral_adc = neutral_adc
-        self.act_min = act_min
-        self.act_max = act_max
-        # Note: We don't automatically reset depth/velocity here, 
-        # but we do update the baseline for the next step().
-        if self.realistic_physics:
-            v_cylinder = math.pi * ((self.diameter / 2.0) ** 2) * self.length
-            v_additional = self.additional_volume_in3 * 1.6387064e-5  # in^3 to m^3
-            self.v_hull_zero = v_cylinder + v_additional
-            
-            # Derives and sets self.mass so neutral buoyancy is achieved at calibrated neutral_adc
-            rho_surface = self.get_water_density(0.0)
-            adc_range = max(self.act_max - self.act_min, 1)
-            neutral_ratio = (self.neutral_adc - self.act_min) / adc_range
-            v_syringe_neutral = neutral_ratio * self.syringe_volume
-            self.mass = rho_surface * (self.v_hull_zero + v_syringe_neutral)
-        else:
-            rho_surface = self.get_water_density(0.0)
-            v_neutral = self.mass / rho_surface
-            adc_range = max(self.act_max - self.act_min, 1)
-            neutral_ratio = (self.neutral_adc - self.act_min) / adc_range
-            self.v_hull_zero = v_neutral - (neutral_ratio * self.syringe_volume)
+        # Hardcode parameters per user request to keep sim and float in sync
+        self.neutral_adc = 1850
+        self.mass = 3.47876  # 3478.8 grams
+        self.act_min = 126
+        self.act_max = 3900
+        self.realistic_physics = True
+        
+        v_cylinder = math.pi * ((self.diameter / 2.0) ** 2) * self.length
+        v_additional = self.additional_volume_in3 * 1.6387064e-5  # in^3 to m^3
+        self.v_hull_zero = v_cylinder + v_additional
 
     def get_water_density(self, depth):
         """Calculates water density based on depth and temperature (UNESCO EOS-80 for S=0)."""

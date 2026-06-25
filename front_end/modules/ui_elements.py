@@ -30,7 +30,7 @@ def render_sidebar(hw):
         st.header(":material/navigation: Navigation")
         view = st.radio(
             "View", 
-            ["Mission Dashboard", "System Debug Logs", "Buoyancy Calculator & Simulator Config", "PID Tuner & Profile Analyzer"], 
+            ["Mission Dashboard", "System Debug Logs", "PID Tuner & Profile Analyzer"], 
             label_visibility="collapsed"
         )
         st.divider()
@@ -326,31 +326,10 @@ def render_metrics(hw):
 
         # HIL assumed mass display
         if hw.hil_enabled:
-            try:
-                n_adc = int(float(settings.get('Neutral', 1850)))
-                a_min = int(float(settings.get('ActMin', 126)))
-                a_max = int(float(settings.get('ActMax', 3900)))
-                
-                # Fetch actual mass from the simulator directly
-                hil_mass_g = hw.simulator.mass * 1000.0
-                is_real = hw.simulator.realistic_physics
-                mode_str = "Realistic Fixed-Volume" if is_real else "Calibration-Aligned"
-                
-                # Calculate recommended physical midpoint weight
-                temp = hw.simulator.temp_c
-                rho_w = (999.842594 + 6.793952e-2 * temp - 9.095290e-3 * temp**2 + 
-                         1.001685e-4 * temp**3 - 1.120083e-6 * temp**4 + 6.536332e-9 * temp**5) / 1000.0  # g/mL
-                v_hull = 3443.9  # mL
-                m_recommended = rho_w * (v_hull + 45.0)  # midpoint neutral weight recommendation
-                
-                st.info(
-                    f"🤖 **HIL Simulation Active** | Mode: `{mode_str}` | Water Temp: `{temp:.1f}°C` |\n"
-                    f"Assumed Mass: `{hil_mass_g:.1f} g` "
-                    f"({'derived from Neutral ADC ' + str(n_adc) if is_real else 'user-specified'}) | "
-                    f"Ideal Ballast Weight (Midpoint Neutral): `{m_recommended:.1f} g`"
-                )
-            except Exception:
-                pass
+            st.info(
+                f"🤖 **HIL Simulation Active** | Assumed Mass: `3478.8 g` | "
+                f"Neutral ADC: `1850` (Hardcoded)"
+            )
 
 
 def render_packet_log(hw):
