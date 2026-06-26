@@ -54,6 +54,9 @@ typedef struct {
     // --- Radio Collision Resilience ---
     uint8_t tx_retry_count;
 
+    // --- Mission Safety ---
+    uint32_t mission_start_time;
+
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

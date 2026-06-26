@@ -66,5 +66,6 @@ void surface_fsm_cmd_set_neutral_adc(surface_fsm_t *fsm, uint16_t neutral_adc);
 void surface_fsm_cmd_sync(surface_fsm_t *fsm);
 void surface_fsm_cmd_reset(surface_fsm_t *fsm);
 void surface_fsm_cmd_test_mode(surface_fsm_t *fsm);
+void surface_fsm_cmd_send_data(surface_fsm_t *fsm);
 
 #endif // SURFACE_FSM_H

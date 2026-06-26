@@ -126,6 +126,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
               printf(">> Received BEGIN_PROFILE. Triggering Pre-Dive "
                      "Transmission...\n");
               fsm->state = FLOAT_PRE_DIVE;
+              fsm->mission_start_time = to_ms_since_boot(get_absolute_time());
               update_status_led(fsm->state);
             } else if (rx_pkt.command == CMD_ENTER_TEST &&
                        fsm->state == FLOAT_IDLE) {
@@ -318,6 +319,16 @@ void float_fsm_update(float_fsm_t *fsm) {
     fsm->currently_transmitting = true;
     radio_start_transmit((uint8_t *)&tx_pkt, sizeof(packet_t));
   } else if (fsm->state == FLOAT_PROFILING) {
+    if (fsm->mission_start_time > 0 &&
+        (now - fsm->mission_start_time) >= (uint32_t)MISSION_TOTAL_TIMEOUT_S * 1000) {
+      printf("!! [MISSION TIMEOUT] %u s elapsed. Forcing surface and profile done.\n",
+             MISSION_TOTAL_TIMEOUT_S);
+      fsm->actuator_target = settings.act_max;
+      fsm->state = FLOAT_PROFILE_DONE;
+      update_status_led(fsm->state);
+      return;
+    }
+
     float target_m = 0.0f;
     const char *stage_name = "UNKNOWN";
 

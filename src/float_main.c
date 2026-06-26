@@ -1,5 +1,6 @@
 #include "hardware/i2c.h"
 #include "hardware/sync.h"
+#include "hardware/watchdog.h"
 #include "ms5837.h"
 #include "pico/stdlib.h"
 #include <math.h>
@@ -75,6 +76,7 @@ static void handle_profile(const char *params) {
   printf(">> [CONSOLE] Starting Profile command via serial...\n");
   if (global_fsm.state == FLOAT_IDLE) {
     global_fsm.state = FLOAT_PRE_DIVE;
+    global_fsm.mission_start_time = to_ms_since_boot(get_absolute_time());
   } else {
     printf(">> [CONSOLE] Ignoring: FSM must be in IDLE to start a profile.\n");
   }
@@ -275,6 +277,7 @@ int main() {
   double dt_seconds = (double)DEPTH_PID_LOOP_MS / 1000.0;
   depth_pid_init(&depth_pid, settings.kp, settings.ki, settings.kd, dt_seconds,
                  settings.act_min, settings.act_max);
+  watchdog_enable(WATCHDOG_TIMEOUT_MS, 1);
   printf("Float System Ready. Build: %s %s\n", __DATE__, __TIME__);
 
   uint32_t last_depth_pid_time = to_ms_since_boot(get_absolute_time());
@@ -283,6 +286,7 @@ int main() {
   uint32_t consecutive_sensor_failures = 0;
 
   while (true) {
+    watchdog_update();
     uint32_t now = to_ms_since_boot(get_absolute_time());
     console_update();
 

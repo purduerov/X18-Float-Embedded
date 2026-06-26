@@ -172,6 +172,18 @@ void surface_fsm_cmd_test_mode(surface_fsm_t *fsm) {
     }
 }
 
+void surface_fsm_cmd_send_data(surface_fsm_t *fsm) {
+    if (!fsm->currently_transmitting) {
+        printf(">> Manual SEND_DATA command. Starting download...\n");
+        data_logger_reset();
+        packet_t tx_pkt = {.command = CMD_SEND_DATA, .seq_num = 0};
+        send_packet(fsm, &tx_pkt);
+        fsm->state = SURFACE_DOWNLOADING;
+        fsm->expected_seq_num = 1;
+        fsm->last_rx_time = to_ms_since_boot(get_absolute_time());
+    }
+}
+
 // --- Radio Event Processor ---
 
 void surface_fsm_process_event(surface_fsm_t *fsm) {

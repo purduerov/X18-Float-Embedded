@@ -114,6 +114,10 @@ static void handle_test(const char *params) {
   surface_fsm_cmd_test_mode(&global_fsm);
 }
 
+static void handle_send_data(const char *params) {
+  surface_fsm_cmd_send_data(&global_fsm);
+}
+
 static const console_command_t cmd_table[] = {
     {'p', handle_profile, "Begin Profile"},
     {'s', handle_pid, "Set PID (P I D)"},
@@ -129,7 +133,8 @@ static const console_command_t cmd_table[] = {
     {'n', handle_neutral_adc, "Set Neutral ADC Position"},
     {'?', handle_sync, "Sync Settings"},
     {'r', handle_reset, "Reset State Machine"},
-    {'k', handle_test, "Enter Test Mode"}};
+    {'k', handle_test, "Enter Test Mode"},
+    {'g', handle_send_data, "Manual Data Download"}};
 
 // --- Main Application ---
 
