@@ -126,8 +126,8 @@ void reflash_host_stream_from_serial(RadioLibSX127x_t *lora) {
     }
 
     if (bytes_sent == total_size) {
-        printf("[HOST] Reflash transfer complete! Rebooting Surface...\n");
-        sleep_ms(500);
-        watchdog_reboot(0, 0, 100);
+        printf("[SUCCESS] REFLASH SUCCESS: Data transfer complete.\n");
     }
+
+    RadioLib_SX127x_StartReceive(lora);
 }
