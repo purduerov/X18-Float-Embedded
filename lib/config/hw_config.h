@@ -22,6 +22,7 @@
 // --- Radio (LoRa SPI) Pins ---
 
 #ifdef TARGET_SURFACE
+#define PIN_SPI_INST spi0
 #define PIN_SPI_SCK 18
 #define PIN_SPI_MOSI 19
 #define PIN_SPI_MISO 16
@@ -30,13 +31,14 @@
 #define PIN_IRQ 2  // pin 4 on non radio side
 #define PIN_EN 8   // pin 11 on non radio side
 #else
+#define PIN_SPI_INST spi1
 #define PIN_SPI_SCK 14
 #define PIN_SPI_MOSI 15
 #define PIN_SPI_MISO 8
 #define PIN_CS 24
 #define PIN_RST 25 // D25
-#define PIN_IRQ 9           // D9
-#define PIN_EN 6            // pin 11 on non radio side
+#define PIN_IRQ 9  // D9
+#define PIN_EN 6   // pin 11 on non radio side
 
 #endif
 
