@@ -300,6 +300,7 @@ void float_fsm_update(float_fsm_t *fsm) {
   if (fsm->state == FLOAT_PRE_DIVE && !fsm->currently_transmitting) {
     if (!radio_channel_clear()) {
       fsm->last_tx_time = now - RADIO_DONE_BROADCAST_MS + 50;
+      radio_start_receive();
       return;
     }
     printf(">> Sending Pre-Dive Data Packet...\n");
@@ -606,6 +607,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     if (now - fsm->last_tx_time >= RADIO_DONE_BROADCAST_MS) {
       if (!radio_channel_clear()) {
         fsm->last_tx_time = now - RADIO_DONE_BROADCAST_MS + 50;
+        radio_start_receive();
         return;
       }
       printf(">> Broadcasting DONE_PROFILE (Waiting for Recovery / SEND_DATA "
@@ -636,6 +638,7 @@ void float_fsm_update(float_fsm_t *fsm) {
       }
       if (!radio_channel_clear()) {
         fsm->last_tx_time = now - RADIO_DATA_RETRANSMIT_MS + 50;
+        radio_start_receive();
         return;
       }
       fsm->tx_retry_count++;
