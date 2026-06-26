@@ -54,7 +54,7 @@
 #define RADIO_POWER 17       // dBm (Max for SX1276 PA_BOOST)
 #define RADIO_CR 8           // Coding Rate 4/8: max FEC for near-water multipath
 #define RADIO_PREAMBLE 16    // symbols: better sync at waterline
-#define RADIO_SYNC_WORD 0x12 // LoRa Sync Word
+#define RADIO_SYNC_WORD 0x14 // Unique sync word (team EX14)
 #define SPI_BAUDRATE 8000000 // 8 MHz
 
 #endif // HW_CONFIG_H

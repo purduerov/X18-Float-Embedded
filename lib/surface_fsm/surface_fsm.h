@@ -21,6 +21,7 @@ typedef struct {
     SurfaceState_t state;
     bool currently_transmitting;
     uint16_t expected_seq_num;
+    uint32_t last_rx_time;
 } surface_fsm_t;
 
 /**
@@ -32,6 +33,11 @@ void surface_fsm_init(surface_fsm_t *fsm);
  * Process a Radio event (Interrupt received)
  */
 void surface_fsm_process_event(surface_fsm_t *fsm);
+
+/**
+ * Polled update — call from main loop for download timeout
+ */
+void surface_fsm_update(surface_fsm_t *fsm);
 
 /**
  * Get human-readable state name

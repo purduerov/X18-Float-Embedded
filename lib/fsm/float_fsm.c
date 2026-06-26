@@ -248,6 +248,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
               fsm->state = FLOAT_DUMPING_DATA;
               update_status_led(fsm->state);
               fsm->current_seq_num = 1;
+              fsm->tx_retry_count = 0;
               fsm->last_tx_time = 0;
             }
           } else if (fsm->state == FLOAT_DUMPING_DATA) {
@@ -255,6 +256,7 @@ void float_fsm_process_event(float_fsm_t *fsm) {
                 rx_pkt.seq_num == fsm->current_seq_num) {
               printf(">> Received ACK for packet %d.\n", fsm->current_seq_num);
               fsm->current_seq_num++;
+              fsm->tx_retry_count = 0;
 
               if (fsm->current_seq_num > fsm->sample_index) {
                 printf(">> All data sent. Sending DATA_DONE...\n");
@@ -295,6 +297,10 @@ void float_fsm_update(float_fsm_t *fsm) {
 
   // State Logic
   if (fsm->state == FLOAT_PRE_DIVE && !fsm->currently_transmitting) {
+    if (!radio_channel_clear()) {
+      fsm->last_tx_time = now - RADIO_DONE_BROADCAST_MS + 50;
+      return;
+    }
     printf(">> Sending Pre-Dive Data Packet...\n");
     packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
     tx_pkt.payload.telemetry.company_number = settings.company_number;
@@ -587,6 +593,10 @@ void float_fsm_update(float_fsm_t *fsm) {
     }
   } else if (fsm->state == FLOAT_PROFILE_DONE && !fsm->currently_transmitting) {
     if (now - fsm->last_tx_time >= RADIO_DONE_BROADCAST_MS) {
+      if (!radio_channel_clear()) {
+        fsm->last_tx_time = now - RADIO_DONE_BROADCAST_MS + 50;
+        return;
+      }
       printf(">> Broadcasting DONE_PROFILE (Waiting for Recovery / SEND_DATA "
              "CMD)...\n");
       packet_t tx_pkt = {.command = CMD_DONE_PROFILE, .seq_num = 0};
@@ -597,8 +607,29 @@ void float_fsm_update(float_fsm_t *fsm) {
     }
   } else if (fsm->state == FLOAT_DUMPING_DATA && !fsm->currently_transmitting) {
     if (now - fsm->last_tx_time >= RADIO_DATA_RETRANSMIT_MS) {
-      printf(">> Sending/Retransmitting Data Packet %d...\n",
-             fsm->current_seq_num);
+      if (fsm->tx_retry_count >= RADIO_MAX_DATA_RETRIES) {
+        printf("!! Max retries (%d) for packet %d. Skipping.\n",
+               RADIO_MAX_DATA_RETRIES, fsm->current_seq_num);
+        fsm->current_seq_num++;
+        fsm->tx_retry_count = 0;
+        if (fsm->current_seq_num > fsm->sample_index) {
+          printf(">> All data sent (some skipped). Sending DATA_DONE...\n");
+          packet_t done_pkt = {.command = CMD_DATA_DONE, .seq_num = 0};
+          done_pkt.checksum = packet_calculate_checksum(&done_pkt);
+          fsm->currently_transmitting = true;
+          radio_start_transmit((uint8_t *)&done_pkt, sizeof(packet_t));
+          fsm->state = FLOAT_IDLE;
+          update_status_led(fsm->state);
+          return;
+        }
+      }
+      if (!radio_channel_clear()) {
+        fsm->last_tx_time = now - RADIO_DATA_RETRANSMIT_MS + 50;
+        return;
+      }
+      fsm->tx_retry_count++;
+      printf(">> Sending/Retransmitting Data Packet %d (attempt %d)...\n",
+             fsm->current_seq_num, fsm->tx_retry_count);
       packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION,
                          .seq_num = fsm->current_seq_num};
       tx_pkt.payload.telemetry.company_number = settings.company_number;

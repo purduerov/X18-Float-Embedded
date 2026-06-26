@@ -33,6 +33,11 @@
 #define RADIOLIB_SX127X_STANDBY 0x01
 #define RADIOLIB_SX127X_TX 0x03
 #define RADIOLIB_SX127X_RXCONTINUOUS 0x05
+#define RADIOLIB_SX127X_CAD 0x07
+
+// IRQ flag masks
+#define RADIOLIB_SX127X_IRQ_CAD_DONE 0x04
+#define RADIOLIB_SX127X_IRQ_CAD_DETECTED 0x01
 
 // State Structure
 typedef struct RadioLibSX127x
@@ -77,4 +82,6 @@ int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t *chip);
 
 float RadioLib_SX127x_GetSNR(RadioLibSX127x_t *chip);
 float RadioLib_SX127x_GetRSSI(RadioLibSX127x_t *chip);
+
+bool RadioLib_SX127x_ScanChannel(RadioLibSX127x_t *chip);
 #endif

@@ -77,6 +77,8 @@
 #define RADIO_DONE_BROADCAST_MS 3000
 #define RADIO_DATA_RETRANSMIT_MS 2000
 #define RADIO_TEST_TX_MS 1000
+#define RADIO_MAX_DATA_RETRIES 10
+#define SURFACE_DOWNLOAD_TIMEOUT_MS 60000
 
 // ==========================================
 // 3. SYSTEM SETTINGS

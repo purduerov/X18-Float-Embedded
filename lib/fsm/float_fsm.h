@@ -51,6 +51,9 @@ typedef struct {
     uint32_t hover_accumulated_adc;
     uint32_t hover_sample_count;
 
+    // --- Radio Collision Resilience ---
+    uint8_t tx_retry_count;
+
     MS5837_t *depth_sensor;
 } float_fsm_t;
 

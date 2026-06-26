@@ -32,7 +32,7 @@
 #define RADIO_POWER     17
 #define RADIO_CR        8
 #define RADIO_PREAMBLE  16
-#define RADIO_SYNC_WORD 0x12
+#define RADIO_SYNC_WORD 0x14
 #define SPI_BAUDRATE    8000000
 
 // === PID DEFAULTS ===

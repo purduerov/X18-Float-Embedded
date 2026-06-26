@@ -1,6 +1,7 @@
 #include "surface_fsm.h"
 #include "radio_setup.h"
 #include "data_logger.h"
+#include "sw_config.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
@@ -243,6 +244,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     send_packet(fsm, &tx_pkt);
                     fsm->state = SURFACE_DOWNLOADING;
                     fsm->expected_seq_num = 1;
+                    fsm->last_rx_time = to_ms_since_boot(get_absolute_time());
                 }
             } else if (fsm->state == SURFACE_DOWNLOADING) {
                 if (rx_pkt.command == CMD_DONE_PROFILE) {
@@ -271,6 +273,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                         printf(">> Received duplicate/old packet #%d. Re-sending ACK.\n", rx_pkt.seq_num);
                     }
 
+                    fsm->last_rx_time = to_ms_since_boot(get_absolute_time());
                     packet_t ack_pkt = {.command = CMD_ACK, .seq_num = rx_pkt.seq_num};
                     send_packet(fsm, &ack_pkt);
                 } else if (rx_pkt.command == CMD_DATA_DONE) {
@@ -284,5 +287,21 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
 
     if (!fsm->currently_transmitting) {
         radio_start_receive();
+    }
+}
+
+void surface_fsm_update(surface_fsm_t *fsm) {
+    if (fsm->state != SURFACE_DOWNLOADING)
+        return;
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - fsm->last_rx_time >= SURFACE_DOWNLOAD_TIMEOUT_MS) {
+        printf("!! [TIMEOUT] No data received for %u s. Dumping partial CSV and returning to IDLE.\n",
+               SURFACE_DOWNLOAD_TIMEOUT_MS / 1000);
+        data_logger_dump_csv();
+        printf(">> Partial download saved. Packets received: %u\n",
+               (unsigned int)data_logger_get_count());
+        fsm->state = SURFACE_IDLE;
+        fsm->expected_seq_num = 1;
     }
 }

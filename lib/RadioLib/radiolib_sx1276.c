@@ -31,12 +31,12 @@ int16_t RadioLib_SX1276_SetOutputPower(RadioLibSX127x_t *chip, int8_t power) {
 
 int16_t RadioLib_SX1276_Begin(RadioLibSX127x_t *chip, float freq, float bw,
                               uint8_t sf, uint8_t cr, int8_t power,
-                              uint16_t preambleLen) {
+                              uint16_t preambleLen, uint8_t syncWord) {
   // 1. Hardware Reset
   RadioLib_SX1276_Reset(chip);
 
   // 2. Base SX127x initialization (Checks version and enters LoRa mode)
-  int16_t state = RadioLib_SX127x_Begin(chip, 0x12, preambleLen);
+  int16_t state = RadioLib_SX127x_Begin(chip, syncWord, preambleLen);
   if (state != RADIOLIB_ERR_NONE)
     return state;
 

@@ -20,8 +20,9 @@
  * @param cr Coding rate (5 - 8).
  * @param power Output power in dBm (2 - 17).
  * @param preambleLen Preamble length in symbols (default 8).
+ * @param syncWord LoRa sync word for network filtering.
  */
-int16_t RadioLib_SX1276_Begin(RadioLibSX127x_t* chip, float freq, float bw, uint8_t sf, uint8_t cr, int8_t power, uint16_t preambleLen);
+int16_t RadioLib_SX1276_Begin(RadioLibSX127x_t* chip, float freq, float bw, uint8_t sf, uint8_t cr, int8_t power, uint16_t preambleLen, uint8_t syncWord);
 
 /**
  * @brief Performs a hard reset of the radio using the RST pin.

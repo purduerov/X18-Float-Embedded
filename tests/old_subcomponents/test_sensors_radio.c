@@ -87,7 +87,7 @@ int tx_main() {
 
     // Added newline to ensure this prints before Begin starts
     printf("Attempting RadioLib Begin (915MHz)...\n"); 
-    int16_t radio_state = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 5, 10, 8);
+    int16_t radio_state = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 5, 10, 8, 0x12);
     
     if (radio_state == RADIOLIB_ERR_NONE) {
         printf("Radio Success!\n");

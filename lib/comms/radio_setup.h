@@ -22,5 +22,6 @@ int16_t radio_read_data(uint8_t *buffer, size_t len);
 
 float radio_get_rssi(void);
 float radio_get_snr(void);
+bool radio_channel_clear(void);
 
 #endif // RADIO_SETUP_H

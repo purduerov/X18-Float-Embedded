@@ -188,6 +188,9 @@ int main() {
       }
     }
 
+    // 4. Polled FSM update (download timeout)
+    surface_fsm_update(&global_fsm);
+
     sleep_ms(1);
   }
   return 0;

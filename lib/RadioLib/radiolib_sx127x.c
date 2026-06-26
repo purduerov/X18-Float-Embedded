@@ -340,6 +340,28 @@ int16_t RadioLib_SX127x_FinishTransmit(RadioLibSX127x_t* chip) {
     return setMode(chip, RADIOLIB_SX127X_STANDBY);
 }
 
+bool RadioLib_SX127x_ScanChannel(RadioLibSX127x_t *chip) {
+    setMode(chip, RADIOLIB_SX127X_STANDBY);
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_DIO_MAPPING_1, 0x80);
+    RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+    setMode(chip, RADIOLIB_SX127X_CAD);
+
+    RadioLibHal_t *hal = chip->mod->hal;
+    for (int i = 0; i < 100; i++) {
+        uint8_t flags = RadioLib_Module_SPIreadRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS);
+        if (flags & RADIOLIB_SX127X_IRQ_CAD_DONE) {
+            bool clear = !(flags & RADIOLIB_SX127X_IRQ_CAD_DETECTED);
+            RadioLib_Module_SPIwriteRegister(chip->mod, RADIOLIB_SX127X_REG_IRQ_FLAGS, 0xFF);
+            setMode(chip, RADIOLIB_SX127X_STANDBY);
+            return clear;
+        }
+        hal->delayMicroseconds(hal, 200);
+    }
+
+    setMode(chip, RADIOLIB_SX127X_STANDBY);
+    return true;
+}
+
 float RadioLib_SX127x_GetSNR(RadioLibSX127x_t *chip) {
   // Read raw SNR register value as a signed 8-bit integer
   int8_t rawSnr = (int8_t)RadioLib_Module_SPIreadRegister(
