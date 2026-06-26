@@ -49,8 +49,6 @@
 #define TRANSIT_THRESHOLD_M 0.5f
 #define TRANSIT_P_MULTIPLIER 2.0f
 
-
-
 // --- Mission & Control Named Thresholds (avoids magic numbers in logic) ---
 #define SHALLOW_BIASED_TARGET_M                                                \
   0.55f // Effective target for shallow hold to avoid surfacing
@@ -85,12 +83,13 @@
 // ==========================================
 // 3. SYSTEM SETTINGS
 // ==========================================
-#define FLOAT_ENABLE_USB_WAIT 1
+#define FLOAT_ENABLE_USB_WAIT 0
 #define SURFACE_ENABLE_USB_WAIT 1
+
 
 // ==========================================
 // 4. FIRMWARE VERSION
 // ==========================================
-#define FIRMWARE_VERSION 101
+#define FIRMWARE_VERSION 102
 
 #endif // SW_CONFIG_H
