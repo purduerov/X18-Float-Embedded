@@ -35,7 +35,7 @@ void init_radio() {
     RadioLib_SX127x_Create(&lora, &radioModule);
     
     // SF7, 500kHz BW, CR 4/5 as per requirement
-    int16_t state = RadioLib_SX1276_Begin(&lora, 915.0, 500.0, 7, 10);
+    int16_t state = RadioLib_SX1276_Begin(&lora, 915.0, 500.0, 7, 5, 10, 8);
     if (state != RADIOLIB_ERR_NONE) {
         printf("Radio init failed, code %d\n", state);
         while (1) tight_loop_contents();

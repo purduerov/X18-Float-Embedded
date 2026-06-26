@@ -69,7 +69,7 @@ int rx_main() {
 
     // 3. INITIALIZE RADIO (Must match TX settings: 915MHz, 125kHz BW, SF7)
     printf("Initializing SX1276...");
-    int16_t state = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 10);
+    int16_t state = RadioLib_SX1276_Begin(&lora, 915.0, 125.0, 7, 5, 10, 8);
 
     if (state == RADIOLIB_ERR_NONE) {
         printf("Success!\nWaiting for incoming packets...\n");

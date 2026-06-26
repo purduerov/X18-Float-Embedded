@@ -28,9 +28,10 @@
 // === RADIO ===
 #define RADIO_FREQ      915.0f
 #define RADIO_BW        125.0f
-#define RADIO_SF        7
+#define RADIO_SF        10
 #define RADIO_POWER     17
-#define RADIO_CR        5
+#define RADIO_CR        8
+#define RADIO_PREAMBLE  16
 #define RADIO_SYNC_WORD 0x12
 #define SPI_BAUDRATE    8000000
 

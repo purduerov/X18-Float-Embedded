@@ -35,7 +35,7 @@ bool radio_setup_init(void (*interrupt_callback)(void)) {
   printf("[RADIO] Initializing SX1276...\n");
   // Use centralized config from hw_config.h
   int16_t status = RadioLib_SX1276_Begin(&lora, RADIO_FREQ, RADIO_BW, RADIO_SF,
-                                         RADIO_CR, RADIO_POWER);
+                                         RADIO_CR, RADIO_POWER, RADIO_PREAMBLE);
 
   if (status != RADIOLIB_ERR_NONE) {
     printf("[RADIO] CRITICAL ERROR: Init failed, code %d\n", status);

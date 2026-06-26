@@ -50,9 +50,10 @@
 // ==========================================
 #define RADIO_FREQ 915.0f    // MHz
 #define RADIO_BW 125.0f      // kHz
-#define RADIO_SF 7           // Spreading Factor (Normal/Fast)
-#define RADIO_POWER 17       // dBm (Max for SX1276 driver)
-#define RADIO_CR 5           // Coding Rate (4/5)
+#define RADIO_SF 10          // SF10: +7.5 dB sensitivity over SF7
+#define RADIO_POWER 17       // dBm (Max for SX1276 PA_BOOST)
+#define RADIO_CR 8           // Coding Rate 4/8: max FEC for near-water multipath
+#define RADIO_PREAMBLE 16    // symbols: better sync at waterline
 #define RADIO_SYNC_WORD 0x12 // LoRa Sync Word
 #define SPI_BAUDRATE 8000000 // 8 MHz
 
