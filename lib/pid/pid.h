@@ -10,10 +10,6 @@ typedef struct {
     float prev_error;
     float output_min;
     float output_max;
-    float integral_min;  // Minimum value for the integral contribution
-    float integral_max;  // Maximum value for the integral contribution
-    float integral_gate; // Conditional integration threshold (0 to disable)
-    float prev_D;        // Previous filtered derivative state for EMA
 } PIDController;
 
 void pid_init(PIDController *pid, float kp, float ki, float kd, float dt, float output_min, float output_max);
