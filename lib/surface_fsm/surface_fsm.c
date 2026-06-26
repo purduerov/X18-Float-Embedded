@@ -98,11 +98,12 @@ void surface_fsm_cmd_set_num_profiles(surface_fsm_t *fsm, uint16_t num) {
     }
 }
 
-void surface_fsm_cmd_set_tolerance(surface_fsm_t *fsm, float tolerance) {
+void surface_fsm_cmd_set_tolerance(surface_fsm_t *fsm, float deep_tol, float shallow_tol) {
     if (fsm->state == SURFACE_IDLE && !fsm->currently_transmitting) {
-        printf(">> Sending Arrival Tolerance Update: %.2f m\n", tolerance);
+        printf(">> Sending Tolerance Update: Deep=%.2f m, Shallow=%.2f m\n", deep_tol, shallow_tol);
         packet_t tx_pkt = {.command = CMD_SET_TOLERANCE, .seq_num = 0};
-        tx_pkt.payload.settings.arrival_band_m = tolerance;
+        tx_pkt.payload.settings.deep_tol_m = deep_tol;
+        tx_pkt.payload.settings.shallow_tol_m = shallow_tol;
         send_packet(fsm, &tx_pkt);
     }
 }
@@ -193,7 +194,7 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
             // State Machine Response Logic
             if (fsm->state == SURFACE_IDLE) {
                 if (rx_pkt.command == CMD_REP_SETTINGS) {
-                    printf("\n[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%u TarAct=%u ActMin=%u ActMax=%u Neutral=%u Tol=%.2f LiveDepth=%.3f FW=%lu\n",
+                    printf("\n[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u Time=%u Off=%.3f ADC=%u TarAct=%u ActMin=%u ActMax=%u Neutral=%u DeepTol=%.2f ShallowTol=%.2f LiveDepth=%.3f FW=%lu\n",
                     rx_pkt.payload.settings.kp, rx_pkt.payload.settings.ki,
                     rx_pkt.payload.settings.kd,
                     rx_pkt.payload.settings.deep_target_m,
@@ -207,7 +208,8 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     rx_pkt.payload.settings.act_min,
                     rx_pkt.payload.settings.act_max,
                     rx_pkt.payload.settings.neutral_buoyancy_adc,
-                    rx_pkt.payload.settings.arrival_band_m,
+                    rx_pkt.payload.settings.deep_tol_m,
+                    rx_pkt.payload.settings.shallow_tol_m,
                     rx_pkt.payload.settings.live_depth,
                     rx_pkt.payload.settings.fw_version);
                 }

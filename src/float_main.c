@@ -51,13 +51,13 @@ static void handle_sync(const char *params) {
   // ADC= is used by dashboard for live actuator position.
   printf("[SYNC] P=%.2f I=%.2f D=%.2f Deep=%.2f Shallow=%.2f N=%u Co#=%u "
          "Time=%u Off=%.3f ADC=%d ActMin=%d ActMax=%d Neutral=%d "
-         "LiveDepth=%.3f Tol=%.2f\n",
+         "LiveDepth=%.3f DeepTol=%.2f ShallowTol=%.2f\n",
          settings.kp, settings.ki, settings.kd, settings.deep_target_m,
          settings.shallow_target_m, settings.num_profiles,
          settings.company_number, settings.profile_duration_s,
          settings.depth_offset, global_fsm.current_actuator_pos,
          settings.act_min, settings.act_max, settings.neutral_buoyancy_adc,
-         global_fsm.current_depth, settings.arrival_band_m);
+         global_fsm.current_depth, settings.deep_tol_m, settings.shallow_tol_m);
 }
 
 static void handle_actuator(const char *params) {
@@ -162,14 +162,15 @@ static void handle_profiles(const char *params) {
 }
 
 static void handle_tolerance(const char *params) {
-  float val;
-  if (sscanf(params, "%f", &val) == 1) {
+  float deep_tol, shallow_tol;
+  if (sscanf(params, "%f %f", &deep_tol, &shallow_tol) == 2) {
     float_settings_t settings;
     storage_get_settings(&settings);
-    settings.arrival_band_m = val;
+    settings.deep_tol_m = deep_tol;
+    settings.shallow_tol_m = shallow_tol;
     storage_set_settings(&settings);
     storage_save();
-    printf(">> [CONSOLE] Tolerance set to %.2f m\n", val);
+    printf(">> [CONSOLE] Tolerance set to Deep=%.2f m, Shallow=%.2f m\n", deep_tol, shallow_tol);
     handle_sync(NULL);
   }
 }
@@ -357,8 +358,6 @@ int main() {
         depth_pid.pos_max = (int)settings.act_max;
         depth_pid.pid.output_min = (float)settings.act_min - neutral_val;
         depth_pid.pid.output_max = (float)settings.act_max - neutral_val;
-        depth_pid.pid.integral_min = -600.0f;
-        depth_pid.pid.integral_max = 600.0f;
 
         // Reset the PID filters and integral accumulator on fresh entry to
         // profiling

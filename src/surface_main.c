@@ -70,9 +70,9 @@ static void handle_num_profiles(const char *params) {
 }
 
 static void handle_tolerance(const char *params) {
-  float tolerance;
-  if (sscanf(params, "%f", &tolerance) == 1) {
-    surface_fsm_cmd_set_tolerance(&global_fsm, tolerance);
+  float deep_tol, shallow_tol;
+  if (sscanf(params, "%f %f", &deep_tol, &shallow_tol) == 2) {
+    surface_fsm_cmd_set_tolerance(&global_fsm, deep_tol, shallow_tol);
   }
 }
 

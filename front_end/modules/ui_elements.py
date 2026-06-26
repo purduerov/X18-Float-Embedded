@@ -120,8 +120,9 @@ def render_sidebar(hw):
         with st.form("unified_settings_form"):
             param_label = st.selectbox("Parameter", [
                 "Manual Move (ADC)", "Team ID", "Duration (s)", 
-                "Deep Target (m)", "Shallow Target (m)", 
-                "Number of Profiles", "Arrival Tolerance (m)", 
+                "Deep Target (m)", "Deep Tolerance (m)",
+                "Shallow Target (m)", "Shallow Tolerance (m)",
+                "Number of Profiles",
                 "Neutral ADC", "Min ADC Limit", "Max ADC Limit"
             ])
             
@@ -133,7 +134,8 @@ def render_sidebar(hw):
                 "Deep Target (m)": "Deep",
                 "Shallow Target (m)": "Shallow",
                 "Number of Profiles": "N",
-                "Arrival Tolerance (m)": "Tol",
+                "Deep Tolerance (m)": "DeepTol",
+                "Shallow Tolerance (m)": "ShallowTol",
                 "Neutral ADC": "Neutral",
                 "Min ADC Limit": "ActMin",
                 "Max ADC Limit": "ActMax"
@@ -159,7 +161,8 @@ def render_sidebar(hw):
                 elif param_label == "Deep Target (m)": hw.update_deep_target(float(new_val))
                 elif param_label == "Shallow Target (m)": hw.update_shallow_target(float(new_val))
                 elif param_label == "Number of Profiles": hw.update_num_profiles(int(new_val))
-                elif param_label == "Arrival Tolerance (m)": hw.update_tolerance(float(new_val))
+                elif param_label == "Deep Tolerance (m)": hw.update_deep_tol(float(new_val))
+                elif param_label == "Shallow Tolerance (m)": hw.update_shallow_tol(float(new_val))
                 elif param_label == "Neutral ADC": hw.update_neutral_adc(int(new_val))
                 elif param_label == "Min ADC Limit":
                     try:
@@ -190,6 +193,15 @@ def render_sidebar(hw):
             i_val = st.number_input("I (Effort)", step=1.0, value=DEFAULT_I)
             d_val = st.number_input("D (Deadband)", step=0.01, value=DEFAULT_D)
             if st.form_submit_button("UPDATE GAINS", width="stretch"): hw.update_pid(round(p_val,2), round(i_val,2), round(d_val,2))
+
+        st.divider()
+        st.header(":material/tune: PID Tuning")
+        with st.form("pid_tune_form"):
+            tune_depth = st.number_input("Dive Depth (m)", value=0.5, step=0.1, min_value=0.1, max_value=5.0)
+            tune_hold = st.number_input("Hold Time (s)", value=10, step=5, min_value=5, max_value=120)
+            tune_tol = st.number_input("Tolerance (m)", value=0.33, step=0.01, min_value=0.05, max_value=1.0)
+            if st.form_submit_button("QUICK PROFILE", icon=":material/speed:", width="stretch", type="primary"):
+                hw.start_quick_profile(tune_depth, tune_hold, tune_tol)
 
         st.divider()
         st.header(":material/system_update_alt: OTA & Firmware")
@@ -313,7 +325,7 @@ def render_metrics(hw):
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.markdown(f"**State:** `{mission_status}`")
-            st.markdown(f"**FW:** `v{settings.get('FW', '--')}` | **ID:** `{settings.get('Co#', '--')}`")
+            st.markdown(f"**FW:** `v{settings.get('FW', '--')}` | **ID:** `EX{settings.get('Co#', '--')}`")
         with m2:
             st.markdown(f"**Target:** `{settings.get('Deep', '--')}m` / `{settings.get('Shallow', '--')}m`")
             st.markdown(f"**PID:** `{settings.get('P', '--')}/{settings.get('I', '--')}/{settings.get('D', '--')}`")
@@ -377,6 +389,23 @@ def render_charts(hw):
             hover_cols = [c for c in ["Depth (m)", "Pressure (kPa)", "Actuator (ADC)", "Target (ADC)"] if c in df.columns]
             fig = px.scatter(df, x="Time (s)", y="Depth (m)", hover_data=hover_cols, height=350)
             fig.update_traces(mode='lines+markers', line=dict(color='#00ffcc', width=3), marker=dict(size=6, color='#00ffcc'))
+
+            try:
+                deep_t = float(hw.float_settings.get("Deep", 0))
+                deep_tol = float(hw.float_settings.get("DeepTol", 0))
+                shallow_t = float(hw.float_settings.get("Shallow", 0))
+                shallow_tol = float(hw.float_settings.get("ShallowTol", 0))
+                for target, tol, label in [(deep_t, deep_tol, "Deep"), (shallow_t, shallow_tol, "Shallow")]:
+                    if target > 0:
+                        fig.add_hline(y=target, line_dash="dash", line_color="#ff4444", line_width=1,
+                                      annotation_text=f"{label} {target:.1f}m ±{tol:.2f}", annotation_position="top left",
+                                      annotation_font_color="#ff4444", annotation_font_size=10)
+                        if tol > 0:
+                            fig.add_hrect(y0=target - tol, y1=target + tol,
+                                          fillcolor="#ff4444", opacity=0.1, line_width=0)
+            except (ValueError, TypeError):
+                pass
+
             fig.update_yaxes(autorange="reversed", gridcolor='#1e293b', title_text="Depth (m)")
             fig.update_xaxes(gridcolor='#1e293b', title_text="Time (s)")
             fig.update_layout(
@@ -719,7 +748,8 @@ def render_pid_analyzer(hw):
         "timestamp": "--",
         "deep_target": 2.5,
         "shallow_target": 0.4,
-        "tolerance": 0.15,
+        "deep_tol": 0.33,
+        "shallow_tol": 0.1,
         "duration": 30.0,
         "P": 120.0,
         "I": 0.5,
@@ -746,9 +776,12 @@ def render_pid_analyzer(hw):
                     elif "Shallow Target:" in line:
                         val = re.search(r"Shallow Target:\s*([\d\.-]+)", line)
                         if val: meta["shallow_target"] = safe_float(val.group(1), meta["shallow_target"])
-                    elif "Arrival Tolerance:" in line:
-                        val = re.search(r"Arrival Tolerance:\s*([\d\.-]+)", line)
-                        if val: meta["tolerance"] = safe_float(val.group(1), meta["tolerance"])
+                    elif "Deep Tolerance:" in line:
+                        val = re.search(r"Deep Tolerance:\s*([\d\.-]+)", line)
+                        if val: meta["deep_tol"] = safe_float(val.group(1), meta["deep_tol"])
+                    elif "Shallow Tolerance:" in line:
+                        val = re.search(r"Shallow Tolerance:\s*([\d\.-]+)", line)
+                        if val: meta["shallow_tol"] = safe_float(val.group(1), meta["shallow_tol"])
                     elif "Hold Duration:" in line:
                         val = re.search(r"Hold Duration:\s*([\d\.-]+)", line)
                         if val: meta["duration"] = safe_float(val.group(1), meta["duration"])
@@ -775,9 +808,10 @@ def render_pid_analyzer(hw):
         p_d = st.number_input("Current D Gain", value=float(meta["D"]), step=5.0)
         
         t_deep = st.number_input("Target Deep Depth (m)", value=float(meta["deep_target"]), step=0.1)
+        t_deep_tol = st.number_input("Deep Tolerance (m)", value=float(meta["deep_tol"]), step=0.01)
         t_shallow = st.number_input("Target Shallow Depth (m)", value=float(meta["shallow_target"]), step=0.1)
+        t_shallow_tol = st.number_input("Shallow Tolerance (m)", value=float(meta["shallow_tol"]), step=0.01)
         t_duration = st.number_input("Target Hold Duration (s)", value=float(meta["duration"]), step=5.0)
-        t_tol = st.number_input("Arrival Tolerance Band (m)", value=float(meta["tolerance"]), step=0.01)
 
     # Load data
     try:
@@ -820,7 +854,7 @@ def render_pid_analyzer(hw):
     # Find first arrival at deep target
     arrive_deep_idx = None
     for idx, d in enumerate(depth_series):
-        if abs(d - t_deep) <= t_tol:
+        if abs(d - t_deep) <= t_deep_tol:
             arrive_deep_idx = idx
             break
             
@@ -880,7 +914,7 @@ def render_pid_analyzer(hw):
         
         arrive_shal_idx = None
         for i, d in enumerate(s_depth):
-            if abs(d - t_shallow) <= t_tol:
+            if abs(d - t_shallow) <= t_shallow_tol:
                 arrive_shal_idx = i
                 break
                 
@@ -936,7 +970,7 @@ def render_pid_analyzer(hw):
             # Parse comments
             h_p = h_i = h_d = None
             h_deep = 2.5
-            h_tol = 0.15
+            h_deep_tol = 0.33
             h_dur = 30.0
             with open(f_path, 'r') as fh:
                 for line in fh:
@@ -950,9 +984,9 @@ def render_pid_analyzer(hw):
                     m_dp = re.search(r"Deep Target:\s*([\d\.-]+)", line)
                     if m_dp:
                         h_deep = float(m_dp.group(1))
-                    m_tl = re.search(r"Arrival Tolerance:\s*([\d\.-]+)", line)
+                    m_tl = re.search(r"Deep Tolerance:\s*([\d\.-]+)", line)
                     if m_tl:
-                        h_tol = float(m_tl.group(1))
+                        h_deep_tol = float(m_tl.group(1))
                     m_dr = re.search(r"Hold Duration:\s*([\d\.-]+)", line)
                     if m_dr:
                         h_dur = float(m_dr.group(1))
@@ -979,7 +1013,7 @@ def render_pid_analyzer(hw):
             # Find arrival
             h_arr_idx = None
             for idx, d_val in enumerate(h_depth):
-                if abs(d_val - h_deep) <= h_tol:
+                if abs(d_val - h_deep) <= h_deep_tol:
                     h_arr_idx = idx
                     break
                     
@@ -1104,13 +1138,13 @@ def render_pid_analyzer(hw):
         
         # Add target lines
         fig_depth.add_hline(y=t_deep, line_dash="dash", line_color="#ff3366", annotation_text=f"Deep Target ({t_deep:.1f}m)")
-        fig_depth.add_hline(y=t_deep + t_tol, line_dash="dot", line_color="#ff6666", line_width=1)
-        fig_depth.add_hline(y=t_deep - t_tol, line_dash="dot", line_color="#ff6666", line_width=1)
+        fig_depth.add_hline(y=t_deep + t_deep_tol, line_dash="dot", line_color="#ff6666", line_width=1)
+        fig_depth.add_hline(y=t_deep - t_deep_tol, line_dash="dot", line_color="#ff6666", line_width=1)
         
         if t_shallow > 0.05:
             fig_depth.add_hline(y=t_shallow, line_dash="dash", line_color="#ffcc00", annotation_text=f"Shallow Target ({t_shallow:.1f}m)")
-            fig_depth.add_hline(y=t_shallow + t_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
-            fig_depth.add_hline(y=t_shallow - t_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
+            fig_depth.add_hline(y=t_shallow + t_shallow_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
+            fig_depth.add_hline(y=t_shallow - t_shallow_tol, line_dash="dot", line_color="#ffcc66", line_width=1)
             
         fig_depth.update_layout(
             title="Depth Response Profile",

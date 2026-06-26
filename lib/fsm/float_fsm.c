@@ -177,10 +177,11 @@ void float_fsm_process_event(float_fsm_t *fsm) {
               storage_set_settings(&settings);
               storage_save();
             } else if (rx_pkt.command == CMD_SET_TOLERANCE) {
-              settings.arrival_band_m = rx_pkt.payload.settings.arrival_band_m;
+              settings.deep_tol_m = rx_pkt.payload.settings.deep_tol_m;
+              settings.shallow_tol_m = rx_pkt.payload.settings.shallow_tol_m;
               printf(
-                  ">> Arrival Tolerance Updated: %.2f m. Saving to Flash...\n",
-                  settings.arrival_band_m);
+                  ">> Tolerance Updated: Deep=%.2f m, Shallow=%.2f m. Saving to Flash...\n",
+                  settings.deep_tol_m, settings.shallow_tol_m);
               storage_set_settings(&settings);
               storage_save();
             } else if (rx_pkt.command == CMD_ZERO_DEPTH) {
@@ -232,7 +233,8 @@ void float_fsm_process_event(float_fsm_t *fsm) {
               tx_pkt.payload.settings.act_max = settings.act_max;
               tx_pkt.payload.settings.neutral_buoyancy_adc =
                   settings.neutral_buoyancy_adc;
-              tx_pkt.payload.settings.arrival_band_m = settings.arrival_band_m;
+              tx_pkt.payload.settings.deep_tol_m = settings.deep_tol_m;
+              tx_pkt.payload.settings.shallow_tol_m = settings.shallow_tol_m;
               tx_pkt.payload.settings.live_depth = fsm->current_depth;
               tx_pkt.payload.settings.fw_version = FIRMWARE_VERSION;
               tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
@@ -335,7 +337,8 @@ void float_fsm_update(float_fsm_t *fsm) {
         if (fsm->current_depth <= SURFACE_DETECTION_M)
           arrived = true;
       } else {
-        if (depth_error <= settings.arrival_band_m)
+        float tol = (fsm->mission_stage == STAGE_DEEP) ? settings.deep_tol_m : settings.shallow_tol_m;
+        if (depth_error <= tol)
           arrived = true;
       }
 
@@ -370,7 +373,7 @@ void float_fsm_update(float_fsm_t *fsm) {
     } else {
       // Reset timer if we drift out of band (Consecutive Hold requirement)
       if (fsm->mission_stage != STAGE_EXITING &&
-          depth_error > settings.arrival_band_m) {
+          depth_error > ((fsm->mission_stage == STAGE_DEEP) ? settings.deep_tol_m : settings.shallow_tol_m)) {
         printf(
             "!! MISSION: Drifted out of band! Resetting %s timer and logs.\n",
             stage_name);
@@ -405,7 +408,7 @@ void float_fsm_update(float_fsm_t *fsm) {
       }
 
       uint32_t stage_sample_idx = fsm->sample_index - stage_start_idx;
-      uint32_t expected_elapsed_ms = stage_sample_idx * SAMPLE_INTERVAL_MS;
+      uint32_t expected_elapsed_ms = (stage_sample_idx + 1) * SAMPLE_INTERVAL_MS;
 
       if (elapsed_ms >= expected_elapsed_ms &&
           stage_sample_idx < MAX_SAMPLES_PER_STAGE &&

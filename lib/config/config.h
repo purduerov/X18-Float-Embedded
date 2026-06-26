@@ -63,7 +63,8 @@
 #define DERIV_EMA_ALPHA         0.3f
 
 // === MISSION ===
-#define ARRIVAL_BAND_M          0.33f
+#define DEEP_TOL_M              0.33f
+#define SHALLOW_TOL_M           0.1f
 #define SURFACE_DETECTION_M     0.05f
 #define ADAPTIVE_HOLD_THRESHOLD_M 0.15f
 #define STALL_CHECK_DURATION_MS 15000

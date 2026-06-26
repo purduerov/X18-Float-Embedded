@@ -44,7 +44,8 @@ class HardwareManager:
             "Neutral": "--",
             "Off": "--",
             "LiveDepth": "--",
-            "Tol": "--",
+            "DeepTol": "--",
+            "ShallowTol": "--",
             "FW": "--"
         }
         
@@ -308,9 +309,13 @@ class HardwareManager:
         self._threaded_cmd_sequence([f"t {val}", "?"])
 
     def update_deep_target(self, val):
+        with self.lock:
+            self.float_settings["Deep"] = f"{val:.2f}"
         self._threaded_cmd_sequence([f"d {val}", "?"])
 
     def update_shallow_target(self, val):
+        with self.lock:
+            self.float_settings["Shallow"] = f"{val:.2f}"
         self._threaded_cmd_sequence([f"u {val}", "?"])
 
     def update_num_profiles(self, val):
@@ -325,17 +330,28 @@ class HardwareManager:
     def update_neutral_adc(self, val):
         self._threaded_cmd_sequence([f"n {val}", "?"])
 
-    def update_tolerance(self, val):
-        self._threaded_cmd_sequence([f"v {val}", "?"])
+    def update_deep_tol(self, val):
+        with self.lock:
+            self.float_settings["DeepTol"] = f"{val:.2f}"
+        shallow = self.float_settings.get("ShallowTol", "0.10")
+        self._threaded_cmd_sequence([f"v {val} {shallow}", "?"])
+
+    def update_shallow_tol(self, val):
+        with self.lock:
+            self.float_settings["ShallowTol"] = f"{val:.2f}"
+        deep = self.float_settings.get("DeepTol", "0.33")
+        self._threaded_cmd_sequence([f"v {deep} {val}", "?"])
 
     def zero_depth(self):
         self._threaded_cmd_sequence(["z", "?"])
 
     def reset_fsm(self):
+        self.save_profile_data()
         self.send_command("r")
-        self.mission_status = "IDLE"
         with self.lock:
+            self.mission_status = "IDLE"
             self.packet_log = []
+            self.data_log = []
         self._safe_log("[WARNING] > Sent: r (Forced FSM Reset)")
 
     def move_actuator(self, val):
@@ -481,6 +497,19 @@ class HardwareManager:
         except Exception as e:
             return None, f"Failed to read firmware file: {e}"
 
+    def start_quick_profile(self, depth, hold_s, tol):
+        with self.lock:
+            self.float_settings["Deep"] = f"{depth:.2f}"
+            self.float_settings["Shallow"] = "0.00"
+            self.float_settings["Time"] = str(int(hold_s))
+            self.float_settings["N"] = "1"
+            self.float_settings["DeepTol"] = f"{tol:.2f}"
+        self._threaded_cmd_sequence([
+            f"d {depth}", f"u 0.0", f"t {int(hold_s)}", "m 1",
+            f"v {tol} 0.1", "?"
+        ])
+        self.start_profile()
+
     def start_profile(self):
         """Triggers the start command. Timer starts after PRE-DIVE confirmation."""
         with self.lock:
@@ -559,7 +588,7 @@ class HardwareManager:
                             except ValueError:
                                 co_id = DEFAULT_TEAM_ID
                                 
-                            raw_str = f"Company #{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
+                            raw_str = f"Company #EX{co_id}, Time: {rel_time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {sim_depth:.2f}m"
                             
                             entry = {
                                 "Time (s)": rel_time_s,
@@ -604,7 +633,8 @@ class HardwareManager:
                 f.write(f"# Deep Target: {self.float_settings.get('Deep', '--')} m\n")
                 f.write(f"# Shallow Target: {self.float_settings.get('Shallow', '--')} m\n")
                 f.write(f"# Profile Count: {self.float_settings.get('N', '--')}\n")
-                f.write(f"# Arrival Tolerance: {self.float_settings.get('Tol', '--')} m\n")
+                f.write(f"# Deep Tolerance: {self.float_settings.get('DeepTol', '--')} m\n")
+                f.write(f"# Shallow Tolerance: {self.float_settings.get('ShallowTol', '--')} m\n")
                 f.write(f"# Hold Duration: {self.float_settings.get('Time', '--')} s\n")
                 f.write(f"# PID: P={self.float_settings.get('P', '--')}, I={self.float_settings.get('I', '--')}, D={self.float_settings.get('D', '--')}\n")
                 f.write(f"# Neutral ADC: {self.float_settings.get('Neutral', '--')}\n")
