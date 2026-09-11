@@ -84,8 +84,18 @@ void float_fsm_process_event(float_fsm_t *fsm) {
       if (fsm->profile_start_time == 0)
         fsm->profile_start_time = 1; // Prevent 0
       fsm->stage_start_time = fsm->profile_start_time;
-      fsm->last_sample_time = 0; // Trigger immediate first sample
+      fsm->last_sample_time = 0;
       fsm->sample_index = 0;
+
+      recorded_times[0] = 0;
+      recorded_depths[0] = fsm->current_depth;
+      recorded_pressures[0] =
+          fsm->depth_sensor
+              ? ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f
+              : 101.325f;
+      recorded_adcs[0] = fsm->current_actuator_pos;
+      recorded_target_adcs[0] = fsm->actuator_target;
+      fsm->sample_index = 1;
 
       // Initialize Stall Detection
       fsm->last_stall_check_time = fsm->profile_start_time;
@@ -244,13 +254,23 @@ void float_fsm_process_event(float_fsm_t *fsm) {
             }
           } else if (fsm->state == FLOAT_PROFILE_DONE) {
             if (rx_pkt.command == CMD_SEND_DATA) {
-              printf(">> Received SEND_DATA command. Starting data dump for "
-                     "scoring...\n");
-              fsm->state = FLOAT_DUMPING_DATA;
-              update_status_led(fsm->state);
-              fsm->current_seq_num = 1;
-              fsm->tx_retry_count = 0;
-              fsm->last_tx_time = 0;
+              if (fsm->sample_index == 0) {
+                printf(">> Received SEND_DATA but no data recorded. Sending DATA_DONE...\n");
+                packet_t done_pkt = {.command = CMD_DATA_DONE, .seq_num = 0};
+                done_pkt.checksum = packet_calculate_checksum(&done_pkt);
+                fsm->currently_transmitting = true;
+                radio_start_transmit((uint8_t *)&done_pkt, sizeof(packet_t));
+                fsm->state = FLOAT_IDLE;
+                update_status_led(fsm->state);
+              } else {
+                printf(">> Received SEND_DATA command. Starting data dump (%u packets)...\n",
+                       (unsigned int)fsm->sample_index);
+                fsm->state = FLOAT_DUMPING_DATA;
+                update_status_led(fsm->state);
+                fsm->current_seq_num = 1;
+                fsm->tx_retry_count = 0;
+                fsm->last_tx_time = 0;
+              }
             }
           } else if (fsm->state == FLOAT_DUMPING_DATA) {
             if (rx_pkt.command == CMD_ACK &&
@@ -372,66 +392,33 @@ void float_fsm_update(float_fsm_t *fsm) {
           fsm->target_depth_reached = true;
           fsm->hover_accumulated_adc = 0;
           fsm->hover_sample_count = 0;
-          fsm->profile_start_time = now;
-          if (fsm->profile_start_time == 0)
-            fsm->profile_start_time = 1;
-
-          if (fsm->current_profile > 0) {
-            if (fsm->mission_stage == STAGE_DEEP) {
-              fsm->sample_index =
-                  (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
-            } else if (fsm->mission_stage == STAGE_SHALLOW) {
-              fsm->sample_index =
-                  (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) +
-                  MAX_SAMPLES_PER_STAGE;
-            }
-          }
+          fsm->hold_start_time = now;
+          if (fsm->hold_start_time == 0)
+            fsm->hold_start_time = 1;
         }
       }
     } else {
-      // Reset timer if we drift out of band (Consecutive Hold requirement)
+      // Reset hold timer if we drift out of band (Consecutive Hold requirement)
       if (fsm->mission_stage != STAGE_EXITING &&
           depth_error > ((fsm->mission_stage == STAGE_DEEP) ? settings.deep_tol_m : settings.shallow_tol_m)) {
         printf(
-            "!! MISSION: Drifted out of band! Resetting %s timer and logs.\n",
+            "!! MISSION: Drifted out of band! Resetting %s hold timer.\n",
             stage_name);
         fsm->target_depth_reached = false;
         fsm->hover_accumulated_adc = 0;
         fsm->hover_sample_count = 0;
-        fsm->profile_start_time = now;
-
-        // Reset sequential packet logging
-        if (fsm->mission_stage == STAGE_DEEP) {
-          fsm->sample_index =
-              (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
-        } else if (fsm->mission_stage == STAGE_SHALLOW) {
-          fsm->sample_index =
-              (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) +
-              MAX_SAMPLES_PER_STAGE;
-        }
+        fsm->hold_start_time = now;
       }
     }
 
-    // Sampling Loop (Configurable interval, hold phase only)
-    if (fsm->target_depth_reached && fsm->profile_start_time > 0) {
-      uint32_t elapsed_ms = now - fsm->profile_start_time;
-      uint32_t stage_start_idx = 0;
-      if (fsm->mission_stage == STAGE_DEEP) {
-        stage_start_idx =
-            (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2);
-      } else if (fsm->mission_stage == STAGE_SHALLOW) {
-        stage_start_idx =
-            (fsm->current_profile - 1) * (MAX_SAMPLES_PER_STAGE * 2) +
-            MAX_SAMPLES_PER_STAGE;
-      }
+    // Continuous Sampling (transit + hold)
+    if (fsm->profile_start_time > 0) {
+      uint32_t mission_elapsed_ms = now - fsm->profile_start_time;
+      uint32_t expected_elapsed_ms = (uint32_t)(fsm->sample_index) * SAMPLE_INTERVAL_MS;
 
-      uint32_t stage_sample_idx = fsm->sample_index - stage_start_idx;
-      uint32_t expected_elapsed_ms = (stage_sample_idx + 1) * SAMPLE_INTERVAL_MS;
-
-      if (elapsed_ms >= expected_elapsed_ms &&
-          stage_sample_idx < MAX_SAMPLES_PER_STAGE &&
+      if (mission_elapsed_ms >= expected_elapsed_ms &&
           fsm->sample_index < MAX_RECORDED_SAMPLES) {
-        recorded_times[fsm->sample_index] = expected_elapsed_ms;
+        recorded_times[fsm->sample_index] = mission_elapsed_ms;
         recorded_depths[fsm->sample_index] = fsm->current_depth;
         recorded_pressures[fsm->sample_index] =
             fsm->depth_sensor
@@ -442,21 +429,24 @@ void float_fsm_update(float_fsm_t *fsm) {
 
         // Adaptive Neutral Learning: Accumulate actuator position while holding
         // close to target
-        float err_val = fsm->current_depth - target_m;
-        if (err_val < 0)
-          err_val = -err_val;
-        if (err_val <= ADAPTIVE_HOLD_THRESHOLD_M) {
-          if (fsm->hover_sample_count < 1000000) {
-            fsm->hover_accumulated_adc += fsm->current_actuator_pos;
-            fsm->hover_sample_count++;
+        if (fsm->target_depth_reached) {
+          float err_val = fsm->current_depth - target_m;
+          if (err_val < 0)
+            err_val = -err_val;
+          if (err_val <= ADAPTIVE_HOLD_THRESHOLD_M) {
+            if (fsm->hover_sample_count < 1000000) {
+              fsm->hover_accumulated_adc += fsm->current_actuator_pos;
+              fsm->hover_sample_count++;
+            }
           }
         }
 
-        printf(">> Hold Sample %u/%u [%s]: Time %lu s | Depth %.2f m | ADC %u "
+        printf(">> Sample %u [%s%s]: Time %lu ms | Depth %.2f m | ADC %u "
                "| TargetADC %u\n",
-               (unsigned int)(stage_sample_idx + 1),
-               (unsigned int)MAX_SAMPLES_PER_STAGE, stage_name,
-               expected_elapsed_ms / 1000, recorded_depths[fsm->sample_index],
+               (unsigned int)fsm->sample_index, stage_name,
+               fsm->target_depth_reached ? " HOLD" : " TRANSIT",
+               (unsigned long)mission_elapsed_ms,
+               recorded_depths[fsm->sample_index],
                recorded_adcs[fsm->sample_index],
                recorded_target_adcs[fsm->sample_index]);
 
@@ -493,12 +483,12 @@ void float_fsm_update(float_fsm_t *fsm) {
 
     // Mission Progression Logic
     if (fsm->profile_start_time > 0) {
-      uint32_t elapsed = now - fsm->profile_start_time;
+      uint32_t hold_elapsed = (fsm->hold_start_time > 0) ? (now - fsm->hold_start_time) : 0;
       uint32_t stage_elapsed = now - fsm->stage_start_time;
       bool buffer_full = (fsm->sample_index >= MAX_RECORDED_SAMPLES);
       bool stage_complete =
           (fsm->target_depth_reached &&
-           (elapsed >= (uint32_t)settings.profile_duration_s * 1000));
+           (hold_elapsed >= (uint32_t)settings.profile_duration_s * 1000));
       uint32_t safety_timeout_s = (fsm->mission_stage == STAGE_DEEP)
                                       ? DEEP_PROFILING_SAFETY_TIMEOUT_S
                                       : SHALLOW_PROFILING_SAFETY_TIMEOUT_S;
@@ -525,7 +515,6 @@ void float_fsm_update(float_fsm_t *fsm) {
         }
 
         if (fsm->mission_stage == STAGE_DEEP) {
-          // Check if shallow stage is disabled (e.g. 0.0m)
           if (settings.shallow_target_m <= 0.05f) {
             printf(">> MISSION: Deep stage %u/%u done. Shallow disabled.\n",
                    fsm->current_profile, settings.num_profiles);
@@ -536,13 +525,11 @@ void float_fsm_update(float_fsm_t *fsm) {
               fsm->actuator_target = settings.act_max;
               fsm->last_stall_check_time = now;
               fsm->stall_reference_depth = fsm->current_depth;
-              fsm->profile_start_time = now;
               fsm->stage_start_time = now;
             } else {
               fsm->current_profile++;
               fsm->mission_stage = STAGE_DEEP;
               fsm->target_depth_reached = false;
-              fsm->profile_start_time = now;
               fsm->stage_start_time = now;
               fsm->last_stall_check_time = now;
               fsm->stall_reference_depth = fsm->current_depth;
@@ -552,7 +539,6 @@ void float_fsm_update(float_fsm_t *fsm) {
                    fsm->current_profile, settings.num_profiles);
             fsm->mission_stage = STAGE_SHALLOW;
             fsm->target_depth_reached = false;
-            fsm->profile_start_time = now;
             fsm->stage_start_time = now;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
@@ -567,13 +553,11 @@ void float_fsm_update(float_fsm_t *fsm) {
             fsm->actuator_target = settings.act_max;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
-            fsm->profile_start_time = now;
             fsm->stage_start_time = now;
           } else {
             fsm->current_profile++;
             fsm->mission_stage = STAGE_DEEP;
             fsm->target_depth_reached = false;
-            fsm->profile_start_time = now;
             fsm->stage_start_time = now;
             fsm->last_stall_check_time = now;
             fsm->stall_reference_depth = fsm->current_depth;
@@ -597,7 +581,6 @@ void float_fsm_update(float_fsm_t *fsm) {
           fsm->actuator_target = settings.act_max;
           fsm->last_stall_check_time = now;
           fsm->stall_reference_depth = fsm->current_depth;
-          fsm->profile_start_time = now;
           fsm->stage_start_time = now;
         }
         update_status_led(fsm->state);
@@ -665,9 +648,16 @@ void float_fsm_update(float_fsm_t *fsm) {
   } else if (fsm->state == FLOAT_TEST_CALIBRATE &&
              !fsm->currently_transmitting) {
     if (now - fsm->last_tx_time >= RADIO_TEST_TX_MS) {
-      packet_t tx_pkt = {.command = CMD_REP_TEST_DATA, .seq_num = 0};
-      tx_pkt.payload.test_data.live_depth = fsm->current_depth;
-      tx_pkt.payload.test_data.live_adc = fsm->current_actuator_pos;
+      packet_t tx_pkt = {.command = CMD_DATA_TRANSMISSION, .seq_num = 0};
+      tx_pkt.payload.telemetry.company_number = settings.company_number;
+      tx_pkt.payload.telemetry.time_ms = now;
+      tx_pkt.payload.telemetry.depth_m = fsm->current_depth;
+      tx_pkt.payload.telemetry.pressure_kpa =
+          fsm->depth_sensor
+              ? ms5837_get_pressure(fsm->depth_sensor, Pa) / 1000.0f
+              : 101.325f;
+      tx_pkt.payload.telemetry.actuator_pos = fsm->current_actuator_pos;
+      tx_pkt.payload.telemetry.target_actuator_pos = fsm->actuator_target;
       tx_pkt.checksum = packet_calculate_checksum(&tx_pkt);
 
       fsm->currently_transmitting = true;

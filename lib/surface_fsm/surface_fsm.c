@@ -226,10 +226,20 @@ void surface_fsm_process_event(surface_fsm_t *fsm) {
                     rx_pkt.payload.settings.live_depth,
                     rx_pkt.payload.settings.fw_version);
                 }
- else if (rx_pkt.command == CMD_REP_TEST_DATA) {
-                    printf("\n[SYNC] LiveDepth=%.3f ADC=%u\n",
-                           rx_pkt.payload.test_data.live_depth,
-                           rx_pkt.payload.test_data.live_adc);
+ else if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {
+                    printf("[TELEMETRY] Co# %u | Time %lu ms | Depth %.2f m | Pressure %.2f kPa | ADC %u | TargetADC %u\n",
+                           rx_pkt.payload.telemetry.company_number,
+                           rx_pkt.payload.telemetry.time_ms,
+                           rx_pkt.payload.telemetry.depth_m,
+                           rx_pkt.payload.telemetry.pressure_kpa,
+                           rx_pkt.payload.telemetry.actuator_pos,
+                           rx_pkt.payload.telemetry.target_actuator_pos);
+                    data_logger_add_sample(rx_pkt.payload.telemetry.company_number,
+                                          rx_pkt.payload.telemetry.time_ms,
+                                          rx_pkt.payload.telemetry.depth_m,
+                                          rx_pkt.payload.telemetry.pressure_kpa,
+                                          rx_pkt.payload.telemetry.actuator_pos,
+                                          rx_pkt.payload.telemetry.target_actuator_pos);
                 }
             } else if (fsm->state == SURFACE_WAITING_PROFILE) {
                 if (rx_pkt.command == CMD_DATA_TRANSMISSION && rx_pkt.seq_num == 0) {

@@ -31,6 +31,7 @@ typedef struct {
     uint16_t current_profile;
     bool currently_transmitting;
     uint32_t profile_start_time;
+    uint32_t hold_start_time;
     uint32_t stage_start_time; // Tracks time from entering a stage for safety timeout
     uint32_t last_tx_time;
     uint32_t last_sample_time;

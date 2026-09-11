@@ -68,12 +68,10 @@
 #define SENSOR_ABORT_STRIKES 50
 
 #define SAMPLE_INTERVAL_MS 1000
-#define MAX_SAMPLES_PER_STAGE 50
-#define MAX_RECORDED_SAMPLES                                                   \
-  (MAX_SAMPLES_PER_STAGE * 2 * 3) // Enough for 3 profiles with 2 stages each
+#define MAX_RECORDED_SAMPLES 600
 
 #define RADIO_DONE_BROADCAST_MS 3000
-#define RADIO_DATA_RETRANSMIT_MS 2000
+#define RADIO_DATA_RETRANSMIT_MS 3500
 #define RADIO_TEST_TX_MS 1000
 #define RADIO_MAX_DATA_RETRIES 10
 #define SURFACE_DOWNLOAD_TIMEOUT_MS 60000
