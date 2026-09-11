@@ -208,20 +208,20 @@ sequenceDiagram
     participant Surface as Surface Station
     participant Host as Host Dashboard
 
-    Note over Float,Surface: Float surfaces; broadcasts CMD_DONE_PROFILE every 3s
-    Host->>Surface: Send 'g' (Manual Download) or Auto-trigger
+    Note over Float,Surface: Float surfaces and broadcasts CMD_DONE_PROFILE every 3s
+    Host->>Surface: Send 'g' for manual download or auto-trigger
     Surface->>Float: CMD_SEND_DATA
     
-    loop For each sample (1 to N)
-        Float->>Surface: CMD_DATA_TRANSMISSION (seq_num = K, Telemetry)
-        Surface->>Host: Stream line: "Stored Data #K: Co# X | Time Y | Depth Z | ADC W"
-        Surface->>Float: CMD_ACK (seq_num = K)
-        Note over Float: If ACK not received in 3500ms, retransmit (up to 10 retries)
+    loop For each sample 1 to N
+        Float->>Surface: CMD_DATA_TRANSMISSION with seq_num K
+        Surface->>Host: Stream Stored Data sample to console
+        Surface->>Float: CMD_ACK with seq_num K
+        Note over Float: Retransmit after 3500ms timeout if ACK missed
     end
 
-    Float->>Surface: CMD_DATA_DONE (seq_num = 0)
-    Surface->>Host: Print "Download Complete (Saved to CSV)"
-    Surface->>Float: CMD_ACK (seq_num = 0)
+    Float->>Surface: CMD_DATA_DONE with seq_num 0
+    Surface->>Host: Print Download Complete and save CSV
+    Surface->>Float: CMD_ACK with seq_num 0
     Note over Float: Float returns to FLOAT_IDLE
 ```
 
