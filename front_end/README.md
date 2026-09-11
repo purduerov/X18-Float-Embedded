@@ -4,15 +4,15 @@ The Mission Control Dashboard is a real-time interface for monitoring and contro
 
 ## Features
 
-- **🔌 Real-time Connectivity:** Connect/Disconnect to the float's COM port.
-- **📈 Telemetry Visualization:** Live plotting of Depth (m) vs. Time (s).
-- **⚙️ Remote Configuration:**
+- **Real-time Connectivity:** Connect/Disconnect to the float's COM port.
+- **Telemetry Visualization:** Live plotting of Depth (m) vs. Time (s).
+- **Remote Configuration:**
   - Update PID gains (P, I, D).
   - Set Team/Company ID.
   - Set Mission Duration.
-- **🚀 Mission Control:** Trigger pre-dive profiles and download logged data.
-- **📋 Live Console:** View raw serial output from the float.
-- **📥 Data Export:** Download telemetry sessions as CSV files.
+- **Mission Control:** Trigger pre-dive profiles and download logged data.
+- **Live Console:** View raw serial output from the float.
+- **Data Export:** Download telemetry sessions as CSV files.
 
 ## Prerequisites
 

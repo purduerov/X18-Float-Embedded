@@ -2,14 +2,14 @@
 
 Autonomous underwater float project designed for oceanographic research and environmental monitoring.
 
-## 📂 Project Structure
+## Project Structure
 
 - **`src/`**: Main firmware entry points (C/C++).
 - **`lib/`**: Embedded drivers and modular libraries.
 - **`front_end/`**: Mission Control Dashboard (Python/Streamlit).
 - **`.gemini/`**: Gemini CLI configuration and hardware maps.
 
-## 🏗️ Software Architecture
+## Software Architecture
 
 Detailed documentation for the system components:
 - **[Float Unit (Underwater)](docs/float_architecture.md)**: Main loop flow, state machine, and safety mechanisms.
@@ -18,7 +18,7 @@ Detailed documentation for the system components:
 - **[Hardware & Pinouts](docs/hardware_specifications.md)**: GPIO mapping, I2C/SPI peripherals, and actuator control logic.
 - **[Hardware Map (Internal)](.gemini/hardware_map.md)**: **CRITICAL** Wiring reference (restricted).
 
-## ✨ Key Features
+## Key Features
 
 - **Autonomous Depth Control:** Real-time PID-based buoyancy management.
 - **Mission FSM:** Robust mission lifecycle management (Ascent, Descent, Drift).
@@ -26,7 +26,7 @@ Detailed documentation for the system components:
 - **Wireless Telemetry:** SX127x LoRa/FSK radio communication.
 - **Mission Control Dashboard:** Real-time visualization and remote tuning.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Embedded Firmware
 1. Install [PlatformIO](https://platformio.org/).
