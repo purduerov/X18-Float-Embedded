@@ -12,6 +12,7 @@ Autonomous underwater float project designed for oceanographic research and envi
 ## Software Architecture
 
 Detailed documentation for the system components:
+- **[System Architecture & Data Flow Deep Dive](docs/software_architecture_and_data_flow.md)**: End-to-end component roles, multi-rate control loops, data flow pathways, and design rationale.
 - **[Float Unit (Underwater)](docs/float_architecture.md)**: Main loop flow, state machine, and safety mechanisms.
 - **[Surface Station](docs/surface_architecture.md)**: Dashboard link, recovery FSM, and data logging.
 - **[Communication Protocol](docs/communication_protocol.md)**: Detailed packet structures, command codes, and reliability ARQ.
