@@ -33,6 +33,8 @@ compile_commands.json
 Thumbs.db
 *.pyc
 __pycache__/
+*.tmp
+*.tmp.*
 
 RESEARCH.md
 TEST.md

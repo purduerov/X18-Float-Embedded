@@ -287,11 +287,10 @@ def render_ota_section(hw):
 
 @st.fragment(run_every=REFRESH_RATE_S)
 def render_mission_dashboard_fragment(hw):
-    # Top Row: Compact Key Metrics
-    render_metrics(hw)
-    
-    # Action Bar: Directly under Active Config
+    # Sticky top section: metrics + action buttons (always visible on scroll)
     with st.container():
+        st.markdown('<div class="sticky-anchor" style="display:none;"></div>', unsafe_allow_html=True)
+        render_metrics(hw)
         c1, c2, c3 = st.columns(3)
         with c1:
             st.button("BEGIN PROFILE", icon=":material/play_arrow:", width="stretch", type="primary", key="btn_begin_profile", on_click=lambda: hw.start_profile())
@@ -303,7 +302,7 @@ def render_mission_dashboard_fragment(hw):
 
     # Two distinct halves
     left_col, right_col = st.columns([1, 2], gap="medium")
-    
+
     with left_col:
         st.subheader("Telemetry Feed")
         packet_container = st.container()
@@ -315,6 +314,11 @@ def render_mission_dashboard_fragment(hw):
         chart_container = st.container()
         with chart_container:
             render_charts(hw)
+
+    # Debug terminal log below charts
+    st.markdown("---")
+    st.subheader(":material/terminal: Debug Terminal")
+    render_debug_terminal(hw)
 
 def render_metrics(hw):
     with hw.lock:
@@ -439,6 +443,39 @@ def render_charts(hw):
         else:
             st.error(f"Telemetry data keys mismatch. Columns: {df.columns.tolist()}")
 
+
+
+def render_debug_terminal(hw):
+    with hw.lock:
+        raw_logs = list(hw.console_log)
+
+    formatted_lines = []
+    for line in reversed(raw_logs):
+        if "🔴" in line or "[ERROR]" in line or "error" in line.lower() or "critical" in line.lower() or "lost" in line.lower() or "failed" in line.lower():
+            color = "#ff4b4b"
+        elif "🔵" in line or "[TX]" in line or "sent:" in line.lower() or "commanding" in line.lower():
+            color = "#00a3ff"
+        elif "🟢" in line or "✅" in line or "[SUCCESS]" in line or "[OK]" in line or "success" in line.lower() or "complete" in line.lower() or "synced" in line.lower():
+            color = "#00ff66"
+        elif "🟡" in line or "[WARN]" in line or "warning" in line.lower() or "progress" in line.lower() or "ota" in line.lower():
+            color = "#ffd700"
+        elif "⚠️" in line or "[WARNING]" in line:
+            color = "#ffa500"
+        else:
+            color = "#a0a5b5"
+
+        escaped = html.escape(line)
+        formatted_lines.append(f'<div style="color: {color}; margin-bottom: 2px; white-space: pre-wrap; word-break: break-all;">{escaped}</div>')
+
+    log_html = "".join(formatted_lines)
+    container_style = (
+        '<div style="background-color: #070f1a; color: #d4d4d4; font-family: \'Courier New\', Courier, monospace; '
+        'font-size: 13px; height: 250px; overflow-y: auto; padding: 10px; border: 1px solid #00ccff; border-radius: 5px; '
+        'line-height: 1.4; display: flex; flex-direction: column-reverse; box-shadow: inset 0 0 10px rgba(0, 204, 255, 0.15);">'
+        f'{log_html}'
+        '</div>'
+    )
+    st.markdown(container_style, unsafe_allow_html=True)
 
 
 @st.fragment(run_every=2.0)

@@ -34,6 +34,18 @@ st.markdown("""
     footer {
         visibility: hidden;
     }
+    /* Sticky header: metrics + buttons stay visible on scroll */
+    [data-testid="stVerticalBlock"]:has(.sticky-anchor) {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 999 !important;
+        background: #0e1117 !important;
+        padding-bottom: 0.25rem !important;
+        border-bottom: 2px solid #1e293b !important;
+    }
+    .sticky-anchor {
+        display: none;
+    }
     </style>
 """, unsafe_allow_html=True)
 

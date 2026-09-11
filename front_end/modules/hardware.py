@@ -720,9 +720,6 @@ class HardwareManager:
         elif "START DATA DUMP" in line:
             with self.lock:
                 self.mission_status = "DOWNLOADING DATA"
-                self.data_log = []
-                self.packet_log = []
-                self.first_timestamp = None
         elif "Download Complete" in line:
             should_save = False
             with self.lock:
@@ -763,9 +760,9 @@ class HardwareManager:
                 with self.lock:
                     self.last_acked_bytes = int(m.group(1))
 
-        # Telemetry Log Parsing
+        # Telemetry Log Parsing (PRE-DIVE and downloaded Stored Data packets)
         m = re.search(
-            r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa",
+            r"(?:PRE-DIVE Packet Logged|Stored Data #\d+):\s*Co#\s*(\d+)\s*\|\s*Time\s*(\d+)\s*ms\s*\|\s*Depth\s*([\d\.-]+)\s*m\s*\|\s*Pressure\s*([\d\.-]+)\s*kPa(?:\s*\|\s*ADC\s*(\d+)\s*\|\s*TargetADC\s*(\d+))?",
             line
         )
         if m:
@@ -776,7 +773,26 @@ class HardwareManager:
                 pressure_kpa = float(m.group(4))
                 time_s = time_ms / 1000.0
                 raw_str = f"Company #{co_id}, Time: {time_s:.1f}s, Pressure: {pressure_kpa:.2f} kPa, Depth: {depth_m:.2f}m"
+
                 with self.lock:
+                    if self.first_timestamp is None:
+                        self.first_timestamp = time_ms
+                    rel_time_s = (time_ms - self.first_timestamp) / 1000.0
+
+                entry = {
+                    "Time (s)": rel_time_s,
+                    "Depth (m)": depth_m,
+                    "Pressure (kPa)": pressure_kpa,
+                }
+                if m.group(5):
+                    entry["Actuator (ADC)"] = int(m.group(5))
+                if m.group(6):
+                    entry["Target (ADC)"] = int(m.group(6))
+
+                with self.lock:
+                    self.data_log.append(entry)
+                    if len(self.data_log) > 2000:
+                        self.data_log.pop(0)
                     self.packet_log.append(raw_str)
                     if len(self.packet_log) > 100:
                         self.packet_log.pop(0)
